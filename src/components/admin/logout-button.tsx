@@ -1,6 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
+import { LogOut } from "lucide-react";
 
 import { logoutAdmin } from "@/app/actions/admin-auth";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ export function LogoutButton() {
       disabled={isPending}
       onClick={() => startTransition(() => logoutAdmin())}
     >
+      <LogOut aria-hidden="true" />
       {isPending ? t("panel.saliendo") : t("panel.salir")}
     </Button>
   );
