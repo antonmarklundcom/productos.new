@@ -25,6 +25,10 @@ The storefront has been merged into `main`. Select `main` for deployment.
 
 In the dropdown-only installer, choose **pnpm run build**, package manager **pnpm**, and output directory **.next**. The pnpm pin matches the 11.24.0 invoked during Hostinger's build; the previous 11.22.0 pin failed Corepack's version check after dependency installation.
 
+The app explicitly builds `output: "standalone"`, matching the server package detected in Hostinger's successful deployment log. `postbuild` copies `public` and `.next/static` into `.next/standalone`; Next's default standalone output omits them. The generated entry point is `.next/standalone/server.js`, which reads Hostinger's `PORT`. The importer keeps its detected Next.js entry setting. For a manual standalone launch use `node .next/standalone/server.js`; `pnpm start` remains available for a full checkout preview.
+
+Run `pnpm test:deployment` after `pnpm build`. CI copies only the standalone artifact to a temporary directory outside the checkout, starts it with Node, and checks HTML, every referenced CSS/JS asset, a public image, and health without a database. This catches missing published files that a full-checkout `next start` can hide.
+
 The five-value import example below contains placeholders only. Generate three independent strong random secrets and fill values privately in hPanel. Never reuse the local test environment.
 
 ```dotenv
@@ -91,3 +95,5 @@ Record the selected repository/branch and full main commit. Inspect the complete
 6. The preview illustration route must return 404 in Hostinger. There must be no DEMO products, invented prices or stock in its database.
 
 For an empty HTTP 200, inspect the app's emitted response body and process directly, the deployed output directory, repository/commit selection, domain mapping and Hostinger proxy/startup logs. Compare the temporary hostname. Do not assume another rebuild resolves a host routing problem. These live checks require Hostinger access and the deployed cron secret; local verification cannot establish them.
+
+For plain `Internal Server Error` on both `/` and `/api/health` after a successful build, collect **Node.js → Runtime logs** immediately after a fresh request. The health route normally returns JSON with `db:false` when the database is unavailable; a plain 500 on every route needs startup/process/proxy investigation. Record the first exception, entry file and listening port without copying environment values. On 2026-10-06, deployment `01a111cb-0d4f-7367-a65b-14282328d95d` built commit `40fef1d5` successfully, but fresh live requests still returned this plain 500. The local standalone server returned HTML/health successfully and exposed a separate missing-asset issue; do not label that asset fix as proof that the live 500 is resolved.

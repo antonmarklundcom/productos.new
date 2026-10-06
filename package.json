@@ -37,7 +37,9 @@
     "restore": "tsx scripts/restore-backup.ts",
     "test:full": "tsx scripts/verify-full.ts",
     "i18n:client": "tsx scripts/client-messages.ts",
-    "prebuild": "pnpm i18n:client"
+    "prebuild": "pnpm i18n:client",
+    "postbuild": "node scripts/package-standalone.mjs",
+    "test:deployment": "node scripts/verify-standalone.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

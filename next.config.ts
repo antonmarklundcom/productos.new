@@ -57,6 +57,8 @@ function buildSha(): string {
 }
 
 const nextConfig: NextConfig = {
+  // Generate the same server artifact that Hostinger publishes, also in CI.
+  output: "standalone",
   agentRules: false,
   env: {
     BUILD_SHA: buildSha(),
