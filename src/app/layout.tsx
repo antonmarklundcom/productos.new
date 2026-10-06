@@ -7,6 +7,7 @@ import { Analytics } from "@/components/analytics";
 import { CartSheet } from "@/components/cart-sheet";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { StorefrontOnly } from "@/components/storefront-only";
 import { WhatsAppFab } from "@/components/whatsapp-fab";
 import { Toaster } from "@/components/ui/sonner";
 import { getStoreSettings } from "@/domain/store-settings";
@@ -93,19 +94,23 @@ export default async function RootLayout({
           </div>
         ) : null}
         {/* Apagada o sin texto no se monta nada (y en /admin se esconde sola). */}
-        {anuncio.activo && anuncio.texto ? (
-          <AnnouncementBar
-            texto={anuncio.texto}
-            href={linkSeguro(anuncio.href)}
-          />
-        ) : null}
-        <SiteHeader />
+        <StorefrontOnly>
+          {anuncio.activo && anuncio.texto ? (
+            <AnnouncementBar
+              texto={anuncio.texto}
+              href={linkSeguro(anuncio.href)}
+            />
+          ) : null}
+          <SiteHeader />
+        </StorefrontOnly>
         <div id="contenido" className="flex-1" tabIndex={-1}>
           {children}
         </div>
-        <SiteFooter />
-        <CartSheet />
-        <WhatsAppFab />
+        <StorefrontOnly>
+          <SiteFooter />
+          <CartSheet />
+          <WhatsAppFab />
+        </StorefrontOnly>
         <Toaster />
         {/* Nada de terceros salvo que esta tienda configure medidores —
             src/lib/analytics.ts. Sin variables, esto no renderiza nada. */}

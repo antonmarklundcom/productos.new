@@ -8,6 +8,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AdminSidebar, type AdminNavItem } from "@/components/admin/sidebar";
+import { StorefrontOnly } from "@/components/storefront-only";
 
 const route = vi.hoisted(() => ({ pathname: "/admin/productos/42" }));
 vi.mock("next/navigation", () => ({ usePathname: () => route.pathname }));
@@ -41,6 +42,28 @@ afterEach(() => {
 });
 
 describe("AdminSidebar", () => {
+  it("hides shopping chrome in admin and restores it on returning to the store", () => {
+    const view = render(
+      <StorefrontOnly>
+        <span>Shopping navigation</span>
+      </StorefrontOnly>
+    );
+    expect(screen.queryByText("Shopping navigation")).not.toBeInTheDocument();
+    route.pathname = "/";
+    view.rerender(
+      <StorefrontOnly>
+        <span>Shopping navigation</span>
+      </StorefrontOnly>
+    );
+    expect(screen.getByText("Shopping navigation")).toBeVisible();
+    route.pathname = "/admin/login";
+    view.rerender(
+      <StorefrontOnly>
+        <span>Shopping navigation</span>
+      </StorefrontOnly>
+    );
+    expect(screen.queryByText("Shopping navigation")).not.toBeInTheDocument();
+  });
   it("reorders items by dragging without navigating away", () => {
     render(<AdminSidebar items={items} userId={1} />);
     fireEvent.click(screen.getByRole("button", { name: "Editar menú" }));

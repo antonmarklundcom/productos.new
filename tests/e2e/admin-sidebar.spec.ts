@@ -7,6 +7,9 @@ test("owner navigation opens every admin screen without the panel error", async 
 }) => {
   test.setTimeout(120_000);
   await loginAsOwner(page);
+  await expect(page.getByRole("button", { name: "Abrir carrito" })).toHaveCount(
+    0
+  );
   const nav = page.locator("aside").getByRole("navigation");
   const destinations = await nav
     .getByRole("link")
@@ -30,6 +33,10 @@ test("owner navigation opens every admin screen without the panel error", async 
     path: "playwright-report/capturas/admin-sidebar-desktop.png",
     fullPage: true,
   });
+  await page.emulateMedia({ media: "print" });
+  await expect(page.locator("aside")).toBeHidden();
+  await expect(page.locator("main")).toBeVisible();
+  await page.emulateMedia({ media: "screen" });
 });
 
 test("menu changes persist, can be cancelled, and work in the mobile drawer", async ({
