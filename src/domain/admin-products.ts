@@ -15,6 +15,7 @@ import { EXPORT_MAX_ROWS } from "@/lib/csv";
 import type { MessageKey, Params } from "@/i18n";
 
 import { DomainError } from "./errors";
+import { normalizeDropiUrl } from "./catalog-import";
 import type { Executor } from "./executor";
 import { getAvailability, heldQtyMap } from "./stock";
 import { notifyBackInStock } from "./stock-alerts";
@@ -181,6 +182,7 @@ function productWhere(options: AdminProductFilters) {
 }
 
 export type ExportVariantRow = {
+  dropiUrl: string | null;
   saleMode: "stock" | "enquiry" | "showcase";
   showPrice: boolean;
   sku: string;
@@ -211,6 +213,7 @@ export async function listVariantsForExport(
       sku: variants.sku,
       saleMode: products.saleMode,
       showPrice: products.showPrice,
+      dropiUrl: products.dropiUrl,
       productName: products.name,
       categoryName: categories.name,
       label: variants.label,
@@ -278,6 +281,7 @@ export async function listCategories(executor?: Executor) {
 // ---------------------------------------------------------------------------
 
 export type ProductWrite = {
+  dropiUrl?: string | null;
   saleMode?: "stock" | "enquiry" | "showcase";
   showPrice?: boolean;
   slug: string;
@@ -311,6 +315,7 @@ export async function createProduct(
     description: input.description,
     categoryId: input.categoryId,
     brand: input.brand,
+    dropiUrl: normalizeDropiUrl(input.dropiUrl),
     ivaRate: input.ivaRate,
     isActive: input.isActive,
     isFeatured: input.isFeatured ?? false,
@@ -356,6 +361,7 @@ export async function updateProduct(
       description: input.description,
       categoryId: input.categoryId,
       brand: input.brand,
+      dropiUrl: normalizeDropiUrl(input.dropiUrl),
       ivaRate: input.ivaRate,
       isActive: input.isActive,
       // `undefined` = no se toca. Es la diferencia importante con `false`: un

@@ -162,6 +162,13 @@
       "when": 1791235689193,
       "tag": "0022_lame_triathlon",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1791317674093,
+      "tag": "0023_naive_synch",
+      "breakpoints": true
     }
   ]
 }

@@ -1,3 +1,4 @@
+import { normalizeDropiUrl } from "../src/domain/catalog-import";
 import "@/lib/load-env";
 
 import { eq, sql } from "drizzle-orm";
@@ -96,6 +97,7 @@ export async function upsertShippingZones(
  * segundo lugar donde olvidarse del `assertGs` o del "no pisar `on_hand`".
  */
 export type CatalogProductUpsert = {
+  dropiUrl?: string | null;
   saleMode?: "stock" | "enquiry" | "showcase";
   showPrice?: boolean;
   slug: string;
@@ -145,6 +147,7 @@ export async function upsertCatalogProducts(
         description: product.description,
         categoryId: product.categoryId,
         brand: product.brand,
+        dropiUrl: normalizeDropiUrl(product.dropiUrl),
         ivaRate: product.ivaRate,
         isActive: true,
         publishedAt,
@@ -157,6 +160,7 @@ export async function upsertCatalogProducts(
           description: product.description,
           categoryId: product.categoryId,
           brand: product.brand,
+          dropiUrl: normalizeDropiUrl(product.dropiUrl),
           ivaRate: product.ivaRate,
           isActive: true,
         },

@@ -32,6 +32,9 @@ export const esPY = {
   "panel.producto.modo.stock": "Compra online con stock",
   "panel.producto.modo.enquiry": "Consulta por WhatsApp",
   "panel.producto.modo.showcase": "Sólo catálogo",
+  "panel.producto.dropiUrl": "Dropi URL (privada, opcional)",
+  "panel.producto.dropiUrlAyuda":
+    "Referencia del proveedor, visible sólo en el panel.",
   "panel.producto.mostrarPrecio":
     "Mostrar precio (siempre visible para compra online)",
   "error.checkout.pagoNoDisponible":

@@ -39,7 +39,31 @@ export type CatalogoVariante = {
   onHand: number;
 };
 
+export function normalizeDropiUrl(
+  value: string | null | undefined,
+): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value.trim() === "") return null;
+  const clean = value.trim();
+  const url = new URL(clean);
+  if (
+    clean.length > 2048 ||
+    url.protocol !== "https:" ||
+    url.hostname !== "app.dropi.com.py" ||
+    url.port ||
+    url.username ||
+    url.password ||
+    !/^\/dashboard\/product-details\/[1-9]\d*\/[a-z0-9]+(?:-[a-z0-9]+)*\/?$/.test(url.pathname) ||
+    url.search ||
+    url.hash
+  ) {
+    throw new Error("Usá un enlace de producto HTTPS de app.dropi.com.py.");
+  }
+  return clean;
+}
+
 export type CatalogoProducto = {
+  dropiUrl?: string | null;
   saleMode?: "stock" | "enquiry" | "showcase";
   showPrice?: boolean;
   /** De la columna Slug, o derivado del nombre. */
@@ -76,6 +100,8 @@ const COLUMNAS: Record<string, keyof FilaCruda> = {
   sale_mode: "saleMode",
   "mostrar precio": "showPrice",
   show_price: "showPrice",
+  "dropi url": "dropiUrl",
+  product_url: "dropiUrl",
   sku: "sku",
   producto: "producto",
   nombre: "producto",
@@ -95,6 +121,7 @@ const COLUMNAS: Record<string, keyof FilaCruda> = {
 };
 
 type FilaCruda = {
+  dropiUrl: string;
   saleMode: string;
   showPrice: string;
   sku: string;
@@ -325,6 +352,14 @@ export function parseCatalogo(text: string): CatalogoImportado {
       fotosFila = urls;
     }
 
+    let dropiUrl: string | null | undefined;
+    try {
+      dropiUrl = indice.has("dropiUrl") ? normalizeDropiUrl(celda(fila, "dropiUrl")) : undefined;
+    } catch {
+      errores.push(`Línea ${linea}: Dropi URL debe ser un enlace de producto HTTPS de app.dropi.com.py.`);
+      continue;
+    }
+
     const variante: CatalogoVariante = {
       sku,
       label: celda(fila, "variante") || "Único",
@@ -345,6 +380,7 @@ export function parseCatalogo(text: string): CatalogoImportado {
       porSlug.set(slug, {
         ...(saleMode === undefined ? {} : { saleMode }),
         ...(showPrice === undefined ? {} : { showPrice }),
+        ...(dropiUrl === undefined ? {} : { dropiUrl }),
         slug,
         name: nombre,
         description: celda(fila, "descripcion") || null,
@@ -373,6 +409,8 @@ export function parseCatalogo(text: string): CatalogoImportado {
     // lo mismo. Dos filas del mismo slug con categorías distintas no es una
     // preferencia a resolver en silencio — alguien se equivocó de fila.
     const conflictos: string[] = [];
+    if (dropiUrl && existente.dropiUrl && dropiUrl !== existente.dropiUrl) conflictos.push("Dropi URL");
+    if (!existente.dropiUrl && dropiUrl) existente.dropiUrl = dropiUrl;
     if (
       saleMode !== undefined &&
       existente.saleMode !== undefined &&

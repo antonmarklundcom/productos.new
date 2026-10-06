@@ -20,7 +20,7 @@ import {
   type CatalogFotoFallida,
   type CatalogImportPlan,
 } from "@/domain/catalog-import-plan";
-import { type CatalogoProducto } from "@/domain/catalog-import";
+import { normalizeDropiUrl, type CatalogoProducto } from "@/domain/catalog-import";
 import {
   BULK_MAX_IDS,
   BULK_MIN_REASON,
@@ -68,6 +68,9 @@ import {
  */
 
 const ProductSchema = z.object({
+  dropiUrl: z.string().trim().max(2048).nullable().optional().refine((value) => {
+    try { normalizeDropiUrl(value); return true; } catch { return false; }
+  }, "Usá un enlace de producto HTTPS de app.dropi.com.py."),
   saleMode: z.enum(["stock", "enquiry", "showcase"]).optional(),
   showPrice: z.boolean().optional(),
   productId: z.number().int().positive().optional(),
@@ -122,6 +125,7 @@ export async function saveProduct(
       description: parsed.data.description || null,
       categoryId: parsed.data.categoryId,
       brand: parsed.data.brand || null,
+      dropiUrl: normalizeDropiUrl(parsed.data.dropiUrl),
       ivaRate: parsed.data.ivaRate,
       isActive: parsed.data.isActive,
       published: parsed.data.published,
@@ -459,6 +463,7 @@ export async function applyCatalogImport(
           description: producto.description,
           categoryId,
           brand: producto.brand,
+          dropiUrl: producto.dropiUrl,
           ivaRate: producto.ivaRate,
           variants: producto.variants,
         };

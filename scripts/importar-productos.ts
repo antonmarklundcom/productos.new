@@ -233,6 +233,7 @@ async function main(): Promise<void> {
         description: producto.description,
         categoryId,
         brand: producto.brand,
+        dropiUrl: producto.dropiUrl,
         ivaRate: producto.ivaRate,
         variants: producto.variants,
       };

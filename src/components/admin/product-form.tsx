@@ -22,6 +22,7 @@ export type ProductFormValues = {
   description: string;
   categoryId: number;
   brand: string;
+  dropiUrl?: string;
   ivaRate: number;
   isActive: boolean;
   published: boolean;
@@ -64,6 +65,7 @@ export function ProductForm({
             description: String(data.get("description") ?? ""),
             categoryId: Number(data.get("categoryId")),
             brand: String(data.get("brand") ?? ""),
+            dropiUrl: String(data.get("dropiUrl") ?? ""),
             ivaRate: Number(data.get("ivaRate")),
             isActive: data.get("isActive") === "on",
             published: data.get("published") === "on",
@@ -193,6 +195,21 @@ export function ProductForm({
             <option value="0">{t("panel.producto.iva0")}</option>
           </select>
         </div>
+      </div>
+
+      <div className="grid gap-1.5">
+        <Label htmlFor="dropiUrl">{t("panel.producto.dropiUrl")}</Label>
+        <Input
+          id="dropiUrl"
+          name="dropiUrl"
+          type="url"
+          maxLength={2048}
+          placeholder="https://app.dropi.com.py/dashboard/product-details/10067/cepillo-limpiador"
+          defaultValue={defaults.dropiUrl ?? ""}
+        />
+        <p className="text-sm text-muted-foreground">
+          {t("panel.producto.dropiUrlAyuda")}
+        </p>
       </div>
 
       <div className="grid gap-2">

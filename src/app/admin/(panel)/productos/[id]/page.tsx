@@ -85,6 +85,7 @@ export default async function AdminProductPage({ params }: { params: Params }) {
               description: product.description ?? "",
               categoryId: product.categoryId,
               brand: product.brand ?? "",
+              dropiUrl: product.dropiUrl ?? "",
               ivaRate: product.ivaRate,
               isActive: product.isActive,
               published: product.publishedAt !== null,

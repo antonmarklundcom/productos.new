@@ -22,8 +22,10 @@ vi.mock('@/lib/admin-guard', async (importOriginal) => {
 });
 
 const createProduct = vi.fn(async () => 7);
+const updateProduct = vi.fn(async () => undefined);
 vi.mock('@/domain/admin-products', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/domain/admin-products')>()),
+  updateProduct: (...args: unknown[]) => updateProduct(...(args as [])),
   createProduct: (...args: unknown[]) => createProduct(...(args as [])),
 }));
 
@@ -65,5 +67,24 @@ describe('el slug de un producto', () => {
     expect(createProduct).toHaveBeenCalledWith(
       expect.objectContaining({ slug: 'remera-destacada', isFeatured: true }),
     );
+  });
+});
+
+
+describe('private Dropi URL saving', () => {
+  it('keeps omitted update undefined and sends blank as null', async () => {
+    const { saveProduct } = await import('@/app/actions/admin-products');
+    updateProduct.mockClear();
+    await saveProduct({ ...ENTRADA, slug: 'remera', productId: 7 });
+    expect(updateProduct).toHaveBeenLastCalledWith(7, expect.objectContaining({ dropiUrl: undefined }));
+    await saveProduct({ ...ENTRADA, slug: 'remera', productId: 7, dropiUrl: ' ' });
+    expect(updateProduct).toHaveBeenLastCalledWith(7, expect.objectContaining({ dropiUrl: null }));
+  });
+  it('rejects another host before any write', async () => {
+    const { saveProduct } = await import('@/app/actions/admin-products');
+    updateProduct.mockClear();
+    const result = await saveProduct({ ...ENTRADA, slug: 'remera', productId: 7, dropiUrl: 'https://evil.example/dashboard/search/123' });
+    expect(result.ok).toBe(false);
+    expect(updateProduct).not.toHaveBeenCalled();
   });
 });
