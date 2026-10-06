@@ -134,6 +134,9 @@ jobs:
 
       - run: pnpm build
 
+      - name: Isolated Hostinger standalone runtime
+        run: pnpm test:deployment
+
   # Playwright contra un build de verdad (fable/plan.md §6.1): lo que ve la
   # compradora en un navegador, no lo que asume un test unitario. Corre
   # después de `checks` — sin typecheck/lint/unitarios verdes no vale la pena
