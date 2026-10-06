@@ -139,6 +139,7 @@ export async function exportProductsCsv(
         t("csv.producto.stock"),
         t("csv.producto.modo"),
         t("csv.producto.mostrarPrecio"),
+        "Dropi URL",
       ],
       rows.map((row) => [
         row.sku,
@@ -149,6 +150,7 @@ export async function exportProductsCsv(
         row.onHand,
         row.saleMode,
         row.showPrice ? "true" : "false",
+        row.dropiUrl ?? "",
       ])
     );
 

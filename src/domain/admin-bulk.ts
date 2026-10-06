@@ -348,6 +348,7 @@ export async function duplicateProduct(productId: number): Promise<number> {
       description: original.description,
       categoryId: original.categoryId,
       brand: original.brand,
+      dropiUrl: original.dropiUrl,
       ivaRate: original.ivaRate,
       isActive: false,
       isFeatured: false,

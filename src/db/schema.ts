@@ -185,6 +185,8 @@ export const products = mysqlTable(
         onUpdate: "cascade",
       }),
     brand: varchar("brand", { length: 120 }),
+    /** Private supplier reference, only exposed in the admin panel. */
+    dropiUrl: varchar("dropi_url", { length: 2048 }),
     /** 10 | 5 | 0 — IVA incluido en el precio. */
     ivaRate: tinyint("iva_rate").notNull().default(10),
     isActive: boolean("is_active").notNull().default(true),

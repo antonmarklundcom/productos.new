@@ -1,0 +1,1 @@
+ALTER TABLE `products` ADD `dropi_url` varchar(2048);
