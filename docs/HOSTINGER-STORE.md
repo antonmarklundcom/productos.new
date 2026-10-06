@@ -21,7 +21,7 @@ The final instruction is to leave the work in a ready, unmerged PR. Merge that P
 | Environment     | `NODE_ENV=production` in hPanel                                                                   |
 | Public origin   | `https://productos.com.py`, or the selected temporary Hostinger URL until domain mapping is ready |
 
-`build` executes `next build --webpack`. The template's `prebuild` generates client translations; its single build worker, upload limits, security headers and external `mysql2` configuration remain. System fonts need no build-time Google Fonts connection. Keep the lockfile; do not deploy `.next` or `node_modules` from this checkout. Hostinger supplies the process port.
+`build` executes `next build --webpack`. The template's `prebuild` generates client translations; its single build worker, upload limits, security headers and external `mysql2` configuration remain. `.npmrc` keeps build dependencies installed even when Hostinger sets `NODE_ENV=production`, so the default install command can still run `tsx`, TypeScript and Tailwind during the build. This does not change the production runtime mode. System fonts need no build-time Google Fonts connection. Keep the lockfile; do not deploy `.next` or `node_modules` from this checkout. Hostinger supplies the process port.
 
 The five-value import example below contains placeholders only. Generate three independent strong random secrets and fill values privately in hPanel. Never reuse the local test environment.
 
