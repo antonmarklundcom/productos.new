@@ -25,6 +25,8 @@ import { t, tPlural } from "@/i18n";
  */
 export function CatalogImportForm() {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [source, setSource] = useState<"file" | "paste">("file");
+  const [csvText, setCsvText] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
   const [pisarStock, setPisarStock] = useState(false);
   const [summary, setSummary] = useState<CatalogImportSummary | null>(null);
@@ -32,9 +34,11 @@ export function CatalogImportForm() {
   const [isPending, startTransition] = useTransition();
 
   const buildFormData = (): FormData | null => {
-    const file = inputRef.current?.files?.[0];
+    const file = source === "paste"
+      ? (csvText.trim() ? new File([csvText], "catalogo.csv", { type: "text/csv" }) : undefined)
+      : inputRef.current?.files?.[0];
     if (!file) {
-      toast.error(t("adminError.elegiArchivo"));
+      toast.error(t(source === "paste" ? "panel.productos.importar.pegaCsvVacio" : "adminError.elegiArchivo"));
       return null;
     }
     const formData = new FormData();
@@ -91,6 +95,7 @@ export function CatalogImportForm() {
       setSummary(null);
       setErrores(null);
       setFileName(null);
+      setCsvText("");
       if (inputRef.current) inputRef.current.value = "";
     });
   };
@@ -100,10 +105,36 @@ export function CatalogImportForm() {
       <h2 className="text-sm font-semibold">{t("panel.productos.importar.titulo")}</h2>
       <p className="text-muted-foreground mt-1 text-xs">{t("panel.productos.importar.ayuda")}</p>
 
+      <fieldset className="mt-3 flex flex-wrap gap-4 text-sm" disabled={isPending}>
+        <legend className="sr-only">{t("panel.productos.importar.origen")}</legend>
+        {(["file", "paste"] as const).map((option) => (
+          <label key={option} className="flex items-center gap-2">
+            <input type="radio" name="catalog-import-source" value={option} checked={source === option} onChange={() => {
+              setSource(option);
+              setSummary(null);
+              setErrores(null);
+            }} />
+            {t(option === "file" ? "panel.productos.importar.archivo" : "panel.productos.importar.pegaCsv")}
+          </label>
+        ))}
+      </fieldset>
+      {source === "paste" ? (
+        <div className="mt-3 grid gap-2">
+          <label htmlFor="catalog-import-csv" className="text-sm">{t("panel.productos.importar.csvTexto")}</label>
+          <textarea id="catalog-import-csv" rows={8} value={csvText} disabled={isPending} onChange={(event) => {
+            setCsvText(event.target.value);
+            setSummary(null);
+            setErrores(null);
+          }} className="border-border rounded-lg border p-2 font-mono text-xs" />
+          <p className="text-muted-foreground text-xs">{t("panel.productos.importar.pegaCsvAyuda")}</p>
+        </div>
+      ) : null}
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <input
           ref={inputRef}
           type="file"
+          hidden={source === "paste"}
+          disabled={isPending}
           accept=".csv,.xlsx,text/csv"
           aria-label={t("panel.productos.importar.titulo")}
           onChange={(event) => {
@@ -116,7 +147,7 @@ export function CatalogImportForm() {
         <button
           type="button"
           onClick={revisar}
-          disabled={isPending || !fileName}
+          disabled={isPending || (source === "paste" ? !csvText.trim() : !fileName)}
           className="border-border hover:bg-muted rounded-lg border px-3 py-1.5 text-sm disabled:opacity-60"
         >
           {t("panel.productos.importar.revisar")}
@@ -126,6 +157,7 @@ export function CatalogImportForm() {
       <label className="text-muted-foreground mt-3 flex items-center gap-2 text-xs">
         <input
           type="checkbox"
+          disabled={isPending}
           checked={pisarStock}
           onChange={(event) => {
             setPisarStock(event.target.checked);

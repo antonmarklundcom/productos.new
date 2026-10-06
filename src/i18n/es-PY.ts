@@ -1521,6 +1521,12 @@ export const esPY = {
   "panel.productos.importar.titulo": "Cargar planilla",
   "panel.productos.importar.ayuda":
     "CSV o Excel, una fila por variante — el mismo formato que baja el botón de arriba. Primero se revisa; recién se escribe cuando confirmás.",
+  "panel.productos.importar.origen": "Cómo cargar la planilla",
+  "panel.productos.importar.archivo": "Subir archivo",
+  "panel.productos.importar.pegaCsv": "Pegar CSV",
+  "panel.productos.importar.csvTexto": "Contenido CSV",
+  "panel.productos.importar.pegaCsvAyuda": "Pegá el CSV completo, con el encabezado y una fila por variante. Revisá el resultado antes de confirmar.",
+  "panel.productos.importar.pegaCsvVacio": "Pegá el contenido CSV para revisarlo.",
   "panel.productos.importar.revisar": "Revisar",
   "panel.productos.importar.confirmar": "Confirmar e importar",
   "panel.productos.importar.aplicando": "Importando…",
