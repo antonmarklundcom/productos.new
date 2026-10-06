@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:net";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -15,12 +16,16 @@ let exited;
 try {
   await cp(path.resolve(".next/standalone"), staging, {
     recursive: true,
-    // Preserve pnpm's relative links into .pnpm; flattening them breaks Node's
-    // dependency resolution inside the generated server package.
-    dereference: false,
-    verbatimSymlinks: true,
+    // Reproduce publication as physical directories. Preserving pnpm links
+    // hid Hostinger's missing sql-escaper failure; hoisted installs survive it.
+    dereference: true,
     filter: (source) => !path.basename(source).startsWith(".env"),
   });
+  // The runtime log failed here, before Next could prepare instrumentation.
+  // Load both entry points from the published location, without opening SQL.
+  const requirePublished = createRequire(path.join(staging, "server.js"));
+  requirePublished("mysql2");
+  requirePublished("mysql2/promise");
   const reservation = createServer();
   reservation.listen(0, "127.0.0.1");
   await once(reservation, "listening");
