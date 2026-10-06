@@ -286,6 +286,13 @@ export function AdminSidebar({
                         href={item.href}
                         data-testid={item.testId}
                         aria-current={active ? "page" : undefined}
+                        aria-label={
+                          item.id === "resenas" && item.badge
+                            ? t("panel.nav.resenasPendientes", {
+                                n: item.badge,
+                              })
+                            : undefined
+                        }
                         onClick={() => setMobileOpen(false)}
                         className={cn(
                           "focus-visible:ring-ring flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors outline-none focus-visible:ring-2",
