@@ -1,3 +1,8 @@
+# Hostinger's published mysql2 resolved at node_modules/mysql2 and could not
+# load sql-escaper. Copying the isolated tree as physical directories reproduces it.
+# A hoisted tree keeps those dependencies resolvable after publication.
+nodeLinker: hoisted
+
 # Aprobación de los scripts de build.
 #
 # pnpm no corre el `postinstall` de una dependencia salvo que esté aprobada acá.
