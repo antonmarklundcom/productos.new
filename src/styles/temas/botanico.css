@@ -1,0 +1,48 @@
+/*
+ * Tema botanico. Para quién: una tienda general con una identidad verde y cálida.
+ * Fuentes sugeridas: sistema (Segoe UI / Arial), sin red durante el build.
+ * layout.tsx conserva las variables --font-geist-sans y --font-geist-mono mediante CSS.
+ */
+:root {
+  --radius: 0.75rem;
+  --background: oklch(0.993 0.003 95);
+  --foreground: oklch(0.27 0.035 162);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.27 0.035 162);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.27 0.035 162);
+  --primary: oklch(0.35 0.052 162);
+  --primary-foreground: oklch(0.99 0.005 95);
+  --secondary: oklch(0.94 0.017 145);
+  --secondary-foreground: oklch(0.29 0.035 162);
+  --muted: oklch(0.965 0.006 95);
+  --muted-foreground: oklch(0.48 0.017 162);
+  --accent: oklch(0.92 0.083 115);
+  --accent-foreground: oklch(0.27 0.035 162);
+  --destructive: oklch(0.53 0.18 28);
+  --destructive-foreground: oklch(0.99 0 0);
+  --border: oklch(0.9 0.01 145);
+  --input: oklch(0.9 0.01 145);
+  --ring: oklch(0.5 0.06 162);
+}
+.dark {
+  --background: oklch(0.21 0.023 162);
+  --foreground: oklch(0.96 0.009 95);
+  --card: oklch(0.25 0.023 162);
+  --card-foreground: oklch(0.96 0.009 95);
+  --popover: oklch(0.25 0.023 162);
+  --popover-foreground: oklch(0.96 0.009 95);
+  --primary: oklch(0.85 0.06 140);
+  --primary-foreground: oklch(0.23 0.023 162);
+  --secondary: oklch(0.3 0.023 162);
+  --secondary-foreground: oklch(0.96 0.009 95);
+  --muted: oklch(0.28 0.023 162);
+  --muted-foreground: oklch(0.75 0.009 95);
+  --accent: oklch(0.84 0.083 115);
+  --accent-foreground: oklch(0.23 0.023 162);
+  --destructive: oklch(0.7 0.18 28);
+  --destructive-foreground: oklch(0.15 0 0);
+  --border: oklch(0.4 0.023 162);
+  --input: oklch(0.4 0.023 162);
+  --ring: oklch(0.75 0.06 162);
+}

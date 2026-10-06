@@ -1,0 +1,1 @@
+ALTER TABLE `orders` ADD `payment_reminder_sent_at` datetime;

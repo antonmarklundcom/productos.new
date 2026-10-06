@@ -1,0 +1,5 @@
+# Todo en LF, también en Windows con core.autocrlf: `template:sync` compara
+# blobs, y un archivo commiteado en CRLF parecería cambiado entero por la
+# tienda (merge de 3 vías en conflicto de punta a punta). Los hooks de
+# `.husky/` con CRLF, además, no corren en sh.
+* text=auto eol=lf

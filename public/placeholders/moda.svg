@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" role="img" aria-label="Placeholder de moda">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="hsl(320 45% 93%)" />
+      <stop offset="100%" stop-color="hsl(320 45% 84%)" />
+    </linearGradient>
+  </defs>
+  <rect width="400" height="400" fill="url(#bg)" />
+  <g fill="none" stroke="hsl(320 25% 45%)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M165 140 l-55 30 20 35 35 -18 v100 h70 v-100 l35 18 20 -35 -55 -30 a35 35 0 0 1 -70 0 z" />
+  </g>
+  <text x="200" y="300" text-anchor="middle" font-family="system-ui, sans-serif" font-size="18" fill="hsl(320 20% 40%)">Foto próximamente</text>
+</svg>
