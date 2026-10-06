@@ -6,7 +6,7 @@ The destination was inspected at its initial commit `9f04114b018f48dfc40bc009508
 
 ## Hostinger settings
 
-The final instruction is to leave the work in a ready, unmerged PR. Merge that PR yourself before selecting `main` for deployment; the original `main` contains only `.gitignore` and is not deployable yet.
+The storefront has been merged into `main`. Select `main` for deployment.
 
 | Field           | Value                                                                                             |
 | --------------- | ------------------------------------------------------------------------------------------------- |
@@ -14,7 +14,7 @@ The final instruction is to leave the work in a ready, unmerged PR. Merge that P
 | Branch          | `main`                                                                                            |
 | Project root    | `/`                                                                                               |
 | Runtime         | Node.js 22 (validated locally with 22.23.3)                                                       |
-| Package manager | `pnpm@11.22.0`, as pinned by the template                                                         |
+| Package manager | `pnpm@11.24.0`, matching the Hostinger build environment                                          |
 | Install         | `pnpm install --frozen-lockfile`                                                                  |
 | Build           | `pnpm build`                                                                                      |
 | Start           | `pnpm start`                                                                                      |
@@ -22,6 +22,8 @@ The final instruction is to leave the work in a ready, unmerged PR. Merge that P
 | Public origin   | `https://productos.com.py`, or the selected temporary Hostinger URL until domain mapping is ready |
 
 `build` executes `next build --webpack`. The template's `prebuild` generates client translations; its single build worker, upload limits, security headers and external `mysql2` configuration remain. `.npmrc` keeps build dependencies installed even when Hostinger sets `NODE_ENV=production`, so the default install command can still run `tsx`, TypeScript and Tailwind during the build. This does not change the production runtime mode. System fonts need no build-time Google Fonts connection. Keep the lockfile; do not deploy `.next` or `node_modules` from this checkout. Hostinger supplies the process port.
+
+In the dropdown-only installer, choose **pnpm run build**, package manager **pnpm**, and output directory **.next**. The pnpm pin matches the 11.24.0 invoked during Hostinger's build; the previous 11.22.0 pin failed Corepack's version check after dependency installation.
 
 The five-value import example below contains placeholders only. Generate three independent strong random secrets and fill values privately in hPanel. Never reuse the local test environment.
 
