@@ -2389,17 +2389,27 @@ export const esPY = {
   "setup.duenio": "Cuenta del dueño",
   "setup.email": "Email",
   "setup.password": "Contraseña",
+  "setup.password.confirmar": "Repetir contraseña",
+  "setup.password.mostrar": "Mostrar contraseñas",
   "setup.nombre": "Nombre (opcional)",
   "setup.duenioAyuda":
     "Vacío = no se crea ni se cambia ninguna cuenta (sólo se aplican las migraciones).",
-  "setup.seed":
-    "Cargar el catálogo de ejemplo (sólo para probar; después se reemplaza por el real)",
-  "setup.force": "La tienda ya estaba inicializada y quiero repetirlo igual",
+  "setup.seed": "Cargar productos de ejemplo",
+  "setup.seedAyuda":
+    "Agrega productos de prueba con precios y stock de ejemplo. Dejalo desmarcado para cargar tu catálogo real. Los ejemplos no se reemplazan automáticamente.",
+  "setup.force": "Repetir la configuración de una tienda ya inicializada",
+  "setup.forceAyuda":
+    "Habilita las opciones elegidas aunque el setup ya se haya completado. Si ingresás un email que ya existe, cambia la contraseña de esa cuenta. Dejalo desmarcado en la primera configuración.",
   "setup.correr": "Inicializar",
   "setup.corriendo": "Inicializando…",
   "setup.listo": "Listo. La tienda quedó inicializada.",
+  "setup.loginAyuda":
+    "La configuración terminó. Si creaste la cuenta del dueño, ya podés entrar con el email y la contraseña que elegiste. Los avisos de abajo indican lo que falta configurar para vender; no son errores del registro.",
+  "setup.irAlAdmin": "Ir al inicio de sesión del admin",
   "setup.preflight": "Lo que falta para cobrar de verdad:",
   "setup.error.secreto": "El SETUP_SECRET no coincide.",
+  "setup.error.passwordNoCoincide":
+    "Las contraseñas no coinciden. Volvé a escribirlas.",
   "setup.error.limite": "Demasiados intentos. Esperá unos minutos.",
   "setup.error.https": "Hace falta entrar por https://.",
   "setup.error.yaInicializada":
