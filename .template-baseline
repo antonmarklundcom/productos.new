@@ -1,0 +1,4 @@
+# Hasta acá está al día esta tienda respecto del template (pnpm template:diff).
+# Lo escribe `pnpm template:diff --marcar` (o `pnpm template:sync`) después de
+# ponerse al día.
+c5422e3c9184f0c4e4575da3db2774329d063214

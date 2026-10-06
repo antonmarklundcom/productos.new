@@ -1,0 +1,50 @@
+name: pnpm al día
+
+on:
+  schedule:
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+jobs:
+  # El pin de "packageManager" es lo que hace reproducible el install, acá y en
+  # el contenedor de build de Hostinger. El problema del pin es que envejece
+  # callado: el día que Hostinger levanta su Corepack a la major siguiente, el
+  # lockfile deja de instalar y el error aparece en el deploy, no acá.
+  #
+  # Este job no actualiza nada —el pin se sube a mano, con su lockfile— pero
+  # avisa cuando la major pineada quedó atrás. Corre en su propio workflow
+  # (semanal + a mano) en vez de en cada PR: le pega al registry de npm, y esa
+  # llamada no tiene nada que ver con el diff que se está revisando.
+  pnpm-al-dia:
+    # Viaja a cada tienda pero sólo corre en el template: el pin se sube acá y
+    # llega a las tiendas con template:sync. Un cron semanal por tienda era un
+    # minuto facturado por semana en cada repo privado, para avisar lo mismo.
+    if: github.repository == 'antonmarklundcom/ecom'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: La major de pnpm pineada sigue siendo la última
+        run: |
+          set -euo pipefail
+
+          pineado=$(node -p "require('./package.json').packageManager.replace(/^pnpm@/, '')")
+          ultimo=$(curl -fsS --retry 3 --retry-delay 2 https://registry.npmjs.org/pnpm/latest \
+            | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version")
+
+          major_pineado=${pineado%%.*}
+          major_ultimo=${ultimo%%.*}
+
+          echo "packageManager: pnpm@$pineado (major $major_pineado)"
+          echo "registry:       pnpm@$ultimo (major $major_ultimo)"
+
+          # Sólo la major. Cada patch de pnpm rompería todos los PRs abiertos y
+          # el job se terminaría ignorando, que es peor que no tenerlo.
+          if [ "$major_pineado" -lt "$major_ultimo" ]; then
+            echo "::error::pnpm@$pineado está una major atrás de pnpm@$ultimo. Actualizá \"packageManager\" en package.json, corré \`pnpm install\` para regenerar el lockfile y commiteá los dos."
+            exit 1
+          fi
+
+          echo "✓ al día"

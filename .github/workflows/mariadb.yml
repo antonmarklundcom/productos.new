@@ -1,0 +1,76 @@
+name: Tests en MariaDB
+
+# El CI de siempre (`ci.yml`) corre contra MySQL 8, pero la base de Hostinger
+# suele ser **MariaDB**, y las dos no son iguales: el 23/09 un `FOR SHARE`
+# (que MariaDB no tiene) pasó verde en CI y rompía el checkout con cupón en las
+# tiendas. Este workflow corre la misma suite contra MariaDB para atajar eso.
+#
+# Minutos (NEW-STORE.md § "CI y minutos de Actions"): este archivo viaja a
+# todas las tiendas. En un repo **público** (el template) corre solo en cada
+# push a main, gratis. En un repo **privado** (una tienda) sólo corre a mano
+# desde la pestaña Actions, así no gasta minutos sin que nadie lo pida.
+on:
+  pull_request:
+    paths-ignore:
+      - "**.md"
+      - "fable/**"
+      - "docs/**"
+      - "LICENSE"
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "fable/**"
+      - "docs/**"
+      - "LICENSE"
+  workflow_dispatch:
+
+concurrency:
+  group: mariadb-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    if: ${{ !github.event.repository.private || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: ecom
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    env:
+      DATABASE_URL: mysql://root:root@127.0.0.1:3306/ecom
+      TEST_DATABASE_URL: mysql://root:root@127.0.0.1:3306/ecom_test
+      SESSION_SECRET: ci-session-secret-de-al-menos-32-caracteres
+      NEXT_PUBLIC_SITE_URL: https://ci.example.py
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # La misma hora fuera de UTC que en ci.yml: los tests de reservas lo
+      # necesitan para probar que el pool fija cada sesión en UTC.
+      - name: MariaDB fuera de UTC
+        run: mysql -h 127.0.0.1 -uroot -proot -e "SET GLOBAL time_zone = '-03:00'"
+
+      - run: pnpm test
+        timeout-minutes: 10

@@ -1,0 +1,117 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Kit de piel (plan-crecimiento §6.2): `:root`/`.dark` viven en
+ * `src/styles/temas/<nombre>.css`, no acá. Elegir tema = cambiar esta línea
+ * (o correr `pnpm nueva-tienda --tema <nombre>`, que la reescribe sola).
+ * Los tres temas del template: `neutro`, `calido`, `oscuro-vivo` — ver
+ * NEW-STORE.md §5 para cómo crear un cuarto.
+ */
+@import "../styles/temas/botanico.css";
+@import "../styles/store.css";
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* == S11 == */
+/*
+ * Prosa de `product-description.tsx` (descripción de producto y de
+ * categoría, plan-operacion §6.3). La salida de `renderMarkdown` no lleva
+ * `class` ni `style` a propósito (ver el comentario de `src/lib/markdown.ts`):
+ * la piel la estila desde acá, y cada tienda puede rediseñar este bloque sin
+ * tocar el parser. El subconjunto de markdown es chico (párrafos, negrita,
+ * cursiva, listas, links) y estos son sus únicos selectores.
+ */
+.prose {
+  @apply text-muted-foreground text-sm leading-relaxed;
+}
+.prose p + p {
+  @apply mt-3;
+}
+.prose ul {
+  @apply mt-3 list-disc space-y-1 pl-5;
+}
+.prose strong {
+  @apply text-foreground font-medium;
+}
+.prose a {
+  @apply text-foreground underline underline-offset-2;
+}
+
+/*
+ * Barra de compra móvil de la ficha (`src/components/sticky-buy-bar.tsx`):
+ * mientras está a la vista marca `<body data-barra-compra>`, y el botón
+ * flotante de WhatsApp sube para no quedar tapado. Sólo en mobile, que es
+ * donde existe la barra.
+ */
+@media (width < 48rem) {
+  body[data-barra-compra] [data-whatsapp-fab] {
+    bottom: 5.5rem;
+  }
+}
+
+/* == S9 ==
+   CSS de impresión del remito (plan-operacion §6.1). Nada inline: el CSP de
+   `src/proxy.ts` no permite `'unsafe-inline'` en `style-src` para las rutas
+   con nonce, y `/admin` es justamente una de ésas.
+
+   `header` es el único <header> que existe bajo `/admin` — el del layout del
+   panel (`src/app/admin/(panel)/layout.tsx`) — así que ocultarlo acá alcanza
+   para sacar el nav de cualquier página del panel que se imprima, sin tocar
+   ese layout (fuera de los Owns de esta fase). `.s9-no-print` es para lo que
+   la fase sí dibuja: el botón "Imprimir" y el link "Volver al pedido" del
+   remito. */
+@media print {
+  header {
+    display: none !important;
+  }
+  .s9-no-print {
+    display: none !important;
+  }
+  .s9-print-page {
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+}

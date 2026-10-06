@@ -1,0 +1,1 @@
+ALTER TABLE `orders` ADD `card_checkout_state` enum('idle','starting','ready','unknown') DEFAULT 'idle' NOT NULL;

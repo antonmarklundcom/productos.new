@@ -1,0 +1,186 @@
+name: Distribuir a las tiendas
+
+# plan-operacion.md §6.5: el template le empuja un PR a cada tienda creada
+# con "Use this template" (tiendas.json) con la maquinaria nueva de cada
+# versión. Cada tienda decide si lo mergea — su propio CI es el que manda.
+#
+# Corre al publicar una versión del template (tag `v*`, ver CHANGELOG.md) o a
+# mano, no en cada push a main: cada corrida abre un PR en cada tienda, y cada
+# uno de esos PRs corre el CI de esa tienda. Agrupar los arreglos en versiones
+# es lo que mantiene los minutos de Actions bajo control con muchas tiendas.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  # Lee tiendas.json una sola vez y decide si hay algo para hacer, para que
+  # la matrix de abajo ni se arme cuando no hace falta (una tienda vacía o
+  # sin TIENDAS_TOKEN no debe aparecer como "0 jobs corridos", tiene que
+  # decir por qué en el log — es justamente lo que se prueba en este repo).
+  preparar:
+    # Este archivo viaja a cada tienda (Use this template, bootstrap:repo,
+    # template:sync), pero sólo tiene sentido en el template: en una tienda no
+    # debe levantar ni un runner.
+    if: github.repository == 'antonmarklundcom/ecom'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      tiendas: ${{ steps.leer.outputs.tiendas }}
+      hay_token: ${{ steps.token.outputs.hay }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Leer tiendas.json
+        id: leer
+        run: |
+          set -euo pipefail
+
+          if [ ! -f tiendas.json ]; then
+            echo "tiendas=[]" >> "$GITHUB_OUTPUT"
+            echo "No hay tiendas.json en la raíz de este repo: nada que distribuir."
+            exit 0
+          fi
+
+          contenido=$(node -e "
+            const fs = require('node:fs');
+            const tiendas = JSON.parse(fs.readFileSync('tiendas.json', 'utf8'));
+            if (!Array.isArray(tiendas)) throw new Error('tiendas.json tiene que ser un array');
+            for (const t of tiendas) {
+              if (!t || typeof t.repo !== 'string' || !/^[^/\s]+\/[^/\s]+$/.test(t.repo)) {
+                throw new Error('cada entrada necesita { \"repo\": \"owner/nombre\" }: ' + JSON.stringify(t));
+              }
+            }
+            process.stdout.write(JSON.stringify(tiendas));
+          ")
+
+          echo "tiendas=$contenido" >> "$GITHUB_OUTPUT"
+
+          cantidad=$(node -e "process.stdout.write(String(JSON.parse(process.argv[1]).length))" "$contenido")
+          if [ "$cantidad" = "0" ]; then
+            echo "tiendas.json está vacío: nada que distribuir (este es el caso normal en el template)."
+          else
+            echo "$cantidad tienda(s) en tiendas.json: $contenido"
+          fi
+
+      - name: Hay TIENDAS_TOKEN
+        id: token
+        env:
+          TIENDAS_TOKEN: ${{ secrets.TIENDAS_TOKEN }}
+        run: |
+          if [ -n "${TIENDAS_TOKEN:-}" ]; then
+            echo "hay=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "hay=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # En rojo, no en amarillo: con un aviso la corrida quedaba verde y la
+      # distribución no llegó a correr ni una vez en trece corridas (hasta
+      # 2026-09-24) sin que nadie se diera cuenta. Hay tiendas registradas y
+      # ninguna recibe nada: eso es una falla.
+      - name: Sin TIENDAS_TOKEN, falla
+        if: steps.leer.outputs.tiendas != '[]' && steps.token.outputs.hay != 'true'
+        run: |
+          echo "::error::tiendas.json tiene entradas pero no hay secrets.TIENDAS_TOKEN configurado en este repo, así que no se distribuye nada. Cargalo: un token fine-grained con acceso a cada tienda y permisos Contents, Pull requests y Workflows en read and write (NEW-STORE.md § La distribución automática del template)."
+          exit 1
+
+  distribuir:
+    needs: preparar
+    if: needs.preparar.outputs.tiendas != '[]' && needs.preparar.outputs.hay_token == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        tienda: ${{ fromJson(needs.preparar.outputs.tiendas) }}
+
+    steps:
+      # Sin `path:` — este workflow ya vive en el template, así que
+      # $GITHUB_WORKSPACE ES el template (igual que en ci.yml). Eso mantiene
+      # a `pnpm/action-setup` leyendo `packageManager` de `package.json` en
+      # la raíz sin nada especial, y deja un solo checkout para usar como
+      # remoto `template` de cada tienda (clonada aparte, en `./tienda`).
+      - name: Checkout del template
+        uses: actions/checkout@v7
+        with:
+          # Historia completa: la tienda se compara contra su
+          # `.template-baseline`, que puede ser un commit arbitrariamente viejo,
+          # y un clon shallow (depth 1, el default) no lo tiene — este checkout
+          # es el remoto `template` de cada tienda.
+          fetch-depth: 0
+
+      - name: Asegurar una rama local "main" para servir de remoto
+        # `actions/checkout` deja el HEAD **detached** en el SHA del evento —
+        # no existe `refs/heads/main` local. `template:sync` (acá y en cada
+        # tienda) hace `git fetch template main`: sin una rama local con ese
+        # nombre, git no tiene qué mandarle. `-B` la crea o la mueve al HEAD
+        # actual sin quejarse si ya existe.
+        run: git checkout -B main
+
+      # `pnpm`/`node` y las dependencias del template: `template-sync.ts` corre
+      # desde acá (la versión de este tag), con la tienda como directorio de
+      # trabajo. Antes se copiaba el script adentro de la tienda y se corría
+      # la copia; el commit de esa copia chocaba con el mismo archivo cuando
+      # llegaba en la sincronización, y además corría `pnpm install` del lado
+      # de la tienda (código de la tienda con el token en el entorno).
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Dependencias del template
+        run: pnpm install --frozen-lockfile
+
+      - name: Clonar la tienda
+        id: clonar
+        env:
+          TIENDAS_TOKEN: ${{ secrets.TIENDAS_TOKEN }}
+        run: |
+          set -euo pipefail
+          repo="${{ matrix.tienda.repo }}"
+          if ! git clone "https://x-access-token:${TIENDAS_TOKEN}@github.com/${repo}.git" tienda; then
+            echo "::error::No pude clonar ${repo}. ¿Existe, y TIENDAS_TOKEN tiene acceso a ese repo y no venció? (un token fine-grained lista los repos uno por uno: cada tienda nueva hay que sumarla)"
+            exit 1
+          fi
+          cd tienda
+          git config user.name "ecom-template-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git remote add template "$GITHUB_WORKSPACE"
+          base=$(git symbolic-ref --short refs/remotes/origin/HEAD | sed 's#^origin/##')
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+
+      - name: Sincronizar
+        id: sync
+        run: |
+          set -euo pipefail
+          cd tienda
+          # Una sola rama por tienda: cada versión actualiza el mismo PR.
+          echo "rama=template/sync" >> "$GITHUB_OUTPUT"
+
+          salida=$("$GITHUB_WORKSPACE/node_modules/.bin/tsx" "$GITHUB_WORKSPACE/scripts/template-sync.ts" \
+            --sin-tests --json --commitear-conflictos --rama-destino template/sync 2>sync-stderr.log) || true
+          echo "$salida" | tail -n 1 > sync-resultado.json
+          cat sync-stderr.log >&2 || true
+          echo "--- resultado ---"
+          cat sync-resultado.json
+
+      - name: Empujar la rama y abrir (o actualizar) el PR
+        env:
+          GH_TOKEN: ${{ secrets.TIENDAS_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd tienda
+          version=""
+          if [ "${{ github.ref_type }}" = "tag" ]; then version="${{ github.ref_name }}"; fi
+
+          node "$GITHUB_WORKSPACE/scripts/ci/armar-pr-tiendas.mjs" \
+            --repo "${{ matrix.tienda.repo }}" --rama "${{ steps.sync.outputs.rama }}" \
+            --base "${{ steps.clonar.outputs.base }}" --resultado sync-resultado.json \
+            --sha "$GITHUB_SHA" --version "$version" --email-bot "actions@users.noreply.github.com"
+
+      - name: Sin novedades para esta tienda o error sin nada para mostrar
+        if: failure()
+        run: |
+          echo "::error::La distribución a ${{ matrix.tienda.repo }} no terminó bien. Mirá los pasos 'Clonar la tienda' y 'Sincronizar' de arriba."

@@ -1,0 +1,72 @@
+/*
+ * Tema `oscuro-vivo` — kit de piel (plan-crecimiento §6.2).
+ *
+ * Para quién: rubros tech, gaming, indumentaria urbana o cualquier marca que
+ * quiera un fondo oscuro **fijo** (no depende de si el celular de la
+ * compradora está en modo claro u oscuro: la tienda siempre se ve oscura,
+ * con un acento saturado que resalta precio y "Agregar al carrito").
+ * Redondeo chico: botones y cards más "cuadrados", look de interfaz.
+ *
+ * Fuentes sugeridas: `Sora` (títulos, geométrica) + `Inter` (cuerpo). En
+ * `src/app/layout.tsx`, reemplazar:
+ *
+ *   import { Geist, Geist_Mono } from "next/font/google";
+ *   →
+ *   import { Sora, Inter } from "next/font/google";
+ *
+ *   const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
+ *   →
+ *   const geistSans = Inter({ variable: "--font-geist-sans", subsets: ["latin"] });
+ *
+ * (igual que en `calido.css`: `globals.css` no cambia, sigue mapeando
+ * `--font-geist-sans`/`--font-geist-mono`.)
+ *
+ * `:root` y `.dark` llevan los mismos valores a propósito: el fondo oscuro
+ * es una decisión de marca, no una preferencia del sistema operativo de
+ * quien visita.
+ */
+
+:root {
+  --radius: 0.25rem;
+  --background: oklch(0.16 0.02 260);
+  --foreground: oklch(0.96 0 0);
+  --card: oklch(0.2 0.02 260);
+  --card-foreground: oklch(0.96 0 0);
+  --popover: oklch(0.2 0.02 260);
+  --popover-foreground: oklch(0.96 0 0);
+  --primary: oklch(0.72 0.19 310);
+  --primary-foreground: oklch(0.14 0.02 260);
+  --secondary: oklch(0.26 0.02 260);
+  --secondary-foreground: oklch(0.96 0 0);
+  --muted: oklch(0.26 0.02 260);
+  --muted-foreground: oklch(0.68 0.02 260);
+  --accent: oklch(0.3 0.05 300);
+  --accent-foreground: oklch(0.96 0 0);
+  --destructive: oklch(0.65 0.24 25);
+  --destructive-foreground: oklch(0.96 0 0);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 16%);
+  --ring: oklch(0.72 0.19 310);
+}
+
+.dark {
+  --background: oklch(0.16 0.02 260);
+  --foreground: oklch(0.96 0 0);
+  --card: oklch(0.2 0.02 260);
+  --card-foreground: oklch(0.96 0 0);
+  --popover: oklch(0.2 0.02 260);
+  --popover-foreground: oklch(0.96 0 0);
+  --primary: oklch(0.72 0.19 310);
+  --primary-foreground: oklch(0.14 0.02 260);
+  --secondary: oklch(0.26 0.02 260);
+  --secondary-foreground: oklch(0.96 0 0);
+  --muted: oklch(0.26 0.02 260);
+  --muted-foreground: oklch(0.68 0.02 260);
+  --accent: oklch(0.3 0.05 300);
+  --accent-foreground: oklch(0.96 0 0);
+  --destructive: oklch(0.65 0.24 25);
+  --destructive-foreground: oklch(0.96 0 0);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 16%);
+  --ring: oklch(0.72 0.19 310);
+}
