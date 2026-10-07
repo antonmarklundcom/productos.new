@@ -229,6 +229,40 @@ La entrega Cloudinary conserva sus transformaciones anteriores (incluidos
 los recortes de tarjetas). Con R2 habilitado, el contenedor de fotos reales
 usa `object-contain`; esto no recupera píxeles que Cloudinary ya recortó.
 
+### Preparación y subida local de fotos R2
+
+`pnpm fotos:preparar --csv <archivo> --salida <carpeta fuera del repo>`
+genera WebP/JPEG, originales privados, `manifest.private.json`, `review.html`,
+`report.csv` e `import-r2.csv`. `--solo <SKU,SKU>` selecciona productos
+completos, incluidas sus variantes. No cambia precios ni stock.
+El manifiesto conserva el historial de la carpeta al usar `--solo`; la subida
+cuenta todos sus objetos pendientes. Usá una carpeta separada por lote.
+
+Sólo para la PC del operador, **nunca en hPanel ni en variables públicas**:
+`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` y `R2_BUCKET`.
+Las claves se suministran por entorno; no se guardan en manifiestos, CSVs,
+logs ni Git. No se agregan a `.env.example`.
+
+```dotenv
+# Sólo entorno de la terminal local del operador; no configurar en hPanel.
+R2_ACCOUNT_ID=""
+R2_ACCESS_KEY_ID=""
+R2_SECRET_ACCESS_KEY=""
+R2_BUCKET=""
+```
+
+`pnpm fotos:subir --manifiesto <archivo>` sólo cuenta fotos/objetos/bytes.
+La subida exige `--aplicar`; `--verificar` pide un GET público por variante
+seleccionada y registra los headers, usando `NEXT_PUBLIC_IMAGENES_URL`.
+Los objetos son inmutables: un 412 indica que ya existe uno sin confirmación
+local y requiere revisión, no sobreescritura. Las subidas confirmadas se omiten.
+
+`pnpm fotos:reparar --manifiesto <archivo> --slug <slug>` valida un ensayo
+sin conectar a la base. `--aplicar` exige que todos los objetos de la galería
+figuren subidos y usa `DATABASE_URL` del entorno local. Si hay fotos manuales
+Cloudinary, rechaza el reemplazo salvo `--incluir-manuales`. Un operador por
+carpeta a la vez; no commitear originales, manifiestos, CSVs ni HTML de revisión.
+
 ## Cloudinary
 
 ```dotenv
