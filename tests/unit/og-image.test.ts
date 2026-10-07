@@ -66,6 +66,39 @@ describe('metadataBase', () => {
 });
 
 describe('la ficha de producto comparte con foto', () => {
+  it("metadata R2 usa JPEG con las dimensiones reales del retrato", async () => {
+    vi.stubEnv("NEXT_PUBLIC_IMAGENES_URL", "https://img.test");
+    vi.stubEnv("CLOUDINARY_CLOUD_NAME", "");
+    vi.doMock("@/db/queries", () => ({
+      getProductBySlug: vi.fn(async () => ({
+        name: "Cepillo",
+        slug: "cepillo",
+        description: "Foto de producto",
+        variants: [],
+        images: [
+          { cloudinaryId: "r2:p1/cepillo-3f9a2c71d0@3024x4032", alt: "Cepillo" },
+        ],
+      })),
+      getRelatedProducts: vi.fn(),
+    }));
+    try {
+      const { generateMetadata } =
+        await import("../../src/app/producto/[slug]/page");
+      const result = await generateMetadata({
+        params: Promise.resolve({ slug: "cepillo" }),
+      });
+      expect(result.openGraph?.images).toEqual([
+        {
+          url: "https://img.test/p1/cepillo-3f9a2c71d0.jpg",
+          width: 900,
+          height: 1200,
+          alt: "Cepillo",
+        },
+      ]);
+    } finally {
+      vi.doUnmock("@/db/queries");
+    }
+  });
   it('pone la imagen principal en openGraph, con su tamaño', async () => {
     const page = await readCode(path.join('src', 'app', 'producto', '[slug]', 'page.tsx'));
 

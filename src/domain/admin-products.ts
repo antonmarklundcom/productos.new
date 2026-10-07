@@ -11,6 +11,7 @@ import {
 
 import type { AdminProductSort } from "@/lib/admin-product-sort";
 import { EXPORT_MAX_ROWS } from "@/lib/csv";
+import { parseRef } from "@/lib/imagenes-r2";
 
 import type { MessageKey, Params } from "@/i18n";
 
@@ -595,7 +596,9 @@ export async function addProductImage(
 ): Promise<void> {
   const tx = executor ?? getDb();
   const [row] = await tx
-    .select({ total: count() })
+    .select({
+      position: sql<number>`COALESCE(MAX(${productImages.position}) + 1, 0)`,
+    })
     .from(productImages)
     .where(eq(productImages.productId, input.productId));
 
@@ -603,7 +606,38 @@ export async function addProductImage(
     productId: input.productId,
     cloudinaryId: input.cloudinaryId,
     alt: input.alt,
-    position: row?.total ?? 0,
+    position: Number(row?.position ?? 0),
+  });
+}
+
+/** Replace only one product's gallery, atomically; invalid refs never delete photos. */
+export async function replaceProductImages(
+  productId: number,
+  items: readonly { ref: string; alt: string | null }[],
+  executor?: Executor
+): Promise<void> {
+  for (const item of items) {
+    if (
+      !item.ref ||
+      item.ref.length > 255 ||
+      (item.ref.startsWith("r2:") && !parseRef(item.ref))
+    ) {
+      throw new Error("Referencia de foto inválida.");
+    }
+  }
+  const db = executor ?? getDb();
+  await db.transaction(async (tx) => {
+    await tx.delete(productImages).where(eq(productImages.productId, productId));
+    if (items.length) {
+      await tx.insert(productImages).values(
+        items.map((item, position) => ({
+          productId,
+          cloudinaryId: item.ref,
+          alt: item.alt,
+          position,
+        }))
+      );
+    }
   });
 }
 

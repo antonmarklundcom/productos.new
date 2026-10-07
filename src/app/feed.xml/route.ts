@@ -44,7 +44,7 @@ export async function GET(): Promise<Response> {
       brand: product.brand,
       categoryName: product.categoryName,
       images: product.images
-        .map((image) => productImageUrl(image.cloudinaryId, "detail"))
+        .map((image) => productImageUrl(image.cloudinaryId, image.cloudinaryId.startsWith("r2:") ? "og" : "detail"))
         .filter((src): src is string => src !== null),
       variants: product.variants,
     })),

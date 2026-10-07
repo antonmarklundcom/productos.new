@@ -96,6 +96,22 @@ describe('proxy() — la puerta de /admin', () => {
 });
 
 describe('proxy() — CSP con y sin nonce', () => {
+  it('permite sólo el origen R2 válido en img-src', async () => {
+    try {
+      for (const value of ['', 'http://img.test', 'https://img.test?bad=1']) {
+        vi.stubEnv('NEXT_PUBLIC_IMAGENES_URL', value);
+        expect(csp(await proxy(pedido('/checkout')))).not.toContain('img.test');
+      }
+      vi.stubEnv('NEXT_PUBLIC_IMAGENES_URL', 'https://img.test/public/');
+      const policy = csp(await proxy(pedido('/checkout')));
+      const images = policy.split(';').find((part) => part.trim().startsWith('img-src'))!;
+      expect(images).toContain('https://img.test');
+      expect(images).not.toContain('/public');
+      expect(policy.split(';').find((part) => part.trim().startsWith('connect-src'))).not.toContain('img.test');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
   it('las rutas que se renderizan por request llevan nonce y strict-dynamic', async () => {
     const response = await proxy(pedido('/checkout'));
 

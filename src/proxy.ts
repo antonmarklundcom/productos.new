@@ -2,6 +2,7 @@ import { getIronSession } from "iron-session";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { analyticsConfig } from "@/lib/analytics";
+import { publicBase } from "@/lib/imagenes-r2";
 import { USER_ROLES } from "@/lib/roles";
 import { sessionOptions, type AdminSession } from "@/lib/session";
 
@@ -164,6 +165,8 @@ function withSecurityHeaders(
     ...(metaPixelId ? [" https://www.facebook.com https://connect.facebook.net"] : []),
   ].join("");
 
+  const imageBase = publicBase();
+  const r2ImgHost = imageBase ? ` ${new URL(imageBase).origin}` : "";
   const csp = [
     "default-src 'self'",
     /*
@@ -204,7 +207,7 @@ function withSecurityHeaders(
     "style-src 'self' 'unsafe-inline'",
     // Cloudinary sirve las fotos de producto; data: es para los blur
     // placeholders que guardamos en product_images.
-    `img-src 'self' data: blob: https://res.cloudinary.com${imgHosts}`,
+    `img-src 'self' data: blob: https://res.cloudinary.com${imgHosts}${r2ImgHost}`,
     "font-src 'self' data:",
     // El navegador sólo habla con este origen (más los medidores de arriba,
     // si están). Cloudinary se llama desde el servidor, nunca desde el

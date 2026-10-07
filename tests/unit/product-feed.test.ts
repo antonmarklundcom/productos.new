@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { buildProductFeed, escapeXml, type FeedProduct } from "@/lib/product-feed";
 
@@ -19,6 +19,35 @@ function producto(overrides: Partial<FeedProduct> = {}): FeedProduct {
 }
 
 describe("buildProductFeed", () => {
+  it("the feed route delivers R2 JPEGs without Cloudinary credentials", async () => {
+    vi.stubEnv("NEXT_PUBLIC_IMAGENES_URL", "https://img.test");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://example.com");
+    vi.stubEnv("CLOUDINARY_CLOUD_NAME", "");
+    vi.doMock("@/lib/marca", () => ({ nombreTienda: async () => "Tienda" }));
+    vi.doMock("@/db/queries", () => ({
+      getFeedProducts: async () => [
+        {
+          ...producto(),
+          images: [{ cloudinaryId: "r2:p1/cepillo-3f9a2c71d0@500x498" }],
+        },
+      ],
+    }));
+    try {
+      const { GET } = await import("../../src/app/feed.xml/route");
+      const response = await GET();
+      expect(response.status).toBe(200);
+      const xml = await response.text();
+      expect(xml).toContain(
+        "<g:image_link>https://img.test/p1/cepillo-3f9a2c71d0.jpg</g:image_link>"
+      );
+      expect(xml).not.toContain(".webp");
+    } finally {
+      vi.doUnmock("@/db/queries");
+      vi.doUnmock("@/lib/marca");
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    }
+  });
   it("un ítem por variante, con lo que Google exige", () => {
     const xml = buildProductFeed({ origin, tienda, products: [producto()] });
 

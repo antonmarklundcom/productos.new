@@ -21,8 +21,8 @@ const SELF = path.join("tests", "unit", "security-review.test.ts");
 describe("secretos", () => {
   it("ninguna variable de servidor lleva el prefijo NEXT_PUBLIC_", async () => {
     // `NEXT_PUBLIC_*` termina literalmente en el bundle JS del navegador. Lo
-    // único público es la URL del sitio.
-    const ALLOWED = new Set(["NEXT_PUBLIC_SITE_URL"]);
+    // público son las URLs del sitio y del CDN de fotos, nunca claves de subida.
+    const ALLOWED = new Set(["NEXT_PUBLIC_SITE_URL", "NEXT_PUBLIC_IMAGENES_URL"]);
     const offenders: string[] = [];
 
     for (const file of await listSourceFiles(SOURCE_ROOTS)) {

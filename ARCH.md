@@ -1072,7 +1072,8 @@ sigue siendo el endpoint abierto y sigue sin decir ni una versión.
 
 ## 6. Images & performance on PY mobile networks
 
-- **Cloudinary** for everything. Product images public with `f_auto,q_auto` transformations; receipts in a **private/authenticated** folder, admin views them via signed URLs.
+- **Cloudinary** for existing uploads. Product images public with `f_auto,q_auto` transformations; receipts in a **private/authenticated** folder, admin views them via signed URLs.
+- Product photos may also live on R2 as locally pre-generated WebP variants plus JPEG feed/OG images, referenced by `r2:p1/...@WxH` in the existing image column. The public build-time `NEXT_PUBLIC_IMAGENES_URL` enables delivery; empty means off. Private receipts and backups stay on Cloudinary. R2 import stores references without uploading or fetching.
 - Do **not** store uploads on the Hostinger filesystem — a git-based redeploy can wipe them.
 - Blur placeholders stored in `product_images.blur_data_url`; `next/image` with `unoptimized` (Cloudinary already does the work) and long cache headers.
 - Catalog pages use ISR (`revalidate`); only live availability is fetched client-side.

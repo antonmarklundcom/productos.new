@@ -4,6 +4,7 @@ import { count, eq, inArray, sql } from "drizzle-orm";
 import { categories, productImages, products, variants } from "@/db/schema";
 import { getDb } from "@/db";
 import { slugify } from "@/lib/slug";
+import { parseRef } from "@/lib/imagenes-r2";
 import {
   carpetaProductos,
   cloudinary,
@@ -210,9 +211,9 @@ export type CatalogFotoFallida = {
 };
 
 export type CatalogFotosResult = {
-  /** Cuántas fotos se subieron y quedaron registradas. */
+  /** Cuántas fotos quedaron registradas (subidas HTTPS o referencias R2). */
   fotosSubidas: number;
-  /** Cuántas fotos NO se intentaron subir porque Cloudinary no está configurado. */
+  /** Cuántas URLs HTTPS se omitieron porque Cloudinary no está configurado. */
   fotosOmitidas: number;
   /** Cada URL que se intentó y falló, sin frenar el resto de la importación. */
   fotosFallidas: CatalogFotoFallida[];
@@ -221,7 +222,7 @@ export type CatalogFotosResult = {
 const FOTOS_CONCURRENCIA = 4;
 
 /**
- * Sube las fotos de `productos` a Cloudinary y las registra con
+ * Registra referencias R2 ya subidas y sube URLs HTTPS a Cloudinary con
  * `addProductImage` — sólo para un producto que hoy no tiene ninguna, igual
  * que `contarFotosNuevas` (así reimportar la misma planilla nunca duplica).
  *
@@ -229,9 +230,8 @@ const FOTOS_CONCURRENCIA = 4;
  * commiteó: una foto que falla no puede tumbar productos y precios que sí
  * se guardaron. Por eso nunca tira — junta los fallos en `fotosFallidas`.
  *
- * Sin credenciales de Cloudinary, no se intenta ni una subida: se cuentan
- * como `fotosOmitidas` para que quien llama avise con un mensaje claro, no
- * con un error.
+ * Sin credenciales de Cloudinary, sólo las URLs HTTPS se cuentan como
+ * `fotosOmitidas`. Las referencias R2 se validan y registran sin descarga.
  *
  * Es Cloudinary quien va a buscar la URL (`resource_type: "image"` con la
  * URL como fuente) — este server nunca hace un `fetch` de la foto.
@@ -246,12 +246,12 @@ export async function applyCatalogFotos(
     return { fotosSubidas: 0, fotosOmitidas: 0, fotosFallidas: [] };
   }
 
-  // Cloudinary puede venir de /admin/integraciones (también desde el script).
-  await cargarIntegraciones();
-  if (!cloudinaryConfigured()) {
-    const total = conFotos.reduce((acc, p) => acc + p.fotos.length, 0);
-    return { fotosSubidas: 0, fotosOmitidas: total, fotosFallidas: [] };
-  }
+  // R2 references are already uploaded; they need no Cloudinary configuration.
+  const hayUrls = conFotos.some((p) =>
+    p.fotos.some((foto) => !foto.startsWith("r2:"))
+  );
+  if (hayUrls) await cargarIntegraciones();
+  const puedeSubir = hayUrls && cloudinaryConfigured();
 
   const slugs = conFotos.map((p) => p.slug);
   const rows = await tx
@@ -278,6 +278,7 @@ export async function applyCatalogFotos(
     );
 
   let fotosSubidas = 0;
+  let fotosOmitidas = 0;
   const fotosFallidas: CatalogFotoFallida[] = [];
 
   let cursor = 0;
@@ -287,8 +288,33 @@ export async function applyCatalogFotos(
       if (!grupo) return;
       // Secuencial adentro del mismo producto: `addProductImage` calcula la
       // posición contando las filas que ya existen, y subir dos fotos del
-      // mismo producto en paralelo las haría pelear por la posición 0.
+      // mismo producto en paralelo las haría pelear por la misma posición.
       for (const [index, url] of grupo.urls.entries()) {
+        if (url.startsWith("r2:")) {
+          try {
+            if (!parseRef(url)) throw new Error("Referencia de foto inválida.");
+            await addProductImage({
+              productId: grupo.productId,
+              cloudinaryId: url,
+              alt:
+                index === 0
+                  ? grupo.nombre
+                  : `${grupo.nombre} — foto ${index + 1}`,
+            }, tx);
+            fotosSubidas += 1;
+          } catch (error) {
+            fotosFallidas.push({
+              producto: grupo.nombre,
+              url,
+              motivo: safeError(error).message,
+            });
+          }
+          continue;
+        }
+        if (!puedeSubir) {
+          fotosOmitidas += 1;
+          continue;
+        }
         try {
           const uploaded = await cloudinary.uploader.upload(url, {
             folder: carpetaProductos(),
@@ -323,7 +349,7 @@ export async function applyCatalogFotos(
     )
   );
 
-  return { fotosSubidas, fotosOmitidas: 0, fotosFallidas };
+  return { fotosSubidas, fotosOmitidas, fotosFallidas };
 }
 
 /**
