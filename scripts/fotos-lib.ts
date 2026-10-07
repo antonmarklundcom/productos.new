@@ -366,6 +366,17 @@ export function parseManifest(value: unknown): PhotoManifest {
     Object.keys(object).every((key) => allowed.includes(key));
   const isoDate = (date: unknown) =>
     typeof date === "string" && Number.isFinite(Date.parse(date));
+  const nullableText = (text: unknown) =>
+    text === null || typeof text === "string";
+  const nullableCount = (count: unknown) =>
+    count === null ||
+    (typeof count === "number" && Number.isSafeInteger(count) && count >= 0);
+  const httpStatus = (status: unknown) =>
+    status === null ||
+    (typeof status === "number" &&
+      Number.isInteger(status) &&
+      status >= 100 &&
+      status <= 599);
   const code = (value: unknown) =>
     value === null ||
     (typeof value === "string" && /^[A-Z0-9_]{1,80}$/.test(value));
@@ -395,6 +406,7 @@ export function parseManifest(value: unknown): PhotoManifest {
       !fields(p, ["sku", "skus", "slug", "name", "dropiId", "sources"]) ||
       typeof p.sku !== "string" ||
       typeof p.name !== "string" ||
+      !nullableText(p.dropiId) ||
       typeof p.slug !== "string" ||
       !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(p.slug) ||
       !Array.isArray(p.skus) ||
@@ -436,6 +448,9 @@ export function parseManifest(value: unknown): PhotoManifest {
       !m.products.some((product) => product.slug === p.slug) ||
       typeof p.sku !== "string" ||
       typeof p.name !== "string" ||
+      !nullableText(p.dropiId) ||
+      !httpStatus(p.httpStatus) ||
+      ![p.width, p.height, p.pages].every(nullableCount) ||
       typeof p.sourceUrl !== "string" ||
       (p.sourceUrl !== "" && !sourceAllowed(p.sourceUrl)) ||
       typeof p.alphaUsed !== "boolean" ||
@@ -466,7 +481,11 @@ export function parseManifest(value: unknown): PhotoManifest {
         p.original !== `originals/${p.sha256}.${p.format}`)
     )
       return fail();
-    if (p.sha256 !== null && !/^[0-9a-f]{64}$/.test(p.sha256)) return fail();
+    if (
+      p.sha256 !== null &&
+      (typeof p.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(p.sha256))
+    )
+      return fail();
     if (
       p.verification &&
       (!fields(p.verification, [
@@ -479,6 +498,12 @@ export function parseManifest(value: unknown): PhotoManifest {
         "error",
       ]) ||
         !isoDate(p.verification.checkedAt) ||
+        !httpStatus(p.verification.status) ||
+        ![
+          p.verification.contentType,
+          p.verification.cacheControl,
+          p.verification.cfCacheStatus,
+        ].every(nullableText) ||
         !code(p.verification.error) ||
         !p.objects.some((o) => o.key === p.verification!.key))
     )
@@ -530,12 +555,16 @@ export function parseManifest(value: unknown): PhotoManifest {
           "uploadError",
         ]) ||
         (object.uploadError !== undefined && !code(object.uploadError)) ||
+        (object.uploadedAt !== undefined && !isoDate(object.uploadedAt)) ||
+        (object.uploadHttpStatus !== undefined &&
+          !httpStatus(object.uploadHttpStatus)) ||
         object.key !== want.key ||
         object.format !== want.format ||
         object.width !== want.width ||
         object.height !== want.height ||
         !Number.isSafeInteger(object.bytes) ||
         object.bytes <= 0 ||
+        typeof object.sha256 !== "string" ||
         !/^[0-9a-f]{64}$/.test(object.sha256) ||
         !["pending", "uploaded", "failed"].includes(object.uploadStatus)
       )

@@ -375,6 +375,9 @@ async function main(): Promise<void> {
         }
       } catch (error) {
         photo.status = "failed";
+        photo.width ??= null;
+        photo.height ??= null;
+        photo.pages ??= null;
         photo.ref = null;
         photo.objects = [];
         photo.error = safeCode(error);
