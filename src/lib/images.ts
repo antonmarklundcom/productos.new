@@ -8,6 +8,15 @@
  */
 
 
+import {
+  boxesFor,
+  jpegKeyFor,
+  keyFor,
+  parseRef,
+  publicBase,
+  sizeForBox,
+} from "./imagenes-r2";
+
 /** Lo registra `src/lib/integraciones.ts` al cargarse (ver `cloudName`). */
 const LECTOR_CLOUD_NAME = Symbol.for("ecom.integraciones.cloudName");
 
@@ -83,10 +92,43 @@ export function productImageUrl(
   cloudinaryId: string | null | undefined,
   size: ImageSize = "card"
 ): string | null {
+  if (cloudinaryId?.startsWith("r2:")) {
+    const ref = parseRef(cloudinaryId);
+    const base = publicBase();
+    if (!ref || !base) return null;
+    if (size === "og") return `${base}/${jpegKeyFor(ref.base)}`;
+    const boxes = boxesFor(ref.width, ref.height);
+    const preferred = size === "thumb" ? 240 : size === "card" ? 480 : null;
+    const box = preferred && boxes.includes(preferred) ? preferred : boxes.at(-1)!;
+    return `${base}/${keyFor(ref.base, box)}`;
+  }
   const cloud = cloudName();
   if (!cloud || !cloudinaryId) return null;
   const transforms = `${DEFAULT_TRANSFORMS},${SIZE_TRANSFORMS[size]}`;
   return `https://res.cloudinary.com/${cloud}/image/upload/${transforms}/${cloudinaryId}`;
+}
+
+/** Responsive R2 sources. Width descriptors are the actual encoded widths. */
+export function productImageSources(refString: string | null | undefined): {
+  src: string;
+  srcSet: string;
+  jpeg: string;
+} | null {
+  const ref = parseRef(refString);
+  const base = publicBase();
+  if (!ref || !base) return null;
+  const boxes = boxesFor(ref.width, ref.height);
+  const sources = new Map<number, string>();
+  for (const box of boxes) {
+    // Very narrow photos can round to the same width: keep one candidate per width.
+    const width = sizeForBox(ref.width, ref.height, box)!.width;
+    sources.set(width, `${base}/${keyFor(ref.base, box)}`);
+  }
+  return {
+    src: productImageUrl(refString, "card")!,
+    srcSet: [...sources].map(([width, url]) => `${url} ${width}w`).join(", "),
+    jpeg: `${base}/${jpegKeyFor(ref.base)}`,
+  };
 }
 
 /**

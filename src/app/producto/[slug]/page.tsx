@@ -26,6 +26,7 @@ import { t, tPlural } from "@/i18n";
 import { analyticsActivo } from "@/lib/analytics";
 import { waLinkPublico, whatsappPublico } from "@/lib/comercio";
 import { OG_IMAGE_SIZE, productImageUrl } from "@/lib/images";
+import { jpegSizeFor, parseRef } from "@/lib/imagenes-r2";
 import { markdownToText } from "@/lib/markdown";
 import { formatGs } from "@/lib/money";
 import { formatDatePY } from "@/lib/py";
@@ -85,6 +86,8 @@ export async function generateMetadata({
   // omite `images` y Next hereda la del sitio (`app/opengraph-image.tsx`):
   // el link se comparte con la marca en vez de con un rectángulo gris.
   const ogImage = productImageUrl(product.images[0]?.cloudinaryId, "og");
+  const firstRef = parseRef(product.images[0]?.cloudinaryId);
+  const r2OgSize = firstRef ? jpegSizeFor(firstRef.width, firstRef.height) : null;
 
   // == S17 == Mismo criterio que `categoria/[slug]`: canonical a la URL
   // limpia del producto, y sólo si hay origen configurado (`siteOrigin()`,
@@ -109,8 +112,8 @@ export async function generateMetadata({
             images: [
               {
                 url: ogImage,
-                width: OG_IMAGE_SIZE.width,
-                height: OG_IMAGE_SIZE.height,
+                width: r2OgSize?.width ?? OG_IMAGE_SIZE.width,
+                height: r2OgSize?.height ?? OG_IMAGE_SIZE.height,
                 alt: product.images[0]?.alt ?? product.name,
               },
             ],
@@ -194,7 +197,12 @@ export default async function ProductPage({ params }: { params: Params }) {
     brand: product.brand,
     images: product.images
       .slice(0, 5)
-      .map((image) => productImageUrl(image.cloudinaryId, "detail"))
+      .map((image) =>
+        productImageUrl(
+          image.cloudinaryId,
+          image.cloudinaryId.startsWith("r2:") ? "og" : "detail"
+        )
+      )
       .filter((src): src is string => src !== null),
     variants: product.variants,
     saleMode: product.saleMode,

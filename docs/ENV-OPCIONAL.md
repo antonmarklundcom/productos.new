@@ -205,6 +205,30 @@ OWNER_PASSWORD=""
 OWNER_NAME=""
 ```
 
+## Fotos de producto pre-generadas en R2 (opcional)
+
+```dotenv
+NEXT_PUBLIC_IMAGENES_URL=""
+```
+
+URL HTTPS pública del dominio de imágenes; no es una credencial. Vacía o
+ausente apaga la entrega R2 y conserva el comportamiento anterior. Next la
+incorpora en el JavaScript durante el build: cambiarla requiere **rebuildear
+y redeployar**, no sólo reiniciar el proceso. No se agrega a `.env.example`.
+
+Las fotos se preparan y suben antes de importar referencias como
+`r2:p1/cepillo-3f9a2c71d0@1000x1000` en la columna Fotos. La importación
+registra referencias, no descarga ni transforma archivos R2. El cargador
+local debe verificar cada objeto y sus dimensiones contra la política p1
+(240/480/800/1200 de lado mayor, sin ampliar; WebP y un JPEG para feed/OG).
+Los descriptores `srcset` usan el ancho real del WebP, incluido en retratos.
+Originales, manifiestos, comprobantes y backups permanecen privados.
+Las claves de subida R2 nunca van en variables `NEXT_PUBLIC_*`.
+
+La entrega Cloudinary conserva sus transformaciones anteriores (incluidos
+los recortes de tarjetas). Con R2 habilitado, el contenedor de fotos reales
+usa `object-contain`; esto no recupera píxeles que Cloudinary ya recortó.
+
 ## Cloudinary
 
 ```dotenv

@@ -186,6 +186,17 @@ describe('parseCatalogo', () => {
 });
 
 describe('parseCatalogo — columna Fotos', () => {
+  it('acepta referencias R2 y URLs mezcladas, preservando orden y sin duplicados', () => {
+    const r2 = 'r2:p1/cepillo-3f9a2c71d0@500x498';
+    const result = parseCatalogo(`${ENCABEZADO};Fotos\nA-1;Producto A;Hogar;Único;100000;5;${r2}|https://img.test/a.jpg|${r2}\n`);
+    expect(result.errores).toEqual([]);
+    expect(result.productos[0]?.fotos).toEqual([r2, 'https://img.test/a.jpg']);
+  });
+  it('rechaza una referencia R2 malformada sin aceptar un catálogo parcial', () => {
+    const result = parseCatalogo(`${ENCABEZADO};Fotos\nA-1;Producto A;Hogar;Único;100000;5;r2:p1/../bad@0x500\n`);
+    expect(result.errores).toHaveLength(1);
+    expect(result.errores[0]).toContain('r2:p1');
+  });
   it('acepta una o varias URLs https:// separadas por | y las suma sin duplicar', () => {
     const { productos, errores } = parseCatalogo(
       `${ENCABEZADO};Fotos\n` +

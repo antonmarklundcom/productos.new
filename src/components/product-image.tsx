@@ -4,10 +4,12 @@ import { t } from "@/i18n/client";
 import {
   categoryPlaceholderSrc,
   productImageUrl,
+  productImageSources,
   type ImageSize,
 } from "@/lib/images";
 import { cn } from "@/lib/utils";
 import type { CatalogImage } from "@/db/queries";
+import { publicBase } from "@/lib/imagenes-r2";
 
 /**
  * == S18 ==
@@ -70,6 +72,25 @@ export function ProductImage({
     className
   );
 
+  const sources = productImageSources(image?.cloudinaryId);
+  if (sources) {
+    return (
+      <div className={wrapper}>
+        {/* eslint-disable-next-line @next/next/no-img-element -- next/image unoptimized cannot emit srcset. */}
+        <img
+          src={sources.src}
+          srcSet={sources.srcSet}
+          sizes={sizes ?? "(max-width: 640px) 50vw, 300px"}
+          alt={image?.alt ?? alt}
+          loading={priority ? "eager" : "lazy"}
+          fetchPriority={priority ? "high" : undefined}
+          decoding="async"
+          className="absolute inset-0 h-full w-full object-contain"
+        />
+      </div>
+    );
+  }
+
   if (!url) {
     // == S18 == Una categoría fuera de las cuatro del seed (una tienda que
     // agregó las suyas) no cae en `categoryPlaceholderSrc`, que sin
@@ -119,7 +140,7 @@ export function ProductImage({
         unoptimized
         priority={priority}
         sizes={sizes ?? "(max-width: 640px) 50vw, 300px"}
-        className="object-cover"
+        className={publicBase() ? "object-contain" : "object-cover"}
         placeholder={image?.blurDataUrl ? "blur" : "empty"}
         blurDataURL={image?.blurDataUrl ?? undefined}
       />
