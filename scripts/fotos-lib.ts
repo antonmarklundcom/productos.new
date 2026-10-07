@@ -455,6 +455,10 @@ export function parseManifest(value: unknown): PhotoManifest {
     )
       return fail();
     assertByteCap(p.bytes);
+    // Failed photos are retained for review too: their archived paths must
+    // have the same closed set of extensions as successful photos.
+    if (p.format !== null && !["jpeg", "png", "webp", "gif"].includes(p.format))
+      return fail();
     if (
       p.original !== null &&
       (!p.sha256 ||

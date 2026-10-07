@@ -247,6 +247,17 @@ describe("local photo pipeline", () => {
     const wrongOriginal = manifest();
     wrongOriginal.photos[0]!.original = `originals/${"c".repeat(64)}.jpeg`;
     expect(() => parseManifest(wrongOriginal)).toThrow("MANIFEST_INVALID");
+    const failedArchive = manifest([
+      photo({
+        status: "failed",
+        ref: null,
+        objects: [],
+        format: "../private.jpg" as Photo["format"],
+        original: `originals/${sha}.../private.jpg`,
+        error: "HTTP_404",
+      }),
+    ]);
+    expect(() => parseManifest(failedArchive)).toThrow("MANIFEST_INVALID");
   });
   it("keeps hash/upload history outside the selected SKU scope", () => {
     const previous = manifest();
