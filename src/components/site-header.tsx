@@ -1,21 +1,38 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowUpRight, PackageCheck } from "lucide-react";
+import { PackageCheck } from "lucide-react";
 import { CartButton } from "@/components/cart-button";
 import { CuentaHeaderEntry } from "@/components/cuenta/header-entry";
 import { SearchBox } from "@/components/search-box";
 import { WishlistHeaderLink } from "@/components/wishlist-header-link";
 import { storeCategories } from "@/components/store-categories";
 import { marcaEfectiva } from "@/lib/marca";
-import { TESTIDS } from "@/lib/testids";
-import { t } from "@/i18n/client";
+import { paginasActivas } from "@/lib/paginas";
+import {
+  DesktopStoreNavigation,
+  MobileStoreMenu,
+  type NavigationLink,
+} from "@/components/store-navigation";
 
 export async function SiteHeader() {
-  const [categories, marca] = await Promise.all([
+  const [categories, marca, pages] = await Promise.all([
     storeCategories(),
     marcaEfectiva(),
+    paginasActivas(),
   ]);
+  const links: NavigationLink[] = [
+    { href: "/", label: "Inicio" },
+    ...pages
+      .filter(
+        (page) => page.slug === "envios" || page.slug === "preguntas-frecuentes"
+      )
+      .map((page) => ({
+        href: `/${page.slug}`,
+        label: page.slug === "envios" ? "Envíos" : "Preguntas frecuentes",
+      })),
+    { href: "/contacto", label: "Contacto" },
+  ];
   return (
     <header className="store-header bg-background sticky top-0 z-30">
       <div className="store-topline">
@@ -27,10 +44,10 @@ export async function SiteHeader() {
           </Link>
         </div>
       </div>
-      <div className="store-width flex items-center gap-5 py-4 lg:gap-12">
+      <div className="store-width flex min-w-0 items-center gap-2 py-4 sm:gap-5 lg:gap-12">
         <Link
           href="/"
-          className="brand-link flex shrink-0 items-center gap-2.5"
+          className="brand-link flex min-w-0 items-center gap-1.5 sm:gap-2.5"
           aria-label={`${marca.nombre} — Inicio`}
         >
           {marca.logoUrl ? (
@@ -40,12 +57,18 @@ export async function SiteHeader() {
               height={40}
               alt={marca.nombre}
               unoptimized
-              className="h-10 w-auto"
+              className="h-8 w-auto max-w-32 object-contain sm:h-10 sm:max-w-40"
             />
           ) : (
             <>
-              <Image src="/brand/mark.svg" width={40} height={40} alt="" />
-              <span className="text-2xl font-bold tracking-[-0.06em] sm:text-3xl">
+              <Image
+                src="/brand/mark.svg"
+                width={40}
+                height={40}
+                alt=""
+                className="size-7 shrink-0 sm:size-10"
+              />
+              <span className="truncate text-lg font-bold tracking-[-0.06em] sm:text-3xl">
                 {marca.nombre}
                 <span className="brand-dot">.</span>
               </span>
@@ -55,12 +78,23 @@ export async function SiteHeader() {
         <Suspense fallback={null}>
           <SearchBox className="store-search hidden flex-1 md:block" />
         </Suspense>
-        <div className="ml-auto flex items-center gap-2 sm:gap-4">
-          <Suspense fallback={null}>
-            <CuentaHeaderEntry />
-          </Suspense>
+        <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-4">
+          <div className="hidden lg:block">
+            <Suspense fallback={null}>
+              <CuentaHeaderEntry />
+            </Suspense>
+          </div>
           <WishlistHeaderLink />
           <CartButton />
+          <MobileStoreMenu
+            categories={categories}
+            links={links}
+            account={
+              <Suspense fallback={null}>
+                <CuentaHeaderEntry />
+              </Suspense>
+            }
+          />
         </div>
       </div>
       <div className="store-width pb-3 md:hidden">
@@ -68,31 +102,7 @@ export async function SiteHeader() {
           <SearchBox className="store-search" />
         </Suspense>
       </div>
-      <nav
-        aria-label={t("header.categorias")}
-        className="border-border border-t"
-      >
-        <div className="store-width category-nav flex items-center gap-6 overflow-x-auto py-3 text-xs font-medium lg:justify-between lg:text-sm">
-          {categories.map((category) => (
-            <Link
-              key={category.slug}
-              href={`/categoria/${category.slug}`}
-              data-testid={TESTIDS.headerCategoryLink}
-              data-slug={category.slug}
-              className="hover:text-primary shrink-0 whitespace-nowrap transition-colors"
-            >
-              {category.name}
-            </Link>
-          ))}
-          <Link
-            href="/contacto"
-            className="border-border hidden shrink-0 items-center gap-1 border-l pl-5 lg:flex"
-          >
-            Ayuda
-            <ArrowUpRight size={14} aria-hidden />
-          </Link>
-        </div>
-      </nav>
+      <DesktopStoreNavigation categories={categories} links={links} />
     </header>
   );
 }

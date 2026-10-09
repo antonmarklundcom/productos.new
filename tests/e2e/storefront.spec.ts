@@ -1,3 +1,4 @@
+import { openFirstCategory } from "../navigation-helper";
 import { expect, test } from "@playwright/test";
 
 test("the storefront renders real HTML, styles, scripts and preparation help pages", async ({
@@ -51,8 +52,14 @@ test("mobile search and category navigation fit the viewport", async ({
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth)
   ).toBeLessThanOrEqual(390);
-  const category = page.getByTestId("header-category-link").first();
-  await category.click();
+  await page.getByTestId("header-menu-trigger").click();
+  const drawer = page.getByRole("dialog", { name: "Menú" });
+  await expect(drawer).toBeVisible();
+  expect(await drawer.evaluate((element) => element.scrollWidth)).toBeLessThanOrEqual(390);
+  await page.keyboard.press("Escape");
+  await expect(drawer).toHaveCount(0);
+  await expect(page.getByTestId("header-menu-trigger")).toBeFocused();
+  await openFirstCategory(page);
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth)

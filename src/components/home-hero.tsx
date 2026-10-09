@@ -39,7 +39,7 @@ export function HomeHero({ hero }: { hero: Hero }) {
             <ArrowUpRight size={19} aria-hidden />
           </Link>
         ) : null}
-        <p className="hero-footnote">Seis categorías. Un solo lugar.</p>
+        <p className="hero-footnote">Todas las categorías. Un solo lugar.</p>
       </div>
       {!src ? (
         <div className="hero-art" aria-hidden>

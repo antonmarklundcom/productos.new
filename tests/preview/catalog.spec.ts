@@ -1,3 +1,4 @@
+import { openFirstCategory } from "../navigation-helper";
 import { expect, test } from "@playwright/test";
 import path from "node:path";
 
@@ -91,7 +92,7 @@ test("search, category, product and empty cart work while showcase examples cann
     style:
       ".store-header, .product-gallery { position: static !important; } .skip-link { visibility: hidden !important; }",
   });
-  await page.getByTestId("header-category-link").first().click();
+  await openFirstCategory(page);
   await expect(page.getByTestId("product-card")).toHaveCount(0);
   await page.goto("/categoria/tecnologia-y-accesorios");
   await expect(page.getByTestId("product-card")).toHaveCount(1);
