@@ -1,5 +1,5 @@
 const publicPage = /^\/(?:categoria|producto)\/[a-z0-9-]+\/?$/;
-const publicPaths = new Set(["/", "/contacto", "/envios", "/preguntas-frecuentes", "/sitemap.xml", "/api/health"]);
+const publicPaths = new Set(["/", "/contacto", "/envios", "/preguntas-frecuentes", "/devoluciones", "/privacidad", "/terminos", "/buscar", "/sitemap.xml", "/api/health", "/health"]);
 
 function previewResponse(body, status, extraHeaders = {}) {
   return new Response(body, { status, headers: {

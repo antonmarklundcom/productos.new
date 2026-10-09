@@ -1,5 +1,10 @@
 # Productos Cloudflare staging setup
 
+
+## Current follow-up — 2026-10-09
+
+Request-scoped mysql2/Drizzle public reads and stream cleanup are now implemented. A real local workerd preview renders a disposable SELECT-only catalog (262 products / 9 categories / 821 R2 image references) at http://127.0.0.1:8790. The remote Hyperdrive binding/origin verification is still absent; the code fails closed when it is missing. Earlier paragraphs below are historical build evidence, not the current coding status. See [database pilot, measured local checks and remaining provider steps](workers-hyperdrive-pilot-2026-10-09.md). This is still a public-read pilot, not a completed admin/checkout port.
+
 Checked 2026-10-09. Repository: `antonmarklundcom/productos.new`. Branch: `codex/workers-staging-20261009`. Local checkout: `C:/Projects/productos-workers-staging`. This branch is a public-preview foundation, not a finished production port.
 
 ## What exists and what still needs coding

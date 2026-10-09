@@ -475,3 +475,7 @@ REQUIRE_DATABASE_TESTS=""
 ```
 
 Set `REQUIRE_DATABASE_TESTS=1` to refuse integration skips. `pnpm test:full` requires a disposable TEST_DATABASE_URL, then runs typecheck, lint, all tests, build and browser tests. CI also refuses missing test database configuration.
+
+## Cloudflare Workers public pilot (separate branch)
+
+`HYPERDRIVE` is a Worker resource binding, not a public string environment variable or a DATABASE_URL fallback. Attach only a real configuration ID to the isolated staging Worker after origin TLS, firewall, SELECT-only grants and UTC compatibility are verified. Missing binding disables catalog rendering and leaves sanitized health diagnostics available. Do not copy production session/setup/cron/payment secrets or R2 upload keys into this pilot. See [the current pilot report](operations/workers-hyperdrive-pilot-2026-10-09.md).

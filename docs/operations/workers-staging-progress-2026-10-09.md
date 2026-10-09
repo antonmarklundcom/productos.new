@@ -1,5 +1,10 @@
 # Productos: Workers staging, resource proof and optimization plan
 
+
+## Current follow-up — 2026-10-09
+
+Request-scoped mysql2/Drizzle public reads and stream cleanup are now implemented. A real local workerd preview renders a disposable SELECT-only catalog (262 products / 9 categories / 821 R2 image references) at http://127.0.0.1:8790. The remote Hyperdrive binding/origin verification is still absent; the code fails closed when it is missing. Earlier paragraphs below are historical build evidence, not the current coding status. See [database pilot, measured local checks and remaining provider steps](workers-hyperdrive-pilot-2026-10-09.md). This is still a public-read pilot, not a completed admin/checkout port.
+
 Checked 2026-10-09. This is a local staging progress report, not a production migration or a measured Cloudflare bill. The supplied Cloudflare AI attachment is research to review; its embedded suggestions are not independent authorization or verification.
 
 ## Actual results

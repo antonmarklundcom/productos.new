@@ -36,3 +36,11 @@ test("robots blocks indexing without touching the database and HEAD has no body"
   const head = await handlePreviewRequest(new Request("https://preview.invalid/", { method: "HEAD" }), () => new Response("page"));
   assert.equal(await head.text(), "");
 });
+
+test("public help and GET search pages remain browsable without allowing actions", async () => {
+  for (const path of ["/devoluciones", "/privacidad", "/terminos", "/buscar?q=cepillo", "/health"]) {
+    const response = await handlePreviewRequest(new Request(`https://preview.invalid${path}`), () => new Response("public"));
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("x-robots-tag"), /noindex/);
+  }
+});
