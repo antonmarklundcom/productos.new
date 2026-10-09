@@ -68,7 +68,7 @@ export function DesktopStoreNavigation({ categories, links }: NavigationProps) {
           }}
         >
           <summary
-            data-testid="header-categories-trigger"
+            data-testid={TESTIDS.headerCategoriesTrigger}
             className="bg-primary text-primary-foreground flex min-h-11 cursor-pointer list-none items-center gap-3 rounded-lg px-5 text-sm font-semibold [&::-webkit-details-marker]:hidden"
           >
             <Menu size={18} aria-hidden /> {t("header.categorias")}
@@ -121,7 +121,7 @@ export function MobileStoreMenu({
       <Dialog.Trigger asChild>
         <button
           type="button"
-          data-testid="header-menu-trigger"
+          data-testid={TESTIDS.headerMenuTrigger}
           aria-label="Abrir menú"
           className="border-border hover:bg-muted flex size-10 shrink-0 items-center justify-center rounded-lg border lg:hidden"
         >

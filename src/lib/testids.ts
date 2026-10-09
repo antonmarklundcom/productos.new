@@ -19,6 +19,9 @@
 export const TESTIDS = {
   /** Un link del menú de categorías del header (`site-header.tsx`). */
   headerCategoryLink: "header-category-link",
+  /** Responsive navigation controls (`store-navigation.tsx`). */
+  headerMenuTrigger: "header-menu-trigger",
+  headerCategoriesTrigger: "header-categories-trigger",
   /** El botón que abre el carrito (`cart-button.tsx`). */
   headerCartLink: "header-cart-link",
   /** La ficha de producto en una grilla (`product-card.tsx`), con `data-slug`. */
