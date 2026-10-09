@@ -21,6 +21,7 @@ import {
   parsePyDateInputEnd,
 } from "@/lib/py";
 import { t } from "@/i18n";
+import { productMargin } from "@/lib/product-margin";
 
 /**
  * Exports a CSV del panel.
@@ -111,6 +112,23 @@ export async function exportOrdersCsv(
 const ProductsFiltersSchema = z.object({
   categoria: z.coerce.number().int().positive().optional(),
   q: z.string().optional(),
+  destacados: z.enum(["1"]).optional(),
+  estado: z.enum(["publicados", "sin-publicar"]).optional(),
+  modo: z.enum(["stock", "enquiry", "showcase"]).optional(),
+  desde: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .max(Number.MAX_SAFE_INTEGER)
+    .optional(),
+  hasta: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .max(Number.MAX_SAFE_INTEGER)
+    .optional(),
+  margen: z.enum(["50"]).optional(),
+  costos: z.enum(["completos", "faltantes"]).optional(),
 });
 
 export async function exportProductsCsv(
@@ -127,6 +145,13 @@ export async function exportProductsCsv(
     const rows = await listVariantsForExport({
       search: parsed.data.q,
       categoryId: parsed.data.categoria,
+      featured: parsed.data.destacados ? true : undefined,
+      status: parsed.data.estado,
+      saleMode: parsed.data.modo,
+      minPricePyg: parsed.data.desde,
+      maxPricePyg: parsed.data.hasta,
+      minMarginPercent: parsed.data.margen ? 50 : undefined,
+      costState: parsed.data.costos,
     });
 
     const csv = toCsv(
@@ -140,6 +165,10 @@ export async function exportProductsCsv(
         t("csv.producto.modo"),
         t("csv.producto.mostrarPrecio"),
         "Dropi URL",
+        "Costo proveedor (₲)",
+        "Fuente costo",
+        "Margen bruto (%)",
+        "Recargo (%)",
       ],
       rows.map((row) => [
         row.sku,
@@ -151,6 +180,14 @@ export async function exportProductsCsv(
         row.saleMode,
         row.showPrice ? "true" : "false",
         row.dropiUrl ?? "",
+        row.unitCostPyg ?? "",
+        row.unitCostPyg === null ? "" : (row.costSource ?? ""),
+        productMargin(row.pricePyg, row.unitCostPyg)?.marginPercent?.toFixed(
+          2
+        ) ?? "",
+        productMargin(row.pricePyg, row.unitCostPyg)?.markupPercent?.toFixed(
+          2
+        ) ?? "",
       ])
     );
 

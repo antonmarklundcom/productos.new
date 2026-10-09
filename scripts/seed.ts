@@ -7,6 +7,7 @@ import { closePool, getDb } from "@/db";
 import { categories, products, shippingZones, variants } from "@/db/schema";
 import { assertGs } from "@/lib/money";
 import { safeError } from "@/lib/safe-error";
+import { supplierCostsReady, writeSupplierCost } from "@/domain/supplier-costs";
 
 import {
   SEED_CATEGORIES,
@@ -107,6 +108,8 @@ export type CatalogProductUpsert = {
   brand: string | null;
   ivaRate: number;
   variants: Array<{
+    unitCostPyg?: number;
+    costSource?: string;
     sku: string;
     label: string;
     pricePyg: number;
@@ -135,6 +138,21 @@ export async function upsertCatalogProducts(
 ): Promise<number> {
   const db = getDb();
   let variantCount = 0;
+  const hasCosts = items.some((product) =>
+    product.variants.some((variant) => variant.unitCostPyg !== undefined)
+  );
+  if (hasCosts && !(await supplierCostsReady(db)))
+    throw new Error(
+      "Los costos necesitan la migración de costos de proveedor antes de importar."
+    );
+  // Validate every supplied cost before any catalog write.
+  for (const product of items)
+    for (const variant of product.variants) {
+      if (variant.unitCostPyg !== undefined)
+        assertGs(variant.unitCostPyg, `${variant.sku}.unit_cost_pyg`);
+      if ((variant.costSource?.length ?? 0) > 200)
+        throw new Error("Fuente de costo demasiado larga.");
+    }
 
   for (const product of items) {
     await db
@@ -207,6 +225,24 @@ export async function upsertCatalogProducts(
             onHand: resetStock ? variant.onHand : sql`${variants.onHand}`,
           },
         });
+      if (variant.unitCostPyg !== undefined) {
+        const [savedVariant] = await db
+          .select({ id: variants.id })
+          .from(variants)
+          .where(eq(variants.sku, variant.sku))
+          .limit(1);
+        if (!savedVariant)
+          throw new Error("No pude releer la variante para registrar costo.");
+        await writeSupplierCost(
+          savedVariant.id,
+          {
+            unitCostPyg: variant.unitCostPyg,
+            source: variant.costSource || null,
+            checkedAt: null,
+          },
+          db
+        );
+      }
       variantCount += 1;
     }
   }

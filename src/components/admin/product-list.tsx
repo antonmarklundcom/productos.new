@@ -6,6 +6,7 @@ import { useState } from "react";
 import { BulkActionsBar } from "@/components/admin/bulk-actions";
 import { ProductImage } from "@/components/product-image";
 import { formatGs } from "@/lib/money";
+import { ADMIN_PRODUCT_MODE_LABEL } from "@/lib/admin-product-sort";
 import { TESTIDS } from "@/lib/testids";
 import { t, tPlural } from "@/i18n";
 
@@ -17,6 +18,15 @@ export type ProductListRow = {
   categorySlug: string;
   variantCount: number;
   minPricePyg: number | null;
+  maxPricePyg: number | null;
+  minCostPyg: number | null;
+  maxCostPyg: number | null;
+  costCount: number;
+  minMarginPercent: number | null;
+  saleMode: "stock" | "enquiry" | "showcase";
+  showPrice: boolean;
+  dropiUrl: string | null;
+  imageCount: number;
   onHand: number;
   isActive: boolean;
   publishedAt: string | null;
@@ -56,7 +66,8 @@ export function ProductList({
     });
   };
 
-  const allSelected = rows.length > 0 && rows.every((row) => selected.has(row.id));
+  const allSelected =
+    rows.length > 0 && rows.every((row) => selected.has(row.id));
 
   return (
     <div>
@@ -67,7 +78,11 @@ export function ProductList({
             data-testid={TESTIDS.adminProductSelectAll}
             checked={allSelected}
             onChange={(event) => {
-              setSelected(event.target.checked ? new Set(rows.map((row) => row.id)) : new Set());
+              setSelected(
+                event.target.checked
+                  ? new Set(rows.map((row) => row.id))
+                  : new Set()
+              );
             }}
           />
           {t("panel.productos.seleccionarPagina")}
@@ -87,18 +102,23 @@ export function ProductList({
         {rows.map((product) => (
           <li
             key={product.id}
-            className="border-border hover:bg-muted/50 flex items-center gap-3 rounded-xl border p-3"
+            className="border-border hover:bg-muted/50 flex flex-wrap items-center gap-3 rounded-xl border p-3"
           >
             <input
               type="checkbox"
               data-testid={TESTIDS.adminProductRowSelect}
               data-id={product.id}
-              aria-label={t("panel.productos.seleccionar", { nombre: product.name })}
+              aria-label={t("panel.productos.seleccionar", {
+                nombre: product.name,
+              })}
               checked={selected.has(product.id)}
               onChange={() => toggle(product.id)}
             />
 
-            <Link href={`/admin/productos/${product.id}`} className="flex min-w-0 flex-1 items-center gap-3">
+            <Link
+              href={`/admin/productos/${product.id}`}
+              className="flex min-w-0 flex-1 items-center gap-3"
+            >
               {/* Miniatura chica: el dueño reconoce el producto por la foto
                   mucho antes que por el nombre, y son 24 filas en un
                   celular. */}
@@ -142,7 +162,11 @@ export function ProductList({
                 <p className="text-muted-foreground mt-1 text-xs">
                   {product.categoryName} ·{" "}
                   {tPlural("panel.productos.variantes", product.variantCount)} ·{" "}
-                  <span className={product.onHand === 0 ? "text-destructive font-medium" : ""}>
+                  <span
+                    className={
+                      product.onHand === 0 ? "text-destructive font-medium" : ""
+                    }
+                  >
                     {t("panel.productos.enStock", { n: product.onHand })}
                   </span>
                   {!product.isActive || product.publishedAt === null ? (
@@ -153,6 +177,68 @@ export function ProductList({
                 </p>
               </div>
             </Link>
+            <div className="w-full border-t pt-2 text-xs sm:pl-7">
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                <p>
+                  #{product.id} ·{" "}
+                  {t("panel.productos.fotos", { n: product.imageCount })} ·{" "}
+                  {ADMIN_PRODUCT_MODE_LABEL[product.saleMode]}
+                </p>
+                <p>
+                  {t(
+                    product.showPrice
+                      ? "panel.productos.precioVisible"
+                      : "panel.productos.precioOculto"
+                  )}
+                  {product.maxPricePyg !== null &&
+                  product.maxPricePyg !== product.minPricePyg
+                    ? ` · ${formatGs(product.minPricePyg ?? 0)}–${formatGs(product.maxPricePyg)}`
+                    : ""}
+                </p>
+                <p>
+                  {product.minCostPyg === null
+                    ? t("panel.costos.sinDatos")
+                    : t("panel.costos.rango", {
+                        costo:
+                          product.minCostPyg === product.maxCostPyg
+                            ? formatGs(product.minCostPyg)
+                            : `${formatGs(product.minCostPyg)}–${formatGs(product.maxCostPyg ?? product.minCostPyg)}`,
+                      })}
+                </p>
+                <p>
+                  {t("panel.costos.margen", {
+                    margen:
+                      product.minMarginPercent === null
+                        ? "—"
+                        : `${product.minMarginPercent.toFixed(1)}%`,
+                  })}
+                  {product.costCount < product.variantCount
+                    ? ` · ${t("panel.costos.parciales", { n: product.costCount, total: product.variantCount })}`
+                    : ""}
+                </p>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-3">
+                {product.isActive && product.publishedAt ? (
+                  <Link
+                    href={`/producto/${product.slug}`}
+                    prefetch={false}
+                    className="underline"
+                  >
+                    {t("panel.productos.verPublico")}
+                  </Link>
+                ) : null}
+                {product.dropiUrl ? (
+                  <a
+                    href={product.dropiUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline"
+                  >
+                    {t("panel.productos.proveedor")}
+                  </a>
+                ) : null}
+              </div>
+            </div>
           </li>
         ))}
       </ul>

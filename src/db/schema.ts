@@ -270,6 +270,35 @@ export const variants = mysqlTable(
   ]
 );
 
+/** Private procurement data. Kept out of storefront variant queries. */
+export const supplierOffers = mysqlTable(
+  "supplier_offers",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    variantId: int("variant_id")
+      .notNull()
+      .references(() => variants.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    unitCostPyg: pyg("unit_cost_pyg"),
+    source: varchar("source", { length: 200 }),
+    sourceType: mysqlEnum("source_type", ["dropi", "local", "import", "other"])
+      .notNull()
+      .default("other"),
+    productUrl: varchar("product_url", { length: 2048 }),
+    supplierUrl: varchar("supplier_url", { length: 2048 }),
+    supplierStock: int("supplier_stock", { unsigned: true }),
+    notes: varchar("notes", { length: 1000 }),
+    isConfirmed: boolean("is_confirmed").notNull().default(false),
+    isActive: boolean("is_active").notNull().default(true),
+    isPreferred: boolean("is_preferred").notNull().default(false),
+    checkedAt: datetime("checked_at"),
+    updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+  },
+  (table) => [index("supplier_offers_variant_idx").on(table.variantId)]
+);
+
 /**
  * "Avisame cuando haya stock" (plan-operacion §2, la manda O6).
  *
@@ -1526,6 +1555,7 @@ export const BACKUP_TABLES = [
   "products",
   "product_images",
   "variants",
+  "supplier_offers",
   "stock_alerts",
   "price_adjustments",
   "stock_adjustments",

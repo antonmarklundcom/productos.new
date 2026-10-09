@@ -25,6 +25,7 @@ export async function closeTestDb(): Promise<void> {
 }
 
 const TABLES = [
+  "supplier_offers",
   "notification_outbox",
   "operation_keys",
   // O5: las cinco tablas nuevas de plan-operacion §2. Van primero las que
@@ -112,14 +113,12 @@ export async function seedPaymentReadiness(): Promise<void> {
   const { vi } = await import("vitest");
   vi.stubEnv("PAGOPAR_MODE", "mock");
   const { bankDetails } = await import("@/db/schema");
-  await getTestDb()
-    .insert(bankDetails)
-    .values({
-      id: 1,
-      banco: "Disposable Test Bank",
-      titular: "Test Store",
-      ruc: "80000000-0",
-      cuenta: "12345",
-      tipoCuenta: "corriente",
-    });
+  await getTestDb().insert(bankDetails).values({
+    id: 1,
+    banco: "Disposable Test Bank",
+    titular: "Test Store",
+    ruc: "80000000-0",
+    cuenta: "12345",
+    tipoCuenta: "corriente",
+  });
 }

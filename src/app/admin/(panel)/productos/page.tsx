@@ -6,7 +6,12 @@ import { CsvDownloadButton } from "@/components/admin/csv-download";
 import { ProductFilters } from "@/components/admin/product-filters";
 import { ProductList } from "@/components/admin/product-list";
 import { listAdminProducts, listCategories } from "@/domain/admin-products";
-import { isAdminProductSort } from "@/lib/admin-product-sort";
+import {
+  isAdminProductSort,
+  parseAdminProductPrice,
+  type AdminProductStatus,
+  type AdminProductMode,
+} from "@/lib/admin-product-sort";
 import { requireCapabilityPage } from "@/lib/admin-guard";
 import { can } from "@/lib/permissions";
 import { t } from "@/i18n";
@@ -22,25 +27,69 @@ function first(value: string | string[] | undefined): string | undefined {
   return single && single !== "" ? single : undefined;
 }
 
-export default async function AdminProductsPage({ searchParams }: { searchParams: SearchParams }) {
+export default async function AdminProductsPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
   const actor = await requireCapabilityPage("productos");
 
   const query = await searchParams;
   const search = first(query.q);
   const rawCategory = Number(first(query.categoria));
-  const categoryId = Number.isInteger(rawCategory) && rawCategory > 0 ? rawCategory : undefined;
+  const categoryId =
+    Number.isInteger(rawCategory) && rawCategory > 0 ? rawCategory : undefined;
   const rawSort = first(query.orden);
   const sort = isAdminProductSort(rawSort) ? rawSort : "recientes";
   const rawPage = Number(first(query.pagina) ?? 1);
   // == S17 == Filtro "sólo destacados". Ausente = todos, igual que hoy.
   const featured = first(query.destacados) === "1" ? true : undefined;
+  const status = ["publicados", "sin-publicar"].includes(
+    first(query.estado) ?? ""
+  )
+    ? (first(query.estado) as AdminProductStatus)
+    : undefined;
+  const saleMode = ["stock", "enquiry", "showcase"].includes(
+    first(query.modo) ?? ""
+  )
+    ? (first(query.modo) as AdminProductMode)
+    : undefined;
+  const minPricePyg = parseAdminProductPrice(first(query.desde));
+  const maxPricePyg = parseAdminProductPrice(first(query.hasta));
+  const minMarginPercent = first(query.margen) === "50" ? 50 : undefined;
+  const costState = ["completos", "faltantes"].includes(
+    first(query.costos) ?? ""
+  )
+    ? (first(query.costos) as "completos" | "faltantes")
+    : undefined;
+  const filters = {
+    search,
+    categoryId,
+    featured,
+    sort,
+    status,
+    saleMode,
+    minPricePyg,
+    maxPricePyg,
+    minMarginPercent,
+    costState,
+  };
+  const urlFilters = {
+    q: search,
+    categoria: categoryId ? String(categoryId) : undefined,
+    orden: sort !== "recientes" ? sort : undefined,
+    destacados: featured ? "1" : undefined,
+    estado: status,
+    modo: saleMode,
+    desde: minPricePyg?.toString(),
+    hasta: maxPricePyg?.toString(),
+    margen: minMarginPercent?.toString(),
+    costos: costState,
+  };
 
   const [result, categories] = await Promise.all([
     listAdminProducts({
-      search,
-      categoryId,
-      featured,
-      sort,
+      ...filters,
       page: Number.isFinite(rawPage) ? rawPage : 1,
     }),
     listCategories(),
@@ -48,10 +97,8 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
 
   const href = (page: number): string => {
     const params = new URLSearchParams();
-    if (search) params.set("q", search);
-    if (categoryId) params.set("categoria", String(categoryId));
-    if (sort !== "recientes") params.set("orden", sort);
-    if (featured) params.set("destacados", "1");
+    for (const [key, value] of Object.entries(urlFilters))
+      if (value !== undefined) params.set(key, value);
     if (page > 1) params.set("pagina", String(page));
     const qs = params.toString();
     return qs === "" ? "/admin/productos" : `/admin/productos?${qs}`;
@@ -60,7 +107,9 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold tracking-tight">{t("panel.productos.titulo")}</h1>
+        <h1 className="text-xl font-semibold tracking-tight">
+          {t("panel.productos.titulo")}
+        </h1>
         <Link
           href="/admin/productos/nuevo"
           className="bg-primary text-primary-foreground rounded-lg px-4 py-2 text-sm font-medium"
@@ -76,19 +125,26 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
           defaultValue={search ?? ""}
           placeholder={t("panel.productos.buscar.placeholder")}
           aria-label={t("panel.productos.buscar.label")}
-          className="border-input bg-background h-9 flex-1 rounded-md border px-3 text-sm"
+          className="border-input bg-background h-9 min-w-0 flex-1 rounded-md border px-3 text-sm"
         />
         {/* La búsqueda es un form nativo: sin estos hidden, buscar dentro de
             una categoría la perdería y devolvería el catálogo entero. */}
-        {categoryId ? <input type="hidden" name="categoria" value={String(categoryId)} /> : null}
-        {sort !== "recientes" ? <input type="hidden" name="orden" value={sort} /> : null}
-        {featured ? <input type="hidden" name="destacados" value="1" /> : null}
-        <button type="submit" className="border-border rounded-lg border px-4 text-sm">
+        {Object.entries(urlFilters)
+          .filter(([key, value]) => key !== "q" && value !== undefined)
+          .map(([key, value]) => (
+            <input key={key} type="hidden" name={key} value={value} />
+          ))}
+        <button
+          type="submit"
+          className="border-border rounded-lg border px-4 text-sm"
+        >
           {t("panel.filtros.buscar")}
         </button>
       </form>
 
       <ProductFilters
+        key={JSON.stringify(urlFilters)}
+        {...filters}
         categories={categories.map((category) => ({
           id: category.id,
           name: category.name,
@@ -98,6 +154,15 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
         search={search}
         featured={featured ?? false}
       />
+
+      <p className="text-muted-foreground mt-4 text-sm">
+        {t("panel.productos.resumen", { n: result.total })}
+      </p>
+      {!result.costsReady ? (
+        <p role="status" className="mt-2 text-sm">
+          {t("panel.costos.migracion")}
+        </p>
+      ) : null}
 
       {result.rows.length === 0 ? (
         <p className="text-muted-foreground border-border mt-6 rounded-xl border border-dashed p-8 text-center text-sm">
@@ -109,6 +174,7 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
         // porque la barra de acciones necesita saber qué filas están
         // tildadas — eso no se puede guardar del lado del servidor.
         <ProductList
+          key={`${JSON.stringify(urlFilters)}:${result.page}`}
           rows={result.rows.map((product) => ({
             id: product.id,
             slug: product.slug,
@@ -117,20 +183,37 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
             categorySlug: product.categorySlug,
             variantCount: product.variantCount,
             minPricePyg: product.minPricePyg,
+            maxPricePyg: product.maxPricePyg,
+            minCostPyg: product.minCostPyg,
+            maxCostPyg: product.maxCostPyg,
+            costCount: product.costCount,
+            minMarginPercent: product.minMarginPercent,
+            saleMode: product.saleMode,
+            showPrice: product.showPrice,
+            dropiUrl: product.dropiUrl,
+            imageCount: product.imageCount,
             onHand: product.onHand,
             isActive: product.isActive,
-            publishedAt: product.publishedAt ? product.publishedAt.toISOString() : null,
+            publishedAt: product.publishedAt
+              ? product.publishedAt.toISOString()
+              : null,
             imageCloudinaryId: product.imageCloudinaryId,
             imageAlt: product.imageAlt,
             isFeatured: product.isFeatured,
           }))}
-          categories={categories.map((category) => ({ id: category.id, name: category.name }))}
+          categories={categories.map((category) => ({
+            id: category.id,
+            name: category.name,
+          }))}
           canBulkPrice={can(actor.role, "precios.masivo")}
         />
       )}
 
       {result.totalPages > 1 ? (
-        <nav className="mt-6 flex items-center justify-between text-sm" aria-label={t("nav.paginacion")}>
+        <nav
+          className="mt-6 flex items-center justify-between text-sm"
+          aria-label={t("nav.paginacion")}
+        >
           {result.page > 1 ? (
             <Link
               href={href(result.page - 1)}
@@ -162,13 +245,7 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
           catálogo con costos y existencias en un archivo portátil. */}
       {can(actor.role, "exports") ? (
         <div className="border-border mt-6 border-t pt-4">
-          <CsvDownloadButton
-            kind="productos"
-            params={{
-              q: search,
-              categoria: categoryId ? String(categoryId) : undefined,
-            }}
-          />
+          <CsvDownloadButton kind="productos" params={urlFilters} />
           <p className="text-muted-foreground mt-1 text-xs">
             {t("panel.productos.csvAyuda")}
           </p>

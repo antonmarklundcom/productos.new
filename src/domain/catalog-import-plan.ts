@@ -15,6 +15,8 @@ import { cargarIntegraciones } from "@/lib/integraciones-store";
 import { addProductImage } from "./admin-products";
 import { parseCatalogo, type CatalogoProducto } from "./catalog-import";
 import type { Executor } from "./executor";
+import { supplierCostsReady } from "./supplier-costs";
+import { catalogDuplicateWarnings } from "@/lib/catalog-duplicates";
 
 /**
  * El mismo camino de `scripts/importar-productos.ts` (categoría por resolver,
@@ -27,6 +29,7 @@ import type { Executor } from "./executor";
  */
 
 export type CatalogImportPlan = {
+  advertencias?: string[];
   productos: CatalogoProducto[];
   /** Parseo + conflictos de SKU. Si hay al menos uno, no se puede aplicar. */
   errores: string[];
@@ -57,6 +60,16 @@ export async function buildCatalogImportPlan(
 ): Promise<CatalogImportPlan> {
   const tx = executor ?? getDb();
   const { productos, errores: erroresParseo } = parseCatalogo(csvText);
+  if (
+    productos.some((product) =>
+      product.variants.some((variant) => variant.unitCostPyg !== undefined)
+    ) &&
+    !(await supplierCostsReady(tx))
+  ) {
+    erroresParseo.push(
+      "Los costos necesitan la migración de costos de proveedor antes de importar."
+    );
+  }
 
   if (erroresParseo.length > 0) {
     return {
@@ -75,6 +88,35 @@ export async function buildCatalogImportPlan(
   const categoryRows = await tx
     .select({ id: categories.id, slug: categories.slug, name: categories.name })
     .from(categories);
+  const existingProducts = await tx
+    .select({
+      id: products.id,
+      slug: products.slug,
+      name: products.name,
+      dropiUrl: products.dropiUrl,
+      categoryName: categories.name,
+    })
+    .from(products)
+    .innerJoin(categories, eq(products.categoryId, categories.id));
+  const existingPhotos = await tx
+    .select({
+      productId: productImages.productId,
+      ref: productImages.cloudinaryId,
+    })
+    .from(productImages);
+  const photosByProduct = new Map<number, string[]>();
+  for (const photo of existingPhotos) {
+    const refs = photosByProduct.get(photo.productId) ?? [];
+    refs.push(photo.ref);
+    photosByProduct.set(photo.productId, refs);
+  }
+  const advertencias = catalogDuplicateWarnings(
+    productos,
+    existingProducts.map((product) => ({
+      ...product,
+      fotos: photosByProduct.get(product.id) ?? [],
+    }))
+  );
   const categoriaPorSlug = new Map<string, number>();
   for (const row of categoryRows) {
     categoriaPorSlug.set(row.slug, row.id);
@@ -148,6 +190,7 @@ export async function buildCatalogImportPlan(
 
   return {
     productos,
+    advertencias,
     errores: [],
     productosNuevos,
     productosActualizar: productos.length - productosNuevos,
@@ -293,14 +336,17 @@ export async function applyCatalogFotos(
         if (url.startsWith("r2:")) {
           try {
             if (!parseRef(url)) throw new Error("Referencia de foto inválida.");
-            await addProductImage({
-              productId: grupo.productId,
-              cloudinaryId: url,
-              alt:
-                index === 0
-                  ? grupo.nombre
-                  : `${grupo.nombre} — foto ${index + 1}`,
-            }, tx);
+            await addProductImage(
+              {
+                productId: grupo.productId,
+                cloudinaryId: url,
+                alt:
+                  index === 0
+                    ? grupo.nombre
+                    : `${grupo.nombre} — foto ${index + 1}`,
+              },
+              tx
+            );
             fotosSubidas += 1;
           } catch (error) {
             fotosFallidas.push({

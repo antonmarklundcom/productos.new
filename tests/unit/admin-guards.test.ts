@@ -145,6 +145,7 @@ const GUARD_ESPERADO: Readonly<Record<string, "Admin" | "Staff" | "Owner">> = {
   // Catálogo y stock: la operación diaria, sin el mostrador.
   saveProduct: "Staff",
   saveProductVariant: "Staff",
+  saveVariantSupplierCost: "Staff",
   adjustVariantStock: "Staff",
   uploadProductImage: "Staff",
   removeProductImage: "Staff",
