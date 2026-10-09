@@ -3,11 +3,14 @@ import { sql } from "drizzle-orm";
 import { getDb } from "../src/db/index";
 import { handlePreviewRequest } from "./preview-policy.mjs";
 import { PreviewDatabaseError, withPreviewDatabase } from "./hyperdrive-database";
+import { serveCatalogDemo } from "./catalog-demo.mjs";
 export * from "vinext/server/fetch-handler";
 
 const previewWorker = {
   fetch(request, env, ctx) {
     return handlePreviewRequest(request, async (anonymous) => {
+      if (!env.HYPERDRIVE && env.PREVIEW_CATALOG_SNAPSHOT === "true")
+        return serveCatalogDemo(anonymous, env);
       const health = ["/api/health", "/health"].includes(new URL(anonymous.url).pathname);
       try {
         return await withPreviewDatabase(anonymous, env, ctx, async () => {

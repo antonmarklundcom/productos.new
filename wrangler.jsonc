@@ -9,7 +9,11 @@
   "assets": {
     "directory": "dist/client",
     "not_found_handling": "none",
-    "binding": "ASSETS"
+    "binding": "ASSETS",
+    "run_worker_first": [
+      "/__catalog-demo/*"
+    ],
+    "html_handling": "none"
   },
   "workers_dev": true,
   "limits": {
@@ -18,5 +22,8 @@
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1
+  },
+  "vars": {
+    "PREVIEW_CATALOG_SNAPSHOT": "true"
   }
 }

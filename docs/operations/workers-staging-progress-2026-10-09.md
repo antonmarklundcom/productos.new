@@ -1,5 +1,9 @@
 # Productos: Workers staging, resource proof and optimization plan
 
+## Later deployed demo — 2026-10-09
+
+The staging workers.dev URL now serves a labelled 262-product snapshot, deployed and verified. Admin/checkout and real remote database are still unavailable. Earlier missing-binding/Hello World statements below describe the previous state. Read [current demo, checks and deployment procedure](workers-catalog-demo-2026-10-09.md).
+
 
 ## Current follow-up — 2026-10-09
 

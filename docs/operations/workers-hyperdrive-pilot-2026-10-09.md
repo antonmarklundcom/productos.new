@@ -1,5 +1,9 @@
 # Workers database pilot and local catalog preview — 2026-10-09
 
+## Later deployed demo — 2026-10-09
+
+The staging workers.dev URL now serves a labelled 262-product snapshot, deployed and verified. Admin/checkout and real remote database are still unavailable. Earlier missing-binding/Hello World statements below describe the previous state. Read [current demo, checks and deployment procedure](workers-catalog-demo-2026-10-09.md).
+
 Repository: antonmarklundcom/productos.new; isolated branch `codex/workers-staging-20261009`; draft PR14 stays unmerged. Production remains on Hostinger. This report supersedes earlier statements that request-scoped connections have not been implemented.
 
 ## MEASURED: implemented and exercised

@@ -478,4 +478,6 @@ Set `REQUIRE_DATABASE_TESTS=1` to refuse integration skips. `pnpm test:full` req
 
 ## Cloudflare Workers public pilot (separate branch)
 
-`HYPERDRIVE` is a Worker resource binding, not a public string environment variable or a DATABASE_URL fallback. Attach only a real configuration ID to the isolated staging Worker after origin TLS, firewall, SELECT-only grants and UTC compatibility are verified. Missing binding disables catalog rendering and leaves sanitized health diagnostics available. Do not copy production session/setup/cron/payment secrets or R2 upload keys into this pilot. See [the current pilot report](operations/workers-hyperdrive-pilot-2026-10-09.md).
+`HYPERDRIVE` is a Worker resource binding, not a public string environment variable or a DATABASE_URL fallback. Attach only a real configuration ID to the isolated staging Worker after origin TLS, firewall, SELECT-only grants and UTC compatibility are verified. Without a binding, the explicitly enabled staging-only PREVIEW_CATALOG_SNAPSHOT=true flag serves a visual catalog copy. With neither binding nor that flag, catalog rendering remains disabled with sanitized health diagnostics. This snapshot does not enable admin/checkout or prove database performance. Do not copy production session/setup/cron/payment secrets or R2 upload keys into this pilot. See [the current pilot report](operations/workers-hyperdrive-pilot-2026-10-09.md).
+
+The flag is versioned in staging wrangler.jsonc, not a Hostinger variable. See [deployed catalog demo and limits](operations/workers-catalog-demo-2026-10-09.md).
