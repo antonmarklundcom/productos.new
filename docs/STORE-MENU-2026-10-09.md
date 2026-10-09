@@ -1,6 +1,6 @@
 # Store navigation — 9 October 2026
 
-The horizontal category strip is replaced by a desktop Categories dropdown and a mobile menu button at the far right of the header. Desktop category names wrap inside a two/three-column panel. Mobile opens a vertical drawer with a fixed title/close button and a independently scrollable list. No sideways navigation is required.
+The horizontal category strip is replaced by a desktop Categories dropdown and a mobile menu button at the far right of the header. Desktop category names wrap inside a two/three-column panel. Mobile opens a vertical drawer with a fixed title/close button and an independently scrollable list. No sideways navigation is required. The homepage's outdated six-category footnote now says all categories, so it remains accurate when the assortment changes.
 
 `src/components/site-header.tsx` reads active categories from `storeCategories()`. It passes serializable category names/slugs and page links to `src/components/store-navigation.tsx`; private supplier data never enters navigation. Inicio and Contacto are always included. Envíos and Preguntas frecuentes appear only if those policy pages are enabled in the existing store settings. Tracking remains in the top bar and mobile drawer. Search, favorites, cart and optional customer account remain available; the customer account moves into the drawer on small screens.
 
