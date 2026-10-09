@@ -1,3 +1,4 @@
+import { openFirstCategory } from "../navigation-helper";
 import { gzipSync } from "node:zlib";
 
 import type { Page, Response } from "@playwright/test";
@@ -147,7 +148,7 @@ test.describe("presupuesto de JS por página", () => {
 
   test("producto", async ({ page, browser }) => {
     await page.goto("/");
-    await page.getByTestId(TESTIDS.headerCategoryLink).first().click();
+    await openFirstCategory(page);
     await expect(page).toHaveURL(/\/categoria\//);
 
     const productHref = await page

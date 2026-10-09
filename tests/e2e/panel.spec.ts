@@ -1,3 +1,4 @@
+import { openFirstCategory } from "../navigation-helper";
 import { expect, test } from "@playwright/test";
 
 import {
@@ -103,7 +104,7 @@ test("editar un pedido: bajar una cantidad cambia el total en la ficha y en /ped
   page,
 }) => {
   await page.goto("/");
-  await page.getByTestId(TESTIDS.headerCategoryLink).first().click();
+  await openFirstCategory(page);
   await expect(page).toHaveURL(/\/categoria\//);
 
   await page.getByTestId(TESTIDS.productCard).first().click();

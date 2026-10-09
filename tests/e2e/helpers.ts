@@ -1,3 +1,4 @@
+import { openFirstCategory } from "../navigation-helper";
 import type { Locator, Page } from "@playwright/test";
 import { expect } from "@playwright/test";
 
@@ -133,7 +134,7 @@ export async function realizarCompra(
  */
 export async function completarCheckout(page: Page): Promise<void> {
   await page.goto("/");
-  await page.getByTestId(TESTIDS.headerCategoryLink).first().click();
+  await openFirstCategory(page);
   await expect(page).toHaveURL(/\/categoria\//);
 
   await page.getByTestId(TESTIDS.productCard).first().click();
