@@ -64,6 +64,7 @@ export async function backupManifest(tx: Executor): Promise<BackupManifest> {
   const migration = migrationVersions().find((v) => v.hash === hash);
   if (!migration)
     throw new Error("La versión de migración no coincide con esta aplicación");
+  const recordedTables = new Set(tablesForMigration(migration.tag));
   const [versionRows] = await tx.execute(sql`SELECT VERSION() AS version`);
   return {
     type: "manifest",
@@ -72,7 +73,9 @@ export async function backupManifest(tx: Executor): Promise<BackupManifest> {
     migration,
     server: (versionRows as unknown as { version: string }[])[0]!.version,
     app: process.env.BUILD_SHA ?? "unknown",
-    tables: BACKUP_TABLES,
+    // A deployment may precede the additive supplier-cost migration. Preserve
+    // the recorded database version in the backup instead of inventing a table.
+    tables: BACKUP_TABLES.filter((table) => recordedTables.has(table)),
     keyCheck: backupKeyCheck(),
   };
 }

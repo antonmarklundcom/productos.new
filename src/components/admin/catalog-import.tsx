@@ -30,24 +30,37 @@ export function CatalogImportForm() {
   const [fileName, setFileName] = useState<string | null>(null);
   const [pisarStock, setPisarStock] = useState(false);
   const [summary, setSummary] = useState<CatalogImportSummary | null>(null);
+  const [duplicatesReviewed, setDuplicatesReviewed] = useState(false);
   const [errores, setErrores] = useState<string[] | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const buildFormData = (): FormData | null => {
-    const file = source === "paste"
-      ? (csvText.trim() ? new File([csvText], "catalogo.csv", { type: "text/csv" }) : undefined)
-      : inputRef.current?.files?.[0];
+    const file =
+      source === "paste"
+        ? csvText.trim()
+          ? new File([csvText], "catalogo.csv", { type: "text/csv" })
+          : undefined
+        : inputRef.current?.files?.[0];
     if (!file) {
-      toast.error(t(source === "paste" ? "panel.productos.importar.pegaCsvVacio" : "adminError.elegiArchivo"));
+      toast.error(
+        t(
+          source === "paste"
+            ? "panel.productos.importar.pegaCsvVacio"
+            : "adminError.elegiArchivo"
+        )
+      );
       return null;
     }
     const formData = new FormData();
     formData.set("file", file);
     formData.set("pisarStock", pisarStock ? "true" : "false");
+    if (duplicatesReviewed && summary?.advertencias?.length)
+      formData.set("duplicateReview", JSON.stringify(summary.advertencias));
     return formData;
   };
 
   const revisar = (): void => {
+    setDuplicatesReviewed(false);
     const formData = buildFormData();
     if (!formData) return;
 
@@ -84,13 +97,22 @@ export function CatalogImportForm() {
           : t("panel.productos.importar.listo", {
               productos: result.productosNuevos + result.productosActualizar,
               variantes: result.variantesEscritas,
-            }),
+            })
       );
       if (result.fotosOmitidas > 0) {
-        toast.warning(t("panel.productos.importar.fotosOmitidas", { n: result.fotosOmitidas }));
+        toast.warning(
+          t("panel.productos.importar.fotosOmitidas", {
+            n: result.fotosOmitidas,
+          })
+        );
       }
       if (result.fotosFallidas.length > 0) {
-        toast.error(tPlural("panel.productos.importar.fotosFallidas", result.fotosFallidas.length));
+        toast.error(
+          tPlural(
+            "panel.productos.importar.fotosFallidas",
+            result.fotosFallidas.length
+          )
+        );
       }
       setSummary(null);
       setErrores(null);
@@ -102,31 +124,61 @@ export function CatalogImportForm() {
 
   return (
     <div className="border-border rounded-xl border p-4">
-      <h2 className="text-sm font-semibold">{t("panel.productos.importar.titulo")}</h2>
-      <p className="text-muted-foreground mt-1 text-xs">{t("panel.productos.importar.ayuda")}</p>
+      <h2 className="text-sm font-semibold">
+        {t("panel.productos.importar.titulo")}
+      </h2>
+      <p className="text-muted-foreground mt-1 text-xs">
+        {t("panel.productos.importar.ayuda")}
+      </p>
 
-      <fieldset className="mt-3 flex flex-wrap gap-4 text-sm" disabled={isPending}>
-        <legend className="sr-only">{t("panel.productos.importar.origen")}</legend>
+      <fieldset
+        className="mt-3 flex flex-wrap gap-4 text-sm"
+        disabled={isPending}
+      >
+        <legend className="sr-only">
+          {t("panel.productos.importar.origen")}
+        </legend>
         {(["file", "paste"] as const).map((option) => (
           <label key={option} className="flex items-center gap-2">
-            <input type="radio" name="catalog-import-source" value={option} checked={source === option} onChange={() => {
-              setSource(option);
-              setSummary(null);
-              setErrores(null);
-            }} />
-            {t(option === "file" ? "panel.productos.importar.archivo" : "panel.productos.importar.pegaCsv")}
+            <input
+              type="radio"
+              name="catalog-import-source"
+              value={option}
+              checked={source === option}
+              onChange={() => {
+                setSource(option);
+                setSummary(null);
+                setErrores(null);
+              }}
+            />
+            {t(
+              option === "file"
+                ? "panel.productos.importar.archivo"
+                : "panel.productos.importar.pegaCsv"
+            )}
           </label>
         ))}
       </fieldset>
       {source === "paste" ? (
         <div className="mt-3 grid gap-2">
-          <label htmlFor="catalog-import-csv" className="text-sm">{t("panel.productos.importar.csvTexto")}</label>
-          <textarea id="catalog-import-csv" rows={8} value={csvText} disabled={isPending} onChange={(event) => {
-            setCsvText(event.target.value);
-            setSummary(null);
-            setErrores(null);
-          }} className="border-border rounded-lg border p-2 font-mono text-xs" />
-          <p className="text-muted-foreground text-xs">{t("panel.productos.importar.pegaCsvAyuda")}</p>
+          <label htmlFor="catalog-import-csv" className="text-sm">
+            {t("panel.productos.importar.csvTexto")}
+          </label>
+          <textarea
+            id="catalog-import-csv"
+            rows={8}
+            value={csvText}
+            disabled={isPending}
+            onChange={(event) => {
+              setCsvText(event.target.value);
+              setSummary(null);
+              setErrores(null);
+            }}
+            className="border-border rounded-lg border p-2 font-mono text-xs"
+          />
+          <p className="text-muted-foreground text-xs">
+            {t("panel.productos.importar.pegaCsvAyuda")}
+          </p>
         </div>
       ) : null}
       <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -147,7 +199,9 @@ export function CatalogImportForm() {
         <button
           type="button"
           onClick={revisar}
-          disabled={isPending || (source === "paste" ? !csvText.trim() : !fileName)}
+          disabled={
+            isPending || (source === "paste" ? !csvText.trim() : !fileName)
+          }
           className="border-border hover:bg-muted rounded-lg border px-3 py-1.5 text-sm disabled:opacity-60"
         >
           {t("panel.productos.importar.revisar")}
@@ -177,15 +231,50 @@ export function CatalogImportForm() {
 
       {summary ? (
         <div className="bg-muted/50 mt-3 rounded-lg p-3 text-xs">
+          {summary.advertencias?.length ? (
+            <div className="mb-3 rounded-lg border border-amber-400 p-3">
+              <p className="font-medium">
+                {t("panel.productos.importar.duplicados")}
+              </p>
+              <ul className="mt-2 list-disc pl-4">
+                {summary.advertencias.map((warning) => (
+                  <li key={warning}>{warning}</li>
+                ))}
+              </ul>
+              <label className="mt-3 flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  checked={duplicatesReviewed}
+                  disabled={isPending}
+                  onChange={(event) =>
+                    setDuplicatesReviewed(event.target.checked)
+                  }
+                />
+                {t("panel.productos.importar.revisados")}
+              </label>
+            </div>
+          ) : null}
           <p>
-            {tPlural("panel.productos.importar.productosNuevos", summary.productosNuevos)}
+            {tPlural(
+              "panel.productos.importar.productosNuevos",
+              summary.productosNuevos
+            )}
             {" · "}
-            {tPlural("panel.productos.importar.productosActualizar", summary.productosActualizar)}
+            {tPlural(
+              "panel.productos.importar.productosActualizar",
+              summary.productosActualizar
+            )}
           </p>
           <p className="mt-1">
-            {tPlural("panel.productos.importar.variantesNuevas", summary.variantesNuevas)}
+            {tPlural(
+              "panel.productos.importar.variantesNuevas",
+              summary.variantesNuevas
+            )}
             {" · "}
-            {tPlural("panel.productos.importar.variantesActualizar", summary.variantesActualizar)}
+            {tPlural(
+              "panel.productos.importar.variantesActualizar",
+              summary.variantesActualizar
+            )}
             {summary.variantesActualizar > 0
               ? summary.pisaStock
                 ? ` — ${t("panel.productos.importar.pisandoStock")}`
@@ -201,17 +290,25 @@ export function CatalogImportForm() {
           ) : null}
           {summary.fotosNuevas > 0 ? (
             <p className="mt-1">
-              {tPlural("panel.productos.importar.fotosNuevas", summary.fotosNuevas)}
+              {tPlural(
+                "panel.productos.importar.fotosNuevas",
+                summary.fotosNuevas
+              )}
             </p>
           ) : null}
 
           <button
             type="button"
             onClick={confirmar}
-            disabled={isPending}
+            disabled={
+              isPending ||
+              Boolean(summary.advertencias?.length && !duplicatesReviewed)
+            }
             className="bg-primary text-primary-foreground mt-3 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-60"
           >
-            {isPending ? t("panel.productos.importar.aplicando") : t("panel.productos.importar.confirmar")}
+            {isPending
+              ? t("panel.productos.importar.aplicando")
+              : t("panel.productos.importar.confirmar")}
           </button>
         </div>
       ) : null}

@@ -33,6 +33,8 @@ import { parseRef } from "@/lib/imagenes-r2";
  */
 
 export type CatalogoVariante = {
+  unitCostPyg?: number;
+  costSource?: string;
   sku: string;
   label: string;
   pricePyg: number;
@@ -41,7 +43,7 @@ export type CatalogoVariante = {
 };
 
 export function normalizeDropiUrl(
-  value: string | null | undefined,
+  value: string | null | undefined
 ): string | null | undefined {
   if (value === undefined) return undefined;
   if (value === null || value.trim() === "") return null;
@@ -54,7 +56,9 @@ export function normalizeDropiUrl(
     url.port ||
     url.username ||
     url.password ||
-    !/^\/dashboard\/product-details\/[1-9]\d*\/[a-z0-9]+(?:-[a-z0-9]+)*\/?$/.test(url.pathname) ||
+    !/^\/dashboard\/product-details\/[1-9]\d*\/[a-z0-9]+(?:-[a-z0-9]+)*\/?$/.test(
+      url.pathname
+    ) ||
     url.search ||
     url.hash
   ) {
@@ -109,6 +113,9 @@ const COLUMNAS: Record<string, keyof FilaCruda> = {
   categoria: "categoria",
   variante: "variante",
   precio: "precio",
+  "costo proveedor": "unitCostPyg",
+  costo: "unitCostPyg",
+  "fuente costo": "costSource",
   stock: "stock",
   descripcion: "descripcion",
   marca: "marca",
@@ -122,6 +129,8 @@ const COLUMNAS: Record<string, keyof FilaCruda> = {
 };
 
 type FilaCruda = {
+  unitCostPyg: string;
+  costSource: string;
   dropiUrl: string;
   saleMode: string;
   showPrice: string;
@@ -360,13 +369,33 @@ export function parseCatalogo(text: string): CatalogoImportado {
 
     let dropiUrl: string | null | undefined;
     try {
-      dropiUrl = indice.has("dropiUrl") ? normalizeDropiUrl(celda(fila, "dropiUrl")) : undefined;
+      dropiUrl = indice.has("dropiUrl")
+        ? normalizeDropiUrl(celda(fila, "dropiUrl"))
+        : undefined;
     } catch {
-      errores.push(`Línea ${linea}: Dropi URL debe ser un enlace de producto HTTPS de app.dropi.com.py.`);
+      errores.push(
+        `Línea ${linea}: Dropi URL debe ser un enlace de producto HTTPS de app.dropi.com.py.`
+      );
       continue;
     }
 
+    const costRaw = celda(fila, "unitCostPyg");
+    const unitCostPyg = costRaw === "" ? undefined : parseGs(costRaw);
+    const costSource = celda(fila, "costSource");
+    if (unitCostPyg === null || costSource.length > 200) {
+      errores.push(
+        `Línea ${linea}: costo proveedor inválido o fuente de más de 200 caracteres.`
+      );
+      continue;
+    }
+    if (costSource && unitCostPyg === undefined) {
+      errores.push(
+        `Línea ${linea}: una fuente de costo requiere un costo proveedor en esa fila.`
+      );
+      continue;
+    }
     const variante: CatalogoVariante = {
+      ...(unitCostPyg === undefined ? {} : { unitCostPyg, costSource }),
       sku,
       label: celda(fila, "variante") || "Único",
       pricePyg: precio,
@@ -415,7 +444,8 @@ export function parseCatalogo(text: string): CatalogoImportado {
     // lo mismo. Dos filas del mismo slug con categorías distintas no es una
     // preferencia a resolver en silencio — alguien se equivocó de fila.
     const conflictos: string[] = [];
-    if (dropiUrl && existente.dropiUrl && dropiUrl !== existente.dropiUrl) conflictos.push("Dropi URL");
+    if (dropiUrl && existente.dropiUrl && dropiUrl !== existente.dropiUrl)
+      conflictos.push("Dropi URL");
     if (!existente.dropiUrl && dropiUrl) existente.dropiUrl = dropiUrl;
     if (
       saleMode !== undefined &&

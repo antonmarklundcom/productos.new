@@ -169,6 +169,13 @@
       "when": 1791317674093,
       "tag": "0023_naive_synch",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "5",
+      "when": 1791560999902,
+      "tag": "0024_early_hairball",
+      "breakpoints": true
     }
   ]
 }

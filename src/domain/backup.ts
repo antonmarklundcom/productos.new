@@ -69,7 +69,8 @@ export type DumpStats = { tables: number; rows: number };
  * que son de una o dos filas y se traen enteras.
  */
 export async function* dumpRows(
-  executor?: Executor
+  executor?: Executor,
+  tables?: readonly BackupTable[]
 ): AsyncGenerator<{ table: BackupTable; row: Record<string, unknown> }> {
   if (!executor) {
     const connection = await getPool().getConnection();
@@ -81,7 +82,7 @@ export async function* dumpRows(
       await connection.query(
         "START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY"
       );
-      yield* dumpRows(drizzle(connection, { schema, mode: "default" }));
+      yield* dumpRows(drizzle(connection, { schema, mode: "default" }), tables);
       await connection.commit();
       completed = true;
     } catch (error) {
@@ -94,8 +95,12 @@ export async function* dumpRows(
     return;
   }
   const tx = executor;
+  const activeTables = tables ?? (await backupManifest(tx)).tables;
 
-  for (const table of BACKUP_TABLES) {
+  for (const tableName of activeTables) {
+    if (!(BACKUP_TABLES as readonly string[]).includes(tableName))
+      throw new Error("Tabla de backup no reconocida");
+    const table = tableName as BackupTable;
     const pk = PRIMARY_KEY[table];
 
     if (pk === null) {
@@ -180,11 +185,14 @@ export function dumpDatabase(executor?: Executor): {
         yield `${JSON.stringify(manifest)}\n`;
         const tablas = new Set<string>();
         const counts = Object.fromEntries(
-          BACKUP_TABLES.map((table) => [table, 0])
+          manifest.tables.map((table) => [table, 0])
         );
         const digest = rowDigest();
         let filas = 0;
-        for await (const { table, row } of dumpRows(tx)) {
+        for await (const { table, row } of dumpRows(
+          tx,
+          manifest.tables as readonly BackupTable[]
+        )) {
           tablas.add(table);
           filas += 1;
           counts[table]! += 1;
@@ -387,6 +395,7 @@ export async function runBackup(
  * `BACKUP_TABLES`.
  */
 export const PRIMARY_KEY: Record<BackupTable, string | null> = {
+  supplier_offers: "id",
   notification_outbox: "id",
   operation_keys: "id",
   counters: null,

@@ -20,7 +20,10 @@ import {
   type CatalogFotoFallida,
   type CatalogImportPlan,
 } from "@/domain/catalog-import-plan";
-import { normalizeDropiUrl, type CatalogoProducto } from "@/domain/catalog-import";
+import {
+  normalizeDropiUrl,
+  type CatalogoProducto,
+} from "@/domain/catalog-import";
 import {
   BULK_MAX_IDS,
   BULK_MIN_REASON,
@@ -48,6 +51,92 @@ import {
   type AdminActionResult,
 } from "@/lib/admin-guard";
 import { t } from "@/i18n";
+import { getDb } from "@/db";
+import { variants } from "@/db/schema";
+import { and, eq } from "drizzle-orm";
+import {
+  supplierCostsReady,
+  writeSupplierOffer,
+} from "@/domain/supplier-costs";
+
+const SupplierCostSchema = z
+  .object({
+    productId: z.number().int().positive(),
+    variantId: z.number().int().positive(),
+    offerId: z.number().int().positive().optional(),
+    unitCostPyg: z
+      .number()
+      .int()
+      .nonnegative()
+      .max(Number.MAX_SAFE_INTEGER)
+      .nullable(),
+    source: z.string().trim().min(1).max(200),
+    sourceType: z.enum(["dropi", "local", "import", "other"]),
+    productUrl: z.string().trim().max(2048),
+    supplierUrl: z.string().trim().max(2048),
+    supplierStock: z.number().int().nonnegative().max(4294967295).nullable(),
+    checkedAt: z.string().datetime().nullable(),
+    notes: z.string().trim().max(1000),
+    isConfirmed: z.boolean(),
+    isActive: z.boolean(),
+    isPreferred: z.boolean(),
+  })
+  .refine(
+    (offer) =>
+      !offer.isPreferred ||
+      (offer.isConfirmed && offer.isActive && offer.unitCostPyg !== null)
+  );
+
+function supplierLink(value: string) {
+  if (!value) return null;
+  const url = new URL(value);
+  if (url.protocol !== "https:" || url.username || url.password)
+    throw new Error(t("panel.costos.enlaceInvalido"));
+  return url.toString();
+}
+
+export async function saveVariantSupplierCost(
+  input: unknown
+): Promise<AdminActionResult> {
+  try {
+    await requireStaffSession();
+    const parsed = SupplierCostSchema.safeParse(input);
+    if (!parsed.success)
+      return { ok: false, error: t("panel.costos.invalidos") };
+    const db = getDb();
+    if (!(await supplierCostsReady(db)))
+      return { ok: false, error: t("panel.costos.migracion") };
+    const { productId, variantId, offerId, checkedAt, ...offer } = parsed.data;
+    const productUrl = supplierLink(offer.productUrl);
+    const supplierUrl = supplierLink(offer.supplierUrl);
+    await db.transaction(async (tx) => {
+      const [variant] = await tx
+        .select({ id: variants.id })
+        .from(variants)
+        .where(
+          and(eq(variants.id, variantId), eq(variants.productId, productId))
+        )
+        .for("update");
+      if (!variant) throw new Error(t("adminError.producto.varianteNoExiste"));
+      await writeSupplierOffer(
+        variantId,
+        offerId,
+        {
+          ...offer,
+          productUrl,
+          supplierUrl,
+          checkedAt: checkedAt ? new Date(checkedAt) : null,
+        },
+        tx
+      );
+    });
+    revalidatePath("/admin/productos");
+    revalidatePath(`/admin/productos/${productId}`);
+    return { ok: true };
+  } catch (error) {
+    return adminActionError("saveVariantSupplierCost", error);
+  }
+}
 
 function revalidarVidriera() {
   revalidatePath("/", "layout");
@@ -68,9 +157,20 @@ import {
  */
 
 const ProductSchema = z.object({
-  dropiUrl: z.string().trim().max(2048).nullable().optional().refine((value) => {
-    try { normalizeDropiUrl(value); return true; } catch { return false; }
-  }, "Usá un enlace de producto HTTPS de app.dropi.com.py."),
+  dropiUrl: z
+    .string()
+    .trim()
+    .max(2048)
+    .nullable()
+    .optional()
+    .refine((value) => {
+      try {
+        normalizeDropiUrl(value);
+        return true;
+      } catch {
+        return false;
+      }
+    }, "Usá un enlace de producto HTTPS de app.dropi.com.py."),
   saleMode: z.enum(["stock", "enquiry", "showcase"]).optional(),
   showPrice: z.boolean().optional(),
   productId: z.number().int().positive().optional(),
@@ -346,6 +446,7 @@ export async function removeProductImage(
 const MAX_CATALOG_FILE_BYTES = 10 * 1024 * 1024;
 
 export type CatalogImportSummary = {
+  advertencias?: string[];
   productosNuevos: number;
   productosActualizar: number;
   variantesNuevas: number;
@@ -385,6 +486,7 @@ function planSummary(
   pisaStock: boolean
 ): CatalogImportSummary {
   return {
+    advertencias: plan.advertencias,
     productosNuevos: plan.productosNuevos,
     productosActualizar: plan.productosActualizar,
     variantesNuevas: plan.variantesNuevas,
@@ -447,6 +549,15 @@ export async function applyCatalogImport(
     const pisaStock = formData.get("pisarStock") === "true";
     const plan = await buildCatalogImportPlan(leido.csvText);
     if (plan.errores.length > 0) return { ok: false, errores: plan.errores };
+
+    if (
+      plan.advertencias?.length &&
+      formData.get("duplicateReview") !== JSON.stringify(plan.advertencias)
+    )
+      return {
+        ok: false,
+        errores: [t("panel.productos.importar.faltaRevision")],
+      };
 
     const categoriaPorSlug = await ensureCatalogCategories(plan);
 
@@ -598,9 +709,7 @@ const BulkPriceSchema = z
     { message: "Elegí variantes o productos, no las dos cosas." }
   );
 
-export async function bulkAdjustProductPrices(
-  input: unknown
-): Promise<
+export async function bulkAdjustProductPrices(input: unknown): Promise<
   AdminActionResult<{
     cambiadas: number;
     miradas: number;

@@ -6,6 +6,7 @@ import { DuplicateProductButton } from "@/components/admin/bulk-actions";
 import { ProductForm } from "@/components/admin/product-form";
 import { ProductImages } from "@/components/admin/product-images";
 import { VariantEditor } from "@/components/admin/variant-editor";
+import { SupplierCostEditor } from "@/components/admin/supplier-cost-editor";
 import {
   getAdminProduct,
   listCategories,
@@ -114,6 +115,26 @@ export default async function AdminProductPage({ params }: { params: Params }) {
             }))}
           />
         </div>
+      </section>
+
+      <section className="mt-8">
+        <h2 className="font-medium">{t("panel.costos.titulo")}</h2>
+        <p className="text-muted-foreground mt-1 text-sm">
+          {t("panel.costos.ayuda")}
+        </p>
+        {!found.costsReady ? (
+          <p role="status" className="mt-2 text-sm">
+            {t("panel.costos.migracion")}
+          </p>
+        ) : null}
+        {variants.map((variant) => (
+          <SupplierCostEditor
+            key={variant.id}
+            productId={product.id}
+            variant={variant}
+            ready={found.costsReady}
+          />
+        ))}
       </section>
 
       {adjustments.length > 0 ? (

@@ -9,7 +9,11 @@ import {
   variants,
 } from "@/db/schema";
 
-import type { AdminProductSort } from "@/lib/admin-product-sort";
+import type {
+  AdminProductSort,
+  AdminProductStatus,
+  AdminProductMode,
+} from "@/lib/admin-product-sort";
 import { EXPORT_MAX_ROWS } from "@/lib/csv";
 import { parseRef } from "@/lib/imagenes-r2";
 
@@ -21,6 +25,7 @@ import type { Executor } from "./executor";
 import { getAvailability, heldQtyMap } from "./stock";
 import { notifyBackInStock } from "./stock-alerts";
 import { log, mensajeDe } from "@/lib/log";
+import { readSupplierOffers, supplierCostsReady } from "./supplier-costs";
 
 /**
  * Catálogo desde el panel (PLAN.md 4.6).
@@ -52,6 +57,15 @@ export type AdminProductRow = {
   publishedAt: Date | null;
   variantCount: number;
   minPricePyg: number | null;
+  maxPricePyg: number | null;
+  saleMode: AdminProductMode;
+  showPrice: boolean;
+  dropiUrl: string | null;
+  imageCount: number;
+  minCostPyg: number | null;
+  maxCostPyg: number | null;
+  costCount: number;
+  minMarginPercent: number | null;
   onHand: number;
   /** La primera foto del producto, o `null` si no cargó ninguna. */
   imageCloudinaryId: string | null;
@@ -64,6 +78,12 @@ export type AdminProductFilters = {
   /** `true` = sólo destacados. `undefined` = todos, que es el listado de siempre. */
   featured?: boolean;
   sort?: AdminProductSort;
+  status?: AdminProductStatus;
+  saleMode?: AdminProductMode;
+  minPricePyg?: number;
+  maxPricePyg?: number;
+  minMarginPercent?: number;
+  costState?: "completos" | "faltantes";
   page?: number;
   perPage?: number;
 };
@@ -76,6 +96,7 @@ export async function listAdminProducts(
   total: number;
   page: number;
   totalPages: number;
+  costsReady: boolean;
 }> {
   const tx = executor ?? getDb();
   const perPage = Math.min(
@@ -84,7 +105,9 @@ export async function listAdminProducts(
   );
   const page = Math.max(1, options.page ?? 1);
 
-  const where = productWhere(options);
+  const costsReady = await supplierCostsReady(tx);
+  const cost = costExpressions(costsReady);
+  const where = productWhere(options, costsReady);
 
   const [{ total = 0 } = {}] = await tx
     .select({ total: count() })
@@ -99,13 +122,21 @@ export async function listAdminProducts(
   const minPrice = sql`MIN(${variants.pricePyg})`;
   const orderBy = {
     recientes: [desc(products.updatedAt)],
+    "nombre-asc": [asc(products.name)],
+    "nombre-desc": [desc(products.name)],
+    "categoria-asc": [asc(categories.name), asc(products.name)],
+    "categoria-desc": [desc(categories.name), asc(products.name)],
     // Un producto sin variantes suma cero y encabeza la lista: eso es correcto,
     // no se puede vender.
     stock: [asc(onHandSum), asc(products.name)],
+    "stock-desc": [desc(onHandSum), asc(products.name)],
     // Los sin precio (sin variantes) van al final en las dos direcciones: no
     // son "el más barato".
     "precio-asc": [sql`${minPrice} IS NULL`, asc(minPrice)],
     "precio-desc": [sql`${minPrice} IS NULL`, desc(minPrice)],
+    "costo-asc": [sql`${cost.min} IS NULL`, asc(cost.min)],
+    "costo-desc": [sql`${cost.max} IS NULL`, desc(cost.max)],
+    "margen-desc": [sql`${cost.margin} IS NULL`, desc(cost.margin)],
   }[options.sort ?? "recientes"];
 
   const rows = await tx
@@ -121,6 +152,15 @@ export async function listAdminProducts(
       publishedAt: products.publishedAt,
       variantCount: sql<number>`COUNT(${variants.id})`,
       minPricePyg: sql<number | null>`MIN(${variants.pricePyg})`,
+      maxPricePyg: sql<number | null>`MAX(${variants.pricePyg})`,
+      saleMode: products.saleMode,
+      showPrice: products.showPrice,
+      dropiUrl: products.dropiUrl,
+      imageCount: sql<number>`(SELECT COUNT(*) FROM \`product_images\` AS pics WHERE pics.\`product_id\` = \`products\`.\`id\`)`,
+      minCostPyg: cost.min,
+      maxCostPyg: cost.max,
+      costCount: cost.count,
+      minMarginPercent: cost.margin,
       onHand: sql<number>`COALESCE(SUM(${variants.onHand}), 0)`,
       // Subconsulta y no JOIN: un JOIN a `product_images` multiplica las filas
       // por sus fotos y rompe COUNT(variants) igual que rompería la
@@ -143,7 +183,7 @@ export async function listAdminProducts(
     .leftJoin(variants, eq(variants.productId, products.id))
     .where(where)
     .groupBy(products.id, categories.name, categories.slug)
-    .orderBy(...orderBy)
+    .orderBy(...orderBy, asc(products.id))
     .limit(perPage)
     .offset((safePage - 1) * perPage);
 
@@ -152,11 +192,41 @@ export async function listAdminProducts(
       ...row,
       variantCount: Number(row.variantCount),
       minPricePyg: row.minPricePyg === null ? null : Number(row.minPricePyg),
+      maxPricePyg: row.maxPricePyg === null ? null : Number(row.maxPricePyg),
+      imageCount: Number(row.imageCount),
+      minCostPyg: row.minCostPyg === null ? null : Number(row.minCostPyg),
+      maxCostPyg: row.maxCostPyg === null ? null : Number(row.maxCostPyg),
+      costCount: Number(row.costCount),
+      minMarginPercent:
+        row.minMarginPercent === null ? null : Number(row.minMarginPercent),
       onHand: Number(row.onHand),
     })),
     total,
     page: safePage,
     totalPages,
+    costsReady,
+  };
+}
+
+function costExpressions(ready: boolean) {
+  const from = sql`FROM \`variants\` AS cv LEFT JOIN \`supplier_offers\` AS sc ON sc.\`variant_id\` = cv.\`id\` AND sc.\`is_preferred\` = TRUE AND sc.\`is_confirmed\` = TRUE AND sc.\`is_active\` = TRUE WHERE cv.\`product_id\` = \`products\`.\`id\``;
+  return {
+    min: ready
+      ? sql<number | null>`(SELECT MIN(sc.\`unit_cost_pyg\`) ${from})`
+      : sql<number | null>`NULL`,
+    max: ready
+      ? sql<number | null>`(SELECT MAX(sc.\`unit_cost_pyg\`) ${from})`
+      : sql<number | null>`NULL`,
+    count: ready
+      ? sql<number>`(SELECT COUNT(sc.\`unit_cost_pyg\`) ${from})`
+      : sql<number>`0`,
+    // Only report a product margin when every variant has cost and a positive
+    // retail price. Pair each variant with its own cost, never MIN(price)-MAX(cost).
+    margin: ready
+      ? sql<
+          number | null
+        >`(SELECT CASE WHEN COUNT(*) > 0 AND COUNT(sc.\`unit_cost_pyg\`) = COUNT(*) AND MIN(cv.\`price_pyg\`) > 0 THEN MIN((CAST(cv.\`price_pyg\` AS SIGNED) - CAST(sc.\`unit_cost_pyg\` AS SIGNED)) * 100.0 / NULLIF(cv.\`price_pyg\`, 0)) ELSE NULL END ${from})`
+      : sql<number | null>`NULL`,
   };
 }
 
@@ -165,11 +235,13 @@ function escapeLike(term: string): string {
 }
 
 /** El filtro del listado, compartido con el export para que bajen lo mismo. */
-function productWhere(options: AdminProductFilters) {
+function productWhere(options: AdminProductFilters, costsReady = false) {
   const term = options.search?.trim();
+  const cost = costExpressions(costsReady);
+  const variantCount = sql`(SELECT COUNT(*) FROM \`variants\` AS vc WHERE vc.\`product_id\` = \`products\`.\`id\`)`;
   return and(
     term
-      ? sql`(${products.name} LIKE ${`%${escapeLike(term)}%`} OR ${products.slug} LIKE ${`%${escapeLike(term)}%`})`
+      ? sql`(${products.name} LIKE ${`%${escapeLike(term)}%`} OR ${products.slug} LIKE ${`%${escapeLike(term)}%`} OR CAST(${products.id} AS CHAR) = ${term} OR ${products.dropiUrl} LIKE ${`%${escapeLike(term)}%`} OR EXISTS (SELECT 1 FROM \`variants\` AS sv WHERE sv.\`product_id\` = \`products\`.\`id\` AND sv.\`sku\` LIKE ${`%${escapeLike(term)}%`}))`
       : undefined,
     options.categoryId
       ? eq(products.categoryId, options.categoryId)
@@ -178,11 +250,35 @@ function productWhere(options: AdminProductFilters) {
     // trayendo destacados y no destacados por igual.
     options.featured === undefined
       ? undefined
-      : eq(products.isFeatured, options.featured)
+      : eq(products.isFeatured, options.featured),
+    options.status === "publicados"
+      ? sql`${products.isActive} = TRUE AND ${products.publishedAt} IS NOT NULL`
+      : options.status === "sin-publicar"
+        ? sql`(${products.isActive} = FALSE OR ${products.publishedAt} IS NULL)`
+        : undefined,
+    options.saleMode ? eq(products.saleMode, options.saleMode) : undefined,
+    // Price filters use the same starting price shown in the list; no gallery
+    // or variant joins here, so product counts and the CSV stay consistent.
+    options.minPricePyg === undefined
+      ? undefined
+      : sql`(SELECT MIN(pv.\`price_pyg\`) FROM \`variants\` AS pv WHERE pv.\`product_id\` = \`products\`.\`id\`) >= ${options.minPricePyg}`,
+    options.maxPricePyg === undefined
+      ? undefined
+      : sql`(SELECT MIN(pv.\`price_pyg\`) FROM \`variants\` AS pv WHERE pv.\`product_id\` = \`products\`.\`id\`) <= ${options.maxPricePyg}`,
+    options.minMarginPercent === undefined
+      ? undefined
+      : sql`${cost.margin} >= ${options.minMarginPercent}`,
+    options.costState === "completos"
+      ? sql`${variantCount} > 0 AND ${cost.count} = ${variantCount}`
+      : options.costState === "faltantes"
+        ? sql`(${variantCount} = 0 OR ${cost.count} < ${variantCount})`
+        : undefined
   );
 }
 
 export type ExportVariantRow = {
+  unitCostPyg: number | null;
+  costSource: string | null;
   dropiUrl: string | null;
   saleMode: "stock" | "enquiry" | "showcase";
   showPrice: boolean;
@@ -208,9 +304,20 @@ export async function listVariantsForExport(
   executor?: Executor
 ): Promise<ExportVariantRow[]> {
   const tx = executor ?? getDb();
+  const costsReady = await supplierCostsReady(tx);
 
   return tx
     .select({
+      unitCostPyg: costsReady
+        ? sql<
+            number | null
+          >`(SELECT sc.\`unit_cost_pyg\` FROM \`supplier_offers\` AS sc WHERE sc.\`variant_id\` = \`variants\`.\`id\` AND sc.\`is_preferred\` = TRUE AND sc.\`is_confirmed\` = TRUE AND sc.\`is_active\` = TRUE)`
+        : sql<number | null>`NULL`,
+      costSource: costsReady
+        ? sql<
+            string | null
+          >`(SELECT sc.\`source\` FROM \`supplier_offers\` AS sc WHERE sc.\`variant_id\` = \`variants\`.\`id\` AND sc.\`is_preferred\` = TRUE AND sc.\`is_confirmed\` = TRUE AND sc.\`is_active\` = TRUE)`
+        : sql<string | null>`NULL`,
       sku: variants.sku,
       saleMode: products.saleMode,
       showPrice: products.showPrice,
@@ -224,7 +331,7 @@ export async function listVariantsForExport(
     .from(variants)
     .innerJoin(products, eq(variants.productId, products.id))
     .innerJoin(categories, eq(products.categoryId, categories.id))
-    .where(productWhere(options))
+    .where(productWhere(options, costsReady))
     .orderBy(asc(products.name), asc(variants.position), asc(variants.id))
     .limit(limit);
 }
@@ -257,12 +364,31 @@ export async function getAdminProduct(productId: number, executor?: Executor) {
     productVariants.map((variant) => variant.id),
     tx
   );
+  const costsReady = await supplierCostsReady(tx);
+  const offers = costsReady
+    ? await readSupplierOffers(
+        productVariants.map((variant) => variant.id),
+        tx
+      )
+    : [];
+  const costs = new Map(
+    offers
+      .filter(
+        (offer) => offer.isPreferred && offer.isConfirmed && offer.isActive
+      )
+      .map((offer) => [offer.variantId, offer])
+  );
 
   return {
     product,
     images,
+    costsReady,
     variants: productVariants.map((variant) => ({
       ...variant,
+      supplierOffers: offers.filter((offer) => offer.variantId === variant.id),
+      unitCostPyg: costs.get(variant.id)?.unitCostPyg ?? null,
+      costSource: costs.get(variant.id)?.source ?? null,
+      costCheckedAt: costs.get(variant.id)?.checkedAt ?? null,
       heldQty: held.get(variant.id) ?? 0,
       available: Math.max(0, variant.onHand - (held.get(variant.id) ?? 0)),
     })),
@@ -627,7 +753,9 @@ export async function replaceProductImages(
   }
   const db = executor ?? getDb();
   await db.transaction(async (tx) => {
-    await tx.delete(productImages).where(eq(productImages.productId, productId));
+    await tx
+      .delete(productImages)
+      .where(eq(productImages.productId, productId));
     if (items.length) {
       await tx.insert(productImages).values(
         items.map((item, position) => ({

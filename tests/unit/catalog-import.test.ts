@@ -14,6 +14,26 @@ import { parseCsv, toCsv } from '../../src/lib/csv';
 
 const ENCABEZADO = 'SKU;Producto;Categoría;Variante;Precio (₲);Stock';
 
+describe('costos privados en la planilla', () => {
+  it('preserves whole-guarani supplier costs including zero and the source', () => {
+    const parsed = parseCatalogo(`${ENCABEZADO};Costo proveedor (₲);Fuente costo\nA;Afilador;Cocina;Único;69000;0;23000;Dropi\nB;Otro;Cocina;Único;50000;0;0;Muestra gratis\n`);
+    expect(parsed.errores).toEqual([]);
+    expect(parsed.productos[0]?.variants[0]?.unitCostPyg).toBe(23000);
+    expect(parsed.productos[0]?.variants[0]?.costSource).toBe('Dropi');
+    expect(parsed.productos[1]?.variants[0]?.unitCostPyg).toBe(0);
+  });
+  it('blank or omitted cost does not overwrite an existing cost', () => {
+    for (const csv of [`${ENCABEZADO}\nA;Afilador;Cocina;Único;69000;0`, `${ENCABEZADO};Costo proveedor (₲);Fuente costo\nA;Afilador;Cocina;Único;69000;0;;`]) {
+      const parsed = parseCatalogo(csv);
+      expect(parsed.errores).toEqual([]);
+      expect(parsed.productos[0]?.variants[0]).not.toHaveProperty('unitCostPyg');
+    }
+  });
+  it('rejects invalid supplier costs before a write can occur', () => {
+    for (const cost of ['-1', '1.50', '9007199254740992']) expect(parseCatalogo(`${ENCABEZADO};Costo proveedor (₲)\nA;Afilador;Cocina;Único;69000;0;${cost}`).errores).not.toEqual([]);
+  });
+});
+
 describe('parseCsv', () => {
   it('lee lo que escribe toCsv (round-trip con BOM, CRLF y comillas)', () => {
     const csv = toCsv(
