@@ -10,7 +10,7 @@ test("the storefront renders real HTML, styles, scripts and preparation help pag
   expect(response?.status()).toBe(200);
   expect((await response!.body()).length).toBeGreaterThan(5000);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "EncontrÃ¡ lo que va con vos."
+    "Encontrá lo que va con vos."
   );
   expect(
     await page
@@ -35,7 +35,7 @@ test("the storefront renders real HTML, styles, scripts and preparation help pag
       await expect(page.locator("main")).toContainText("WhatsApp");
     else
       await expect(page.locator("main")).toContainText(
-        /preparaciÃ³n|preparando/
+        /preparación|preparando/
       );
   }
   expect(errors).toEqual([]);
