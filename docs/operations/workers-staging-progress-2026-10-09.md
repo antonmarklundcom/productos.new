@@ -18,7 +18,20 @@ Checked 2026-10-09. This is a local staging progress report, not a production mi
 | Hyperdrive inventory | No configurations returned | No staging database binding exists |
 | Deployed staging URL | NOT DONE | No Cloudflare page/CPU benchmark has run |
 
-The prototype builds the source before the supplier-admin PR. That PR is now merged as `8e7d8f195df7366901c4afd5acd1dc1c9c23ae4e`; update the staging base and rerun relevant checks before a deployment representing current main. PR #13 passed MySQL/schema/build checks, unit tests and browser e2e; its PR Lighthouse job was intentionally skipped by the workflow. The new supplier-offers migration has not been applied to production.
+## Current branch verification after updating main
+
+The branch was rebased onto merged main `8e7d8f195df7366901c4afd5acd1dc1c9c23ae4e`, including PR #13's supplier administration. That PR's production migration remains unapplied; no migration was run here. Historical measurements in the table above describe the earlier source, not this refreshed build.
+
+- Frozen install, typecheck and lint: PASS on the refreshed branch.
+- Available full suite: 111 files / 1,088 tests PASS; 76 files / 846 database integration tests SKIPPED because no TEST_DATABASE_URL exists.
+- Three preview-policy tests: PASS. Anonymous public-only wrapper blocks private routes and every non-GET/HEAD request, strips cookies/authorization, preserves response streams and CSP, and adds noindex/no-store. HEAD robots also returns no body.
+- Refreshed vinext build: PASS with pinned adapter/toolchain versions. Non-fatal adapter chunking/plugin-timing warnings remain.
+- Refreshed Wrangler dry run: PASS, 7,160.08 KiB uncompressed / 2,336.17 KiB gzip, 474 additional modules and 138 static assets. Package size is not runtime memory.
+- Five actual local workerd probes: health GET 200 (`ok:true, db:false, cron:false`), admin GET 404, root POST 405, robots GET 200/disallow and health HEAD 200/empty. Each had noindex. Local runtime was stopped after checks. These do not prove database connectivity or page rendering.
+- Staging per-invocation CPU cap: 1,000 ms, with full observability sampling for the small pilot. This is not an aggregate spending cap.
+- Code remains an undeployed public-preview foundation. A catalog deployment is blocked on request-scoped database adaptation plus isolated/read-only TLS credentials and a Hyperdrive binding. The existing Hostinger global pool is unchanged; never deploy it with production write credentials just because build/package passed.
+
+See [setup and budget runbook](cloudflare-staging-setup-2026-10-09.md) and [Claude read-only review prompt](claude-workers-review-prompt.md). Initial HTML no-store is a deliberate uncached response baseline; later cache optimization must be measured separately. No Cloudflare deployment or live DNS change occurred, no images were uploaded and no supplier/admin/checkout mutation was exposed.
 
 ## Corrections to the Cloudflare AI notes
 
@@ -61,7 +74,7 @@ Use total CPU or the traffic-weighted mean, not CPU p50, for the monthly bill. I
 
 ## Remaining work and safeguards
 
-Staging database access, request-scoped connections, read-only preview safeguards, real deployment and CPU measurement remain. Production 429 routing and the account-wide process-reaper script are separate unresolved issues; no hosting/DNS/script setting was changed by these local checks. A proxy Worker alone would leave the origin Node processes in place. A full proven port can remove this app's Node hosting dependency, while retaining separately hosted MySQL if its supported connection path passes.
+Staging database access, request-scoped connections, real deployment and CPU measurement remain. The public-only/noindex route guard is implemented and locally verified; database permission enforcement and representative page tests remain. Production 429 routing and the account-wide process-reaper script are separate unresolved issues; no hosting/DNS/script setting was changed by these local checks. A proxy Worker alone would leave the origin Node processes in place. A full proven port can remove this app's Node hosting dependency, while retaining separately hosted MySQL if its supported connection path passes.
 
 No changes were made to propia.node or paraguayresidency. Their mostly static pages are candidates for static delivery, but their forms/admin still need separate runtime and data checks.
 

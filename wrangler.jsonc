@@ -5,10 +5,18 @@
   "compatibility_flags": [
     "nodejs_compat"
   ],
-  "main": "vinext/server/fetch-handler",
+  "main": "workers/preview-entry.mjs",
   "assets": {
     "directory": "dist/client",
     "not_found_handling": "none",
     "binding": "ASSETS"
+  },
+  "workers_dev": true,
+  "limits": {
+    "cpu_ms": 1000
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
   }
 }
