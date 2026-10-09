@@ -2,9 +2,11 @@ import { defineConfig } from "vite";
 import vinext from "vinext";
 import { cloudflare } from "@cloudflare/vite-plugin";
 import path from "node:path";
+import { d1StagingPlugin } from "./workers/d1/build-plugin.mjs";
 
 export default defineConfig({
   plugins: [
+    d1StagingPlugin(import.meta.dirname),
     {
       name: "workers-preview-disable-background-isr",
       enforce: "pre",
@@ -24,8 +26,12 @@ export default defineConfig({
     }),
   ],
   resolve: {
-    alias: {
-      "sharp": path.resolve(import.meta.dirname, "empty-stub.js"),
-    },
+    alias: [
+      {find: /^@\/db\/schema$/, replacement: path.resolve(import.meta.dirname,"workers/d1/schema.ts")},
+      {find: /^@\/db$/, replacement: path.resolve(import.meta.dirname,"workers/d1/database.ts")},
+      {find: /^@\/domain\/supplier-costs$/, replacement: path.resolve(import.meta.dirname,"workers/d1/supplier-costs.ts")},
+      {find: /^@\/domain\/admin-categories$/, replacement: path.resolve(import.meta.dirname,"workers/d1/admin-categories.ts")},
+      {find: "sharp", replacement: path.resolve(import.meta.dirname,"empty-stub.js")},
+    ],
   },
 });

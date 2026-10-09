@@ -24,6 +24,17 @@
     "head_sampling_rate": 1
   },
   "vars": {
-    "PREVIEW_CATALOG_SNAPSHOT": "true"
-  }
+    "PREVIEW_CATALOG_SNAPSHOT": "true",
+    "WORKERS_D1_STAGING": "true",
+    "NEXT_PUBLIC_SITE_URL": "https://productos-workers-staging.marklundfaktura.workers.dev",
+    "NEXT_PUBLIC_IMAGENES_URL": "https://imagenes.productos.com.py"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "productos-workers-staging",
+      "database_id": "5c87a1b7-adc8-4201-9326-c1d0ae09a49f",
+      "migrations_dir": "workers/d1/migrations"
+    }
+  ]
 }
