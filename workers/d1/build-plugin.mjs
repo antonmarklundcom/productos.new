@@ -28,6 +28,7 @@ export function d1StagingPlugin(root) {
       if(file.endsWith("/admin/(panel)/page.tsx"))return {code: `export const dynamic = "force-dynamic"; export { default } from ${JSON.stringify(path.resolve(root,"workers/d1/admin-summary.tsx").replaceAll("\\","/"))};`,map:null};
       let code=original;
       code=code.replace(/(["'])\.\/supplier-costs\1/g, JSON.stringify(path.resolve(root,"workers/d1/supplier-costs.ts").replaceAll("\\","/")));
+      code=code.replace(/(["'])\.\/store-settings\1/g, JSON.stringify(path.resolve(root,"workers/d1/store-settings.ts").replaceAll("\\","/")));
       // Exact, reviewed clock translation in modules used by this pilot. No
       // runtime SQL rewriting or MySQL session-state emulation.
       if(file.endsWith("/domain/stock.ts")||file.endsWith("/lib/auth.ts"))code=code.replaceAll("sql`NOW()`","sql`CURRENT_TIMESTAMP`");

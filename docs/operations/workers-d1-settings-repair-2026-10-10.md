@@ -4,6 +4,7 @@ This follow-up continues the Cloudflare catalog/admin port. The live database he
 
 ## Implementation
 
+- Build verification checks the emitted server JavaScript for the native settings writer. Vite needs an explicit settings alias as well as the relative-import resolver; direct native tests alone do not prove the bundled action uses it.
 - Workers resolves the settings domain to a native D1 implementation. Hostinger's original MySQL implementation remains intact.
 - A single SQLite UPSERT replaces one validated section, or only the supplied policy pages, using JSON functions. Concurrent saves to separate sections/pages preserve each other's changes. Explicit nulls remain defaults; malformed legacy JSON recovers safely. Updated timestamps use UTC and the acting owner's ID is recorded.
 - Existing owner-only settings actions remain guarded. Upload actions remain unavailable; no image re-upload, new transformation service or payment is required. Client accounts cannot be activated through this port.

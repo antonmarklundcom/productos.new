@@ -8,3 +8,10 @@ test('native settings save semantics pass on a disposable local D1', {timeout:12
  assert.equal(result.status,0, result.stdout+'\n'+result.stderr);
  assert.match(result.stdout,/PASS: local D1 settings/);
 });
+
+import {verifyNativeSettingsBundle} from '../../workers/d1/build-verification.mjs';
+test('build fails if settings still compile only to the legacy MySQL implementation',()=>{
+ assert.throws(()=>verifyNativeSettingsBundle('saveStoreSettingsSection db.transaction FOR UPDATE'),/omitted native D1/);
+ assert.throws(()=>verifyNativeSettingsBundle('json_set without native action'),/omitted native D1/);
+ assert.doesNotThrow(()=>verifyNativeSettingsBundle('json_set D1_SETTINGS_SAVE_MISSING_RESULT'));
+});

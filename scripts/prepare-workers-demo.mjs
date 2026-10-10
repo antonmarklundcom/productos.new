@@ -1,8 +1,14 @@
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, readdir } from "node:fs/promises";
 import { gunzipSync } from "node:zlib";
 import path from "node:path";
 
+import { verifyNativeSettingsBundle } from "../workers/d1/build-verification.mjs";
 const root = process.cwd();
+async function serverJavaScript(directory) {
+  const files = await readdir(directory, {withFileTypes:true});
+  return (await Promise.all(files.map(file => file.isDirectory() ? serverJavaScript(path.join(directory,file.name)) : file.name.endsWith(".js") ? readFile(path.join(directory,file.name),"utf8") : ""))).join("\n");
+}
+verifyNativeSettingsBundle(await serverJavaScript(path.join(root,"dist/server")));
 const snapshot = JSON.parse(gunzipSync(await readFile(path.join(root, "workers/catalog-demo/pages.json.gz"))));
 if (snapshot.products !== 262 || snapshot.images !== 821 || Object.keys(snapshot.pages).length < 280)
   throw new Error("Catalog demo completeness check failed");
