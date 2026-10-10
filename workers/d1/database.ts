@@ -8,6 +8,13 @@ export type D1Binding = AnyD1Database;
 const createDatabase = (binding: D1Binding) => drizzle(binding, { schema });
 export type NativeDatabase = ReturnType<typeof createDatabase>;
 const scope = new AsyncLocalStorage<NativeDatabase>();
+export type ImagesBucket = {
+  head(key:string):Promise<unknown|null>;
+  put(key:string,value:Uint8Array,options:{httpMetadata:{contentType:string;cacheControl:string}}):Promise<unknown>;
+  delete(keys:string[]):Promise<void>;
+};
+const bindingsScope=new AsyncLocalStorage<{IMAGES?:ImagesBucket}>();
+export function getD1Bindings(){return bindingsScope.getStore()??{};}
 const secretScope = new AsyncLocalStorage<string | undefined>();
 export function getD1SessionSecret(): string | undefined { return secretScope.getStore(); }
 export function getNativeDb(): NativeDatabase {
@@ -42,20 +49,20 @@ export async function closePool(): Promise<void> { /* D1 has no connection pool.
 
 /** Keep context across streamed RSC/HTML responses and cancellation. */
 export async function withD1Database(
-  binding: D1Binding, operation: () => Promise<Response>, sessionSecret?: string,
+  binding: D1Binding, operation: () => Promise<Response>, sessionSecret?: string, bindings:{IMAGES?:ImagesBucket}={},
 ): Promise<Response> {
   const database = createDatabase(binding);
-  const response = await secretScope.run(sessionSecret, () => scope.run(database, operation));
+  const response = await bindingsScope.run(bindings,()=>secretScope.run(sessionSecret, () => scope.run(database, operation)));
   if (!response.body) return response;
   const reader = response.body.getReader();
   const body = new ReadableStream<Uint8Array>({
     async pull(controller) {
       try {
-        const part = await secretScope.run(sessionSecret, () => scope.run(database, () => reader.read()));
+        const part = await bindingsScope.run(bindings,()=>secretScope.run(sessionSecret, () => scope.run(database, () => reader.read())));
         if (part.done) controller.close(); else controller.enqueue(part.value);
       } catch (error) { controller.error(error); }
     },
-    async cancel(reason) { await secretScope.run(sessionSecret, () => scope.run(database, () => reader.cancel(reason))); },
+    async cancel(reason) { await bindingsScope.run(bindings,()=>secretScope.run(sessionSecret, () => scope.run(database, () => reader.cancel(reason)))); },
   });
   return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
 }

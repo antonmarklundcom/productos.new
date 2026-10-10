@@ -33,6 +33,7 @@
     "NEXT_PUBLIC_SITE_URL": "https://productos.com.py",
     "NEXT_PUBLIC_IMAGENES_URL": "https://imagenes.productos.com.py"
   },
+  "r2_buckets": [{"binding":"IMAGES","bucket_name":"productos-images"}],
   "d1_databases": [
     {
       "binding": "DB",

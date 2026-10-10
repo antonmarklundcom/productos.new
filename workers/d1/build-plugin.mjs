@@ -3,7 +3,7 @@ import ts from "typescript";
 const normalize=(value)=>value.replaceAll("\\", "/").replace(/\.(?:mjs|ts|tsx)$/, "");
 const allowedActions={
   "admin-auth":new Set(["loginAdmin","logoutAdmin"]),
-  "admin-products":new Set(["saveProduct","saveProductVariant","saveVariantSupplierCost","previewCatalogImport"]),
+  "admin-products":new Set(["saveProduct","saveProductVariant","saveVariantSupplierCost","previewCatalogImport","applyCatalogImport","uploadProductImage","removeProductImage"]),
   "admin-ajustes":new Set(["guardarAjustes","restaurarAjustes","quitarImagenPortada","quitarImagenMarca"]),
   "admin-categories":new Set(["crearCategoria","editarCategoria","cambiarEstadoCategoria","moverCategoria"]),
 };
@@ -13,6 +13,7 @@ export function d1StagingPlugin(root) {
     ["src/db/schema","workers/d1/schema.ts"],
     ["src/domain/supplier-costs","workers/d1/supplier-costs.ts"],
     ["src/domain/admin-categories","workers/d1/admin-categories.ts"],
+    ["src/domain/catalog-import-plan","workers/d1/catalog-import-plan.ts"],
     ["src/domain/store-settings","workers/d1/store-settings.ts"],
   ].map(([from,to])=>[normalize(path.resolve(root,from)),path.resolve(root,to)]));
   return {name:"isolated-d1-catalog-pilot",enforce:"pre",
@@ -74,6 +75,26 @@ export function d1StagingPlugin(root) {
       ...(!["resumen","productos","categorias","ajustes"].includes(item.id) ? { availabilityLabel: "Pendiente" } : {}),`);
         code=code.replace("        {children}",'<p role="status" className="mb-5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">Catálogo de consultas: productos, categorías, proveedores y ajustes están disponibles. Las secciones marcadas «Pendiente» explican lo que falta para habilitarlas.</p>\n        {children}');
       }
+      if(file.endsWith("/components/admin/product-images.tsx")){
+        code=code.replace(/^(\s*["']use client["'];)/,'$1\nimport { prepareR2ImageForm } from "@/lib/prepare-r2-images";');
+        code=code.replace('            const result = await uploadProductImage(data);','            try { await prepareR2ImageForm(data); } catch(error) { setError(error instanceof Error ? error.message : "No se pudo preparar la foto."); return; }\n            const result = await uploadProductImage(data);');
+      }
+      if(file.endsWith("/components/admin/catalog-import.tsx")){
+        code=code.replace('    if (!file) {','    if(file && file.size>800*1024){toast.error("Dividí la planilla en archivos de hasta 800 KB y 500 productos.");return null;}\n    if (!file) {');
+        code=code.replace('      const result = await applyCatalogImport(formData);', `      const sendBatch = async (): Promise<Awaited<ReturnType<typeof applyCatalogImport>> & {nextOffset?:number|null}> => {
+        try { return await applyCatalogImport(formData); }
+        catch { return {ok:false,errores:["Se interrumpió la conexión. El último lote puede haberse guardado; revisá los productos antes de reintentar. Reimportar la misma planilla no duplica los SKU."]}; }
+      };
+      let result = await sendBatch();
+      let saved=0, variants=0, photos=0;
+      while(result.ok && result.nextOffset != null){saved=result.nextOffset;variants+=result.variantesEscritas;photos+=result.fotosSubidas;
+        formData.set("batchOffset",String(saved));toast.message(\`Importados \${saved} productos; guardando el siguiente lote…\`);
+        result=await sendBatch();}
+      if(result.ok){result.variantesEscritas+=variants;result.fotosSubidas+=photos;}
+      if(!result.ok && saved)result.errores.unshift(\`Se confirmó el guardado de \${saved} productos. Revisá el último lote antes de reintentar; no se duplican los SKU.\`);`);
+      }
+      if(file.endsWith("/actions/admin-products.ts"))code=code.replace('if (file.size > MAX_CATALOG_FILE_BYTES)', 'if (file.size > 800 * 1024)');
+      if(file.endsWith("/actions/admin-products.ts"))code=code.replace(/^(\s*["']use server["'];)/,'$1\nimport { applyD1CatalogImport, uploadD1ProductImage, removeD1ProductImage } from '+JSON.stringify(path.resolve(root,"workers/d1/catalog-actions.ts").replaceAll("\\","/"))+';');
       // An action ID can be posted to a different page. Route filtering alone
       // is insufficient: deny unported actions at their implementation boundary.
       const moduleIsServer=/^[\s]*["']use server["']/.test(code);
@@ -87,13 +108,15 @@ export function d1StagingPlugin(root) {
           if((moduleIsServer&&exported)||inline){
             const name=node.name?.getText(ast);
             const actionModule=path.basename(file,".ts");
+            const native={applyCatalogImport:"applyD1CatalogImport(formData)",uploadProductImage:"uploadD1ProductImage(formData)",removeProductImage:"removeD1ProductImage(input)"};
+            if(actionModule==="admin-products"&&native[name]){edits.push({at:node.body.getStart(ast)+1,end:node.body.end-1,text:"\nreturn "+native[name]+";\n"});return;}
             if(!allowedActions[actionModule]?.has(name))edits.push({at:node.body.getStart(ast)+1,text:'\nthrow new Error("Esta función todavía no está habilitada en la prueba D1.");\n'});
           }
         }
         ts.forEachChild(node,walk);
       }
       walk(ast);
-      for(const edit of edits.sort((a,b)=>b.at-a.at))code=code.slice(0,edit.at)+edit.text+code.slice(edit.at);
+      for(const edit of edits.sort((a,b)=>b.at-a.at))code=code.slice(0,edit.at)+edit.text+code.slice(edit.end??edit.at);
       return code===original?undefined:{code,map:null};
     },
   };

@@ -38,6 +38,7 @@ export default defineConfig({
       {find: /^@\/db$/, replacement: path.resolve(import.meta.dirname,"workers/d1/database.ts")},
       {find: /^@\/domain\/supplier-costs$/, replacement: path.resolve(import.meta.dirname,"workers/d1/supplier-costs.ts")},
       {find: /^@\/domain\/store-settings$/, replacement: path.resolve(import.meta.dirname,"workers/d1/store-settings.ts")},
+      {find: /^@\/domain\/catalog-import-plan$/, replacement: path.resolve(import.meta.dirname,"workers/d1/catalog-import-plan.ts")},
       {find: /^@\/domain\/admin-categories$/, replacement: path.resolve(import.meta.dirname,"workers/d1/admin-categories.ts")},
       {find: "sharp", replacement: path.resolve(import.meta.dirname,"empty-stub.js")},
     ],

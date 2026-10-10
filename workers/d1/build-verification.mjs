@@ -3,3 +3,7 @@ export function verifyNativeSettingsBundle(serverJavaScript) {
   if (!serverJavaScript.includes("D1_SETTINGS_SAVE_MISSING_RESULT") || !serverJavaScript.includes("json_set"))
     throw new Error("Workers bundle omitted native D1 settings writes; review adapter aliases before deploying.");
 }
+export function verifyNativeCatalogBundle(serverJavaScript){
+  for(const marker of ["D1_CATALOG_BATCH_FAILED","Falta una foto en R2","La foto preparada tiene un formato o tamaño inválido"])
+    if(!serverJavaScript.includes(marker))throw new Error("Workers bundle omitted native catalog/R2 operations; review adapter aliases before deploying.");
+}

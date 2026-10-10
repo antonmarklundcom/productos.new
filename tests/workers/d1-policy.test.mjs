@@ -29,11 +29,15 @@ test('D1 action guard blocks IDs even when posted to another allowed page',()=>{
  const transformed=plugin.transform(source,path.join(root,'src/app/actions/admin-products.ts')).code;
  assert.match(transformed,/saveD1SupplierOffer\(productId, variantId/);
  assert.doesNotMatch(transformed,/await db\.transaction\(async \(tx\) =>/);
- for(const name of ['adjustVariantStock','applyCatalogImport','bulkAdjustProductPrices','duplicateProductAction']){
+ for(const name of ['adjustVariantStock','bulkAdjustProductPrices','duplicateProductAction']){
   const body=transformed.slice(transformed.indexOf('export async function '+name));
   assert.match(body.slice(body.indexOf('{'),body.indexOf('{')+160),/throw new Error\("Esta función/);
  }
  const auth=plugin.transform(readFileSync(path.join(root,'src/app/actions/admin-auth.ts'),'utf8'),path.join(root,'src/app/actions/admin-auth.ts')).code;
+ assert.match(transformed,/^"use server";/);
+ assert.match(transformed,/return applyD1CatalogImport\(formData\)/);
+ assert.match(transformed,/return uploadD1ProductImage\(formData\)/);
+ assert.match(transformed,/return removeD1ProductImage\(input\)/);
  assert.match(auth,/await rateLimit\(/);assert.match(auth,/await resetRateLimitKey\(/);
 });
 

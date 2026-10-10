@@ -28,7 +28,7 @@ const previewWorker = {
           return protectStagingResponse(Response.json({ok:true,db:true,mode:"d1-staging",counts:row,cron:false}));
         }
         return catalogResponse(request, env, ctx, () => app.fetch(request,env,ctx));
-      }, env.SESSION_SECRET);
+      }, env.SESSION_SECRET, env);
     }
     return handlePreviewRequest(request, async (anonymous) => {
       if (!env.HYPERDRIVE && env.PREVIEW_CATALOG_SNAPSHOT === "true")
