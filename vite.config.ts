@@ -2,9 +2,12 @@ import { defineConfig } from "vite";
 import vinext from "vinext";
 import { cloudflare } from "@cloudflare/vite-plugin";
 import path from "node:path";
+import { readFileSync } from "node:fs";
+import { publicBuildDefines } from "./workers/public-build-env.mjs";
 import { d1StagingPlugin } from "./workers/d1/build-plugin.mjs";
 
 export default defineConfig({
+  define: publicBuildDefines(readFileSync(path.resolve(import.meta.dirname, "wrangler.jsonc"), "utf8"), process.env),
   plugins: [
     d1StagingPlugin(import.meta.dirname),
     {
