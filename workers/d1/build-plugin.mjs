@@ -47,6 +47,7 @@ export function d1StagingPlugin(root) {
         if(!code.includes(raw))throw new Error('D1 dashboard date binding source drift');
         code=code.replace(raw,encoded);
       }
+      if(file.endsWith("/admin/login/page.tsx"))code=code.replace("<LoginForm next={next} />", "<LoginForm next={next} passwordRecoveryAvailable />");
       if(file.endsWith("/actions/admin-auth.ts")){
         code=code.replace('from "@/lib/rate-limit"','from "../../../workers/d1/login-limit"');
         code=code.replaceAll("= rateLimit(","= await rateLimit(").replace(/^(\s*)resetRateLimitKey\(/gm,"$1await resetRateLimitKey(");

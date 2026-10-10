@@ -621,3 +621,11 @@ export const variants = sqliteTable("variants", {
 export const workersLoginLimits = sqliteTable("workers_login_limits", {
   key: text("key").primaryKey(), starts: integer("starts").notNull(), hits: integer("hits").notNull()
 });
+
+// Only digests are persisted. Consuming a reset increments users.sessionVersion.
+export const adminPasswordResets = sqliteTable("workers_admin_password_resets", {
+  digest: text("digest").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  sessionVersion: integer("session_version").notNull(),
+  expiresAt: integer("expires_at").notNull(),
+}, (t) => [index("workers_admin_password_resets_user_idx").on(t.userId), index("workers_admin_password_resets_expiry_idx").on(t.expiresAt)]);

@@ -1,7 +1,7 @@
 const publicPaths = new Set(["/", "/contacto", "/envios", "/preguntas-frecuentes", "/devoluciones", "/privacidad", "/terminos", "/buscar", "/sitemap.xml", "/api/health", "/health"]);
 export function d1StagingRoute(request) {
   const path = new URL(request.url).pathname;
-  const admin = /^\/admin(?:\/(?:login|productos(?:\/(?:nuevo|\d+|exportar))?|categorias))?\/?$/.test(path);
+  const admin = /^\/admin(?:\/(?:login|recuperar|restablecer|productos(?:\/(?:nuevo|\d+|exportar))?|categorias))?\/?$/.test(path);
   const publicPage = publicPaths.has(path) || /^\/(?:producto|categoria)\/[a-z0-9-]+\/?$/.test(path);
   const asset = /^\/assets\//.test(path) || /^\/(?:icon\.svg|favicon\.ico|robots\.txt)$/.test(path);
   if (!(admin || publicPage || asset)) return new Response("Feature not available in this isolated D1 catalog pilot.", {status:404});

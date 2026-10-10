@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 
 import { LoginForm } from "@/components/admin/login-form";
 import { safeNextPath } from "@/lib/safe-redirect";
-import { getSession } from "@/lib/session";
+import { getSession, UnauthorizedError } from "@/lib/session";
+import { validateAdminSession } from "@/lib/session-validation";
 import { t } from "@/i18n";
 
 export const metadata: Metadata = {
@@ -25,7 +26,16 @@ export default async function AdminLoginPage({ searchParams }: { searchParams: S
   // Ya está adentro: no tiene sentido pedirle la contraseña de nuevo.
   const session = await getSession();
   if (session.userId && (session.role === "owner" || session.role === "staff")) {
-    redirect(next);
+    // A password reset revokes the DB session version while an old cookie may remain.
+    // Never bounce that stale cookie between login and the protected panel.
+    let valid = false;
+    try {
+      await validateAdminSession(session);
+      valid = true;
+    } catch (error) {
+      if (!(error instanceof UnauthorizedError)) throw error;
+    }
+    if (valid) redirect(next);
   }
 
   return (

@@ -494,3 +494,8 @@ The current codex/workers-staging-20261009 branch defaults to WORKERS_D1_STAGING
 - `CF_VERSION_METADATA`:Wrangler version-metadata binding (not a secret); partitions cache per deployment.
 
 See [dated preparation](operations/workers-production-prep-2026-10-09.md). Existing R2 image URL stays unchanged.
+
+
+## Workers native admin password recovery
+
+Worker-only runtime configuration: ADMIN_PASSWORD_RESET_ENABLED=true and ADMIN_PASSWORD_RESET_FROM=<verified sender>, plus a native EMAIL send_email binding restricted with allowed_sender_addresses. No email API key or SMTP password is needed. Sender onboarding and an actual delivery test are required. Absent configuration disables the flow explicitly. Do not add these to Hostinger's .env.example. See [recovery runbook](operations/workers-admin-recovery-2026-10-09.md).

@@ -49,3 +49,7 @@ The new automatic build036aa4a8-0aaa-4cef-be38-1ef48997ec46 also failed. Its fin
 ## Later staging login correction
 
 The owner has created the first staging account; earlier zero-user status is historical. A second creation was correctly refused. The subsequent successful-login local test exposed an unencoded raw Date parameter in the dashboard sales trend. The D1 build adapter now applies the UTC column encoder; no Hostinger domain code or schema changes. Explicit private reset is supported by `pnpm workers:create-owner --reset-password` using the existing owner email, a12+character password entered twice, and session-version invalidation. See workers-login-reset-2026-10-09.md and the dated login-reset report for final deployment/tests. Do not rerun disposable remote D1 tests that require zero users.
+
+## Owner login confirmed and email recovery prepared
+
+The owner now confirms successful staging login. Password visibility and Worker-native forgot/reset routes are implemented with a generated, applied staging-only D1 migration0002. Email delivery remains disabled pending verified sender onboarding and the EMAIL binding. Existing owner password/catalog/Hostinger are unchanged. See workers-admin-recovery-2026-10-09.md for activation and the remaining cutover checklist.
