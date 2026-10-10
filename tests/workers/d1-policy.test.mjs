@@ -5,7 +5,7 @@ import {d1StagingPlugin} from '../../workers/d1/build-plugin.mjs';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
 test('D1 exposes only catalog, login and supported admin routes',()=>{
- for(const route of ['/','/contacto','/categoria/autos-y-motos','/producto/cepillo','/admin','/admin/login','/admin/productos','/admin/productos/1','/admin/categorias'])assert.equal(d1StagingRoute(new Request('https://stage.invalid'+route)),null);
+ for(const route of ['/','/contacto','/categoria/autos-y-motos','/producto/cepillo','/admin','/admin/login','/admin/productos','/admin/productos/1','/admin/categorias','/admin/estado?seccion=ajustes'])assert.equal(d1StagingRoute(new Request('https://stage.invalid'+route)),null);
  for(const route of ['/checkout','/api/setup/init','/admin/usuarios','/admin/integraciones','/api/cron/vencer-pedidos','/__catalog-demo/private.html'])assert.equal(d1StagingRoute(new Request('https://stage.invalid'+route)).status,404);
 });
 test('D1 mutations require a same-origin POST to an admin route',()=>{
@@ -53,4 +53,13 @@ test('D1 dashboard raw day boundaries use the UTC column encoder',()=>{
  assert.match(result,/sql\.param\(start, orders\.createdAt\)/);
  assert.match(result,/sql\.param\(end, orders\.createdAt\)/);
  assert.throws(()=>plugin.transform('export const changed = true;',file),/source drift/);
+});
+test('D1 full navigation keeps unported destinations on an authenticated status page',()=>{
+ const root=path.resolve(import.meta.dirname,'../..');const plugin=d1StagingPlugin(root);
+ const file=path.join(root,'src/app/admin/(panel)/layout.tsx');
+ const result=plugin.transform(readFileSync(file,'utf8'),file).code;
+ assert.match(result,/filter\(\(item\) => can\(actor.role, item.capability\)\)/);
+ assert.match(result,/admin\/estado\?seccion=/);
+ assert.match(result,/availabilityLabel: "Pendiente"/);
+ assert.equal(d1StagingRoute(new Request('https://stage.invalid/admin/ajustes')).status,404);
 });

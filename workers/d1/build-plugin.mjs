@@ -47,6 +47,7 @@ export function d1StagingPlugin(root) {
         if(!code.includes(raw))throw new Error('D1 dashboard date binding source drift');
         code=code.replace(raw,encoded);
       }
+      if(file.endsWith("/app/page.tsx"))code=code.replace("Consultá la información de tu pedido.","Consultá tus dudas por WhatsApp.");
       if(file.endsWith("/admin/login/page.tsx"))code=code.replace("<LoginForm next={next} />", "<LoginForm next={next} passwordRecoveryAvailable />");
       if(file.endsWith("/actions/admin-auth.ts")){
         code=code.replace('from "@/lib/rate-limit"','from "../../../workers/d1/login-limit"');
@@ -60,8 +61,13 @@ export function d1StagingPlugin(root) {
         code=code.replace('  writeSupplierOffer,','  saveD1SupplierOffer,');
       }
       if(file.endsWith("/admin/(panel)/layout.tsx")){
-        code=code.replace('.filter((item) => can(actor.role, item.capability))','.filter((item) => ["resumen","productos","categorias"].includes(item.id) && can(actor.role, item.capability))');
-        code=code.replace("        {children}",'<p role="status" className="mb-5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">Catálogo de consultas: podés editar productos, categorías y proveedores. Pedidos, pagos, ajustes de stock, importación y subida de imágenes todavía están deshabilitados.</p>\n        {children}');
+        // Preserve the full role-authorised navigation. Unported sections lead to
+        // an authenticated availability screen, never an unsafe legacy form.
+        const navHref='href: item.id === "resumen" ? "/admin" : `/admin/${item.id}`,';
+        if(!code.includes(navHref))throw new Error('D1 admin navigation source drift');
+        code=code.replace(navHref,`href: ["resumen","productos","categorias"].includes(item.id) ? (item.id === "resumen" ? "/admin" : \`/admin/\${item.id}\`) : \`/admin/estado?seccion=\${item.id}\`,
+      ...(!["resumen","productos","categorias"].includes(item.id) ? { availabilityLabel: "Pendiente" } : {}),`);
+        code=code.replace("        {children}",'<p role="status" className="mb-5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">Catálogo de consultas: productos, categorías y proveedores están disponibles. Las secciones marcadas «Pendiente» explican lo que falta para habilitarlas.</p>\n        {children}');
       }
       // An action ID can be posted to a different page. Route filtering alone
       // is insufficient: deny unported actions at their implementation boundary.
