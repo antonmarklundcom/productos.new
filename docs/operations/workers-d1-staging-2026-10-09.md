@@ -58,3 +58,8 @@ Use Workers Metrics/Observability and D1 Metrics → Row Metrics. Next benchmark
 Keep Hostinger/live DNS unchanged until authenticated tests, checkout/order transactional port, backups/recovery, cron and cost/latency validation pass. Rolling the Worker back to its previous snapshot version restores read-only visuals but does not revert D1 contents. Use D1 Time Travel only against this staging database after reviewing changes; no destructive restore/export ran. Stop/disable staging builds to pause this experiment; never repeat live schema repairs.
 
 Remaining: first private staging account; approved authenticated tests; browser/mobile rendering; full transaction port; category/product duplicate review; caching and regional latency study; larger CPU distribution and monthly shared usage model. The earlier snapshot/Hyperdrive docs are historical alternatives, not the current default D1 mode. The old local port8790 server was stopped; the workers.dev preview works independently of this PC.
+
+
+## Subsequent production preparation
+
+See [production preparation](workers-production-prep-2026-10-09.md): zero fixture differences and identical262live sitemap URLs; opt-in anonymous catalog HTML cache/version partition; product-card prefetch disabled; staging remains noindex. This supersedes the blanket all-public-no-store description for eligible anonymous HTML only. Admin/private/no-store responses remain unshared. Owner now explicitly requested reusing the live login; source credentials are unavailable and private first-owner entry is still pending, rather than lack of general account-creation authorization. Automatic build error and business contact details still need owner inputs.
