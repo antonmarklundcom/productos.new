@@ -36,3 +36,13 @@ GitHub CI was green before this change; the separate Cloudflare automatic build4
 Live/contacto returned200 but had no wa.me or mailto links. Business WhatsApp and public email must come from the owner; no personal account email or invented phone is substituted. Contact/WhatsApp CTA completion is pending that input. Preserve truthful policies; no invented shipping terms, address or operating hours.
 
 Domain cutover is a later step: bind the reviewed production Worker as a Cloudflare Custom Domain, replacing the Hostinger website records through the supported flow. Keep imagenes R2/email/nameservers untouched. Verify apex/www redirect, TLS, home/category/product/contact/admin, R2 gallery and production revision. Rollback restores the recorded Hostinger CDN targets with DNS-only, but does not undo D1 writes. Leave PR14 draft/unmerged while authenticated acceptance and automatic deployment remain unresolved.
+
+## Deployed verification (10 October 2026 00:35 UTC / 9 October Paraguay)
+
+Runtime source 81139eb65f3b276320b2c537d4f24b32ffe1c897 was directly deployed as cd0d9f03-ade9-4314-bcfe-aa9854e647b9. Home/product/login/robots checks returned HTTP200, and unauthenticated /admin returned307 to login. No429/5xx occurred in these seven checks. Login still needs the private first-owner step above. These checks do not prove authenticated admin saves or full mobile navigation.
+
+Actual Vinext catalog responses carry private,no-store, so every observed cache check was BYPASS. The new cache intentionally respects that boundary; no cache-hit, CPU reduction or faster-render claim is supported. Product-card prefetch is disabled. Response wall times in this small Paraguay sample were about2.1-2.9seconds for anonymous home/product; these are not billable CPU or a statistical benchmark. Evidence: CACHE-HTTP-CHECKS.json beside the catalog audit.
+
+Checks: typecheck/lint/build:vinext PASS;17 Worker regression tests PASS; full local suite112files passed/76skipped and1103tests passed/846skipped using --testTimeout=120000. MySQL integration was skipped without TEST_DATABASE_URL; no production DB was used. Normal pre-push unit gate passed1067tests/2skipped. Remote D1 reconciliation was read-only; no account, product, image, migration or order writes occurred.
+
+The new automatic build036aa4a8-0aaa-4cef-be38-1ef48997ec46 also failed. Its final substantive error remains unavailable; direct deployment is successful but does not resolve Git-triggered deployment. PR14 stays draft/unmerged. Checkout, orders/payments, stock adjustments, CSV imports, image uploads, integrations/settings, user management and cron remain outside the native pilot acceptance.

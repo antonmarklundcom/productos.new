@@ -63,3 +63,9 @@ Remaining: first private staging account; approved authenticated tests; browser/
 ## Subsequent production preparation
 
 See [production preparation](workers-production-prep-2026-10-09.md): zero fixture differences and identical262live sitemap URLs; opt-in anonymous catalog HTML cache/version partition; product-card prefetch disabled; staging remains noindex. This supersedes the blanket all-public-no-store description for eligible anonymous HTML only. Admin/private/no-store responses remain unshared. Owner now explicitly requested reusing the live login; source credentials are unavailable and private first-owner entry is still pending, rather than lack of general account-creation authorization. Automatic build error and business contact details still need owner inputs.
+
+### Current owner authorization and deployed status
+
+The latest owner request explicitly authorizes reuse of the live login in staging. It supersedes the earlier pending-authorization wording above. No staging user exists; production credentials are unavailable here. The remaining account step is private owner entry through workers:create-owner, not another permission request. The owner can choose the same live email/password (minimum12characters); no existing production account is read or reset.
+
+Runtime81139eb deployed as cd0d9f03-ade9-4314-bcfe-aa9854e647b9. Read-only reconciliation passed262products/9categories/821images, matching the selected fixture and live sitemap URLs. Safe public-cache infrastructure and product-card prefetch changes are deployed; actual private,no-store catalog responses bypass the cache. Authenticated acceptance and automatic-build error diagnosis remain pending. See workers-production-prep-2026-10-09.md for current commands and evidence.
