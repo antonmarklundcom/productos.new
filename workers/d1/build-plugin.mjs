@@ -39,6 +39,14 @@ export function d1StagingPlugin(root) {
         // retaining the framework's server-action-only mutation protection.
         code=code.replace("getIronSession<AdminSession>(cookieStore, sessionOptions())", "getIronSession<AdminSession>({ get: (name: string) => cookieStore.get(name), getAll: () => cookieStore.getAll(), set: (...args: Parameters<typeof cookieStore.set>) => cookieStore.set(...args) }, sessionOptions())");
       }
+      if(file.endsWith("/domain/admin-dashboard.ts")){
+        // Raw SQL Date parameters have no column encoder by default. Keep the
+        // existing Paraguay day boundaries, but bind through the UTC D1 column.
+        const raw='const inDay = sql`${orders.createdAt} >= ${start} AND ${orders.createdAt} < ${end}`;';
+        const encoded='const inDay = sql`${orders.createdAt} >= ${sql.param(start, orders.createdAt)} AND ${orders.createdAt} < ${sql.param(end, orders.createdAt)}`;';
+        if(!code.includes(raw))throw new Error('D1 dashboard date binding source drift');
+        code=code.replace(raw,encoded);
+      }
       if(file.endsWith("/actions/admin-auth.ts")){
         code=code.replace('from "@/lib/rate-limit"','from "../../../workers/d1/login-limit"');
         code=code.replaceAll("= rateLimit(","= await rateLimit(").replace(/^(\s*)resetRateLimitKey\(/gm,"$1await resetRateLimitKey(");

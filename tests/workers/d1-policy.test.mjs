@@ -45,3 +45,12 @@ test('D1 session facade defers read-only cookie writes and uses request-scoped s
  assert.match(result,/getD1SessionSecret\(\)/);
  assert.match(result,/set: \(\.\.\.args: Parameters<typeof cookieStore.set>\) => cookieStore.set\(\.\.\.args\)/);
 });
+
+test('D1 dashboard raw day boundaries use the UTC column encoder',()=>{
+ const root=path.resolve(import.meta.dirname,'../..');const plugin=d1StagingPlugin(root);
+ const file=path.join(root,'src/domain/admin-dashboard.ts');
+ const result=plugin.transform(readFileSync(file,'utf8'),file).code;
+ assert.match(result,/sql\.param\(start, orders\.createdAt\)/);
+ assert.match(result,/sql\.param\(end, orders\.createdAt\)/);
+ assert.throws(()=>plugin.transform('export const changed = true;',file),/source drift/);
+});
