@@ -27,9 +27,10 @@
   "vars": {
     "PREVIEW_CATALOG_SNAPSHOT": "true",
     "WORKERS_D1_STAGING": "true",
-    "WORKERS_PRODUCTION_READY": "false",
+    "WORKERS_PRODUCTION_READY": "true",
     "WORKERS_PUBLIC_CACHE_SECONDS": "60",
-    "NEXT_PUBLIC_SITE_URL": "https://productos-workers-staging.marklundfaktura.workers.dev",
+    "WHATSAPP_NUMBER": "595995628862",
+    "NEXT_PUBLIC_SITE_URL": "https://productos.com.py",
     "NEXT_PUBLIC_IMAGENES_URL": "https://imagenes.productos.com.py"
   },
   "d1_databases": [

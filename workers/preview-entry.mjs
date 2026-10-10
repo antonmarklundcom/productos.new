@@ -7,11 +7,14 @@ import { serveCatalogDemo } from "./catalog-demo.mjs";
 import { getNativeDb, withD1Database } from "./d1/database";
 import { d1StagingRoute, protectStagingResponse } from "./d1/policy.mjs";
 import { catalogResponse, productionPublicRequest } from "./d1/public-response.mjs";
+import { canonicalDomainResponse } from "./catalog-domain.mjs";
 import { handleAdminRecovery } from "./d1/admin-recovery.mjs";
 export * from "vinext/server/fetch-handler";
 
 const previewWorker = {
   async fetch(request, env, ctx) {
+    const canonical = canonicalDomainResponse(request, env);
+    if (canonical) return canonical;
     if (env.WORKERS_D1_STAGING === "true") {
       const blocked = d1StagingRoute(request);
       if (blocked) return protectStagingResponse(blocked);
