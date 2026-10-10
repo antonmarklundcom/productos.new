@@ -45,11 +45,6 @@ const sections: Record<string, { name: string; detail: string }> = {
     detail:
       "La conciliación y comprobantes necesitan el flujo de pagos y pedidos. No están habilitados para cobrar.",
   },
-  ajustes: {
-    name: "Ajustes",
-    detail:
-      "La edición de configuración todavía necesita un guardado nativo probado. Los datos públicos configurados para el lanzamiento se conservan.",
-  },
   integraciones: {
     name: "Integraciones",
     detail:
@@ -90,7 +85,7 @@ export default async function AvailabilityPage({
       </div>
       <p>
         Disponible ahora: resumen, productos, precios, costos y proveedores,
-        publicación y categorías.
+        publicación, categorías y ajustes.
       </p>
       <div className="flex flex-wrap gap-4">
         <Link href="/admin/productos" className="underline">

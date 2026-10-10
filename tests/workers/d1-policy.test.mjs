@@ -5,7 +5,7 @@ import {d1StagingPlugin} from '../../workers/d1/build-plugin.mjs';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
 test('D1 exposes only catalog, login and supported admin routes',()=>{
- for(const route of ['/','/contacto','/categoria/autos-y-motos','/producto/cepillo','/admin','/admin/login','/admin/productos','/admin/productos/1','/admin/categorias','/admin/estado?seccion=ajustes'])assert.equal(d1StagingRoute(new Request('https://stage.invalid'+route)),null);
+ for(const route of ['/','/contacto','/categoria/autos-y-motos','/producto/cepillo','/admin','/admin/login','/admin/productos','/admin/productos/1','/admin/categorias','/admin/ajustes','/admin/estado?seccion=ajustes'])assert.equal(d1StagingRoute(new Request('https://stage.invalid'+route)),null);
  for(const route of ['/checkout','/api/setup/init','/admin/usuarios','/admin/integraciones','/api/cron/vencer-pedidos','/__catalog-demo/private.html'])assert.equal(d1StagingRoute(new Request('https://stage.invalid'+route)).status,404);
 });
 test('D1 mutations require a same-origin POST to an admin route',()=>{
@@ -61,5 +61,32 @@ test('D1 full navigation keeps unported destinations on an authenticated status 
  assert.match(result,/filter\(\(item\) => can\(actor.role, item.capability\)\)/);
  assert.match(result,/admin\/estado\?seccion=/);
  assert.match(result,/availabilityLabel: "Pendiente"/);
- assert.equal(d1StagingRoute(new Request('https://stage.invalid/admin/ajustes')).status,404);
+ assert.equal(d1StagingRoute(new Request('https://stage.invalid/admin/ajustes')),null);
+});
+
+test('D1 settings actions retain owner guards while uploads remain blocked',()=>{
+ const root=path.resolve(import.meta.dirname,'../..');const plugin=d1StagingPlugin(root);
+ const file=path.join(root,'src/app/actions/admin-ajustes.ts');
+ const result=plugin.transform(readFileSync(file,'utf8'),file).code;
+ for(const name of ['guardarAjustes','restaurarAjustes','quitarImagenPortada','quitarImagenMarca']) {
+  const action=result.slice(result.indexOf('export async function '+name));
+  assert.doesNotMatch(action.slice(action.indexOf('{'),action.indexOf('{')+160),/throw new Error/);
+  assert.match(action.slice(0,450),/requireOwnerSession\(\)/);
+ }
+ for(const name of ['subirImagenPortada','subirImagenMarca']) {
+  const action=result.slice(result.indexOf('export async function '+name));
+  assert.match(action.slice(action.indexOf('{'),action.indexOf('{')+160),/throw new Error/);
+ }
+ assert.match(plugin.resolveId('@/domain/store-settings',file),/workers[\\/]d1[\\/]store-settings.ts$/);
+});
+
+test('D1 dashboard uses guarded catalog counts rather than unported orders',()=>{
+ const root=path.resolve(import.meta.dirname,'../..');const plugin=d1StagingPlugin(root);
+ const file=path.join(root,'src/app/admin/(panel)/page.tsx');
+ const result=plugin.transform(readFileSync(file,'utf8'),file).code;
+ assert.match(result,/workers\/d1\/admin-summary.tsx/);
+ const native=readFileSync(path.join(root,'workers/d1/admin-summary.tsx'),'utf8');
+ assert.match(native,/requireCapabilityPage\("dashboard"\)/);
+ assert.match(native,/published_at IS NOT NULL/);
+ assert.doesNotMatch(native,/listOrders|salesTrend|shipping_zones|job_runs/);
 });

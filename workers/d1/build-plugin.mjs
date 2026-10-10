@@ -4,6 +4,7 @@ const normalize=(value)=>value.replaceAll("\\", "/").replace(/\.(?:mjs|ts|tsx)$/
 const allowedActions={
   "admin-auth":new Set(["loginAdmin","logoutAdmin"]),
   "admin-products":new Set(["saveProduct","saveProductVariant","saveVariantSupplierCost","previewCatalogImport"]),
+  "admin-ajustes":new Set(["guardarAjustes","restaurarAjustes","quitarImagenPortada","quitarImagenMarca"]),
   "admin-categories":new Set(["crearCategoria","editarCategoria","cambiarEstadoCategoria","moverCategoria"]),
 };
 export function d1StagingPlugin(root) {
@@ -12,6 +13,7 @@ export function d1StagingPlugin(root) {
     ["src/db/schema","workers/d1/schema.ts"],
     ["src/domain/supplier-costs","workers/d1/supplier-costs.ts"],
     ["src/domain/admin-categories","workers/d1/admin-categories.ts"],
+    ["src/domain/store-settings","workers/d1/store-settings.ts"],
   ].map(([from,to])=>[normalize(path.resolve(root,from)),path.resolve(root,to)]));
   return {name:"isolated-d1-catalog-pilot",enforce:"pre",
     resolveId(source,importer) {
@@ -23,6 +25,7 @@ export function d1StagingPlugin(root) {
     transform(original,id) {
       const file=id.split("?")[0].replaceAll("\\","/");
       if(!file.startsWith(root.replaceAll("\\","/")+"/src/"))return;
+      if(file.endsWith("/admin/(panel)/page.tsx"))return {code: `export const dynamic = "force-dynamic"; export { default } from ${JSON.stringify(path.resolve(root,"workers/d1/admin-summary.tsx").replaceAll("\\","/"))};`,map:null};
       let code=original;
       code=code.replace(/(["'])\.\/supplier-costs\1/g, JSON.stringify(path.resolve(root,"workers/d1/supplier-costs.ts").replaceAll("\\","/")));
       // Exact, reviewed clock translation in modules used by this pilot. No
@@ -47,6 +50,7 @@ export function d1StagingPlugin(root) {
         if(!code.includes(raw))throw new Error('D1 dashboard date binding source drift');
         code=code.replace(raw,encoded);
       }
+      if(file.endsWith("/admin/(panel)/ajustes/page.tsx"))code=code.replaceAll("cloudinaryConfigured()", "false");
       if(file.endsWith("/app/page.tsx"))code=code.replace("Consultá la información de tu pedido.","Consultá tus dudas por WhatsApp.");
       if(file.endsWith("/admin/login/page.tsx"))code=code.replace("<LoginForm next={next} />", "<LoginForm next={next} passwordRecoveryAvailable />");
       if(file.endsWith("/actions/admin-auth.ts")){
@@ -65,9 +69,9 @@ export function d1StagingPlugin(root) {
         // an authenticated availability screen, never an unsafe legacy form.
         const navHref='href: item.id === "resumen" ? "/admin" : `/admin/${item.id}`,';
         if(!code.includes(navHref))throw new Error('D1 admin navigation source drift');
-        code=code.replace(navHref,`href: ["resumen","productos","categorias"].includes(item.id) ? (item.id === "resumen" ? "/admin" : \`/admin/\${item.id}\`) : \`/admin/estado?seccion=\${item.id}\`,
-      ...(!["resumen","productos","categorias"].includes(item.id) ? { availabilityLabel: "Pendiente" } : {}),`);
-        code=code.replace("        {children}",'<p role="status" className="mb-5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">Catálogo de consultas: productos, categorías y proveedores están disponibles. Las secciones marcadas «Pendiente» explican lo que falta para habilitarlas.</p>\n        {children}');
+        code=code.replace(navHref,`href: ["resumen","productos","categorias","ajustes"].includes(item.id) ? (item.id === "resumen" ? "/admin" : \`/admin/\${item.id}\`) : \`/admin/estado?seccion=\${item.id}\`,
+      ...(!["resumen","productos","categorias","ajustes"].includes(item.id) ? { availabilityLabel: "Pendiente" } : {}),`);
+        code=code.replace("        {children}",'<p role="status" className="mb-5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">Catálogo de consultas: productos, categorías, proveedores y ajustes están disponibles. Las secciones marcadas «Pendiente» explican lo que falta para habilitarlas.</p>\n        {children}');
       }
       // An action ID can be posted to a different page. Route filtering alone
       // is insufficient: deny unported actions at their implementation boundary.
