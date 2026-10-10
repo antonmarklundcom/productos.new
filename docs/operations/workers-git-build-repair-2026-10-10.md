@@ -42,3 +42,7 @@ Provide real public enquiry contact; review production build/runtime origin, ind
 - https://github.com/cloudflare/vinext (inline nextConfig support and standalone packaging)
 - https://developers.cloudflare.com/workers/ci-cd/builds/configuration/
 - https://developers.cloudflare.com/workers/ci-cd/builds/build-branches/
+
+## Completion checkpoint — 10 October 2026
+
+The repair source7679878 passed automatic build1f4bb40b-6787-4945-b074-131fdf07e19d at04:52:31UTC. It was superseded by the successful domain/contact source ee1af48 build 0f40678e-7369-4fb6-bd01-4c841b910edb, version 7993efb6-9f9e-43e6-9032-ac8c432fdc27. The domain cutover runbook records completed live acceptance and current build/runtime site URL https://productos.com.py, WORKERS_PRODUCTION_READY=true and existing D1/R2. Earlier settings and pending steps above are historical. Recovery-email and checkout limitations remain.
