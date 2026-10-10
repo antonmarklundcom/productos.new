@@ -61,7 +61,7 @@ export function d1StagingPlugin(root) {
       }
       if(file.endsWith("/admin/(panel)/layout.tsx")){
         code=code.replace('.filter((item) => can(actor.role, item.capability))','.filter((item) => ["resumen","productos","categorias"].includes(item.id) && can(actor.role, item.capability))');
-        code=code.replace("        {children}",'<p role="status" className="mb-5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">Prueba aislada con D1: los cambios sólo afectan este catálogo de prueba. Pedidos, pagos, ajustes de stock, importación y subida de imágenes todavía están deshabilitados.</p>\n        {children}');
+        code=code.replace("        {children}",'<p role="status" className="mb-5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">Catálogo de consultas: podés editar productos, categorías y proveedores. Pedidos, pagos, ajustes de stock, importación y subida de imágenes todavía están deshabilitados.</p>\n        {children}');
       }
       // An action ID can be posted to a different page. Route filtering alone
       // is insufficient: deny unported actions at their implementation boundary.

@@ -30,6 +30,7 @@ export default defineConfig({
   ],
   resolve: {
     alias: [
+      {find: /^@\/config\/catalog-capabilities$/, replacement: path.resolve(import.meta.dirname,"workers/d1/catalog-capabilities.ts")},
       {find: /^@\/db\/schema$/, replacement: path.resolve(import.meta.dirname,"workers/d1/schema.ts")},
       {find: /^@\/db$/, replacement: path.resolve(import.meta.dirname,"workers/d1/database.ts")},
       {find: /^@\/domain\/supplier-costs$/, replacement: path.resolve(import.meta.dirname,"workers/d1/supplier-costs.ts")},
