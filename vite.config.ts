@@ -5,6 +5,7 @@ import path from "node:path";
 import { readFileSync } from "node:fs";
 import { publicBuildDefines } from "./workers/public-build-env.mjs";
 import { d1StagingPlugin } from "./workers/d1/build-plugin.mjs";
+import nextConfig from "./next.config";
 
 export default defineConfig({
   define: publicBuildDefines(readFileSync(path.resolve(import.meta.dirname, "wrangler.jsonc"), "utf8"), process.env),
@@ -20,7 +21,9 @@ export default defineConfig({
           return code.replace(/export const revalidate = \d+;/g, "export const revalidate = 0;");
       },
     },
-    vinext(),
+    // Keep shared headers/env, but Workers emits its own bundle. Node standalone
+    // packaging tries to resolve Cloudflare virtual Wasm modules as npm packages.
+    vinext({ nextConfig: { ...nextConfig, output: undefined } }),
     cloudflare({
       viteEnvironment: {
         name: "rsc",
