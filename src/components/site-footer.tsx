@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { catalogOnly } from "@/config/catalog-capabilities";
 import Image from "next/image";
 import { TIENDA } from "@/config/tienda";
 import { storeCategories } from "@/components/store-categories";
@@ -52,7 +53,7 @@ export async function SiteFooter() {
         <div>
           <h2>{t("footer.ayuda")}</h2>
           <ul>
-            {HELP.map(([label, href]) => (
+            {HELP.filter(([, href]) => !catalogOnly || href !== "/pedido/buscar").map(([label, href]) => (
               <li key={href}>
                 <Link href={href}>{label}</Link>
               </li>

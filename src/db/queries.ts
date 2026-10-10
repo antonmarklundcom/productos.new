@@ -132,40 +132,45 @@ async function hydrate(
   if (rows.length === 0) return [];
   const productIds = rows.map((row) => row.id);
 
-  const variantRows = await tx
-    .select({
-      id: variants.id,
-      productId: variants.productId,
-      sku: variants.sku,
-      label: variants.label,
-      pricePyg: variants.pricePyg,
-      compareAtPyg: variants.compareAtPyg,
-      onHand: variants.onHand,
-    })
-    .from(variants)
-    .where(
-      and(eq(variants.isActive, true), inArray(variants.productId, productIds))
-    )
-    .orderBy(asc(variants.productId), asc(variants.position));
-
-  const imageRows = await tx
-    .select({
-      productId: productImages.productId,
-      cloudinaryId: productImages.cloudinaryId,
-      blurDataUrl: productImages.blurDataUrl,
-      alt: productImages.alt,
-      position: productImages.position,
-    })
-    .from(productImages)
-    .where(inArray(productImages.productId, productIds))
-    .orderBy(asc(productImages.productId), asc(productImages.position));
-
-  const held = await heldQtyMap(
-    variantRows.map((row) => row.id),
+  const [variantRows, imageRows] = await Promise.all([
     tx
-  );
+      .select({
+        id: variants.id,
+        productId: variants.productId,
+        sku: variants.sku,
+        label: variants.label,
+        pricePyg: variants.pricePyg,
+        compareAtPyg: variants.compareAtPyg,
+        onHand: variants.onHand,
+      })
+      .from(variants)
+      .where(
+        and(
+          eq(variants.isActive, true),
+          inArray(variants.productId, productIds)
+        )
+      )
+      .orderBy(asc(variants.productId), asc(variants.position)),
+    tx
+      .select({
+        productId: productImages.productId,
+        cloudinaryId: productImages.cloudinaryId,
+        blurDataUrl: productImages.blurDataUrl,
+        alt: productImages.alt,
+        position: productImages.position,
+      })
+      .from(productImages)
+      .where(inArray(productImages.productId, productIds))
+      .orderBy(asc(productImages.productId), asc(productImages.position)),
+  ]);
 
-  const ratings = await getRatingSummaries(productIds, tx);
+  const [held, ratings] = await Promise.all([
+    heldQtyMap(
+      variantRows.map((row) => row.id),
+      tx
+    ),
+    getRatingSummaries(productIds, tx),
+  ]);
 
   const variantsByProduct = new Map<number, CatalogVariant[]>();
   for (const row of variantRows) {

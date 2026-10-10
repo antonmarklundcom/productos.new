@@ -1,0 +1,45 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "productos-workers-staging",
+  "compatibility_date": "2026-10-09",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "main": "workers/preview-entry.mjs",
+  "assets": {
+    "directory": "dist/client",
+    "not_found_handling": "none",
+    "binding": "ASSETS",
+    "run_worker_first": [
+      "/__catalog-demo/*"
+    ],
+    "html_handling": "none"
+  },
+  "workers_dev": true,
+  "version_metadata": { "binding": "CF_VERSION_METADATA" },
+  "limits": {
+    "cpu_ms": 1000
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "vars": {
+    "PREVIEW_CATALOG_SNAPSHOT": "true",
+    "WORKERS_D1_STAGING": "true",
+    "WORKERS_PRODUCTION_READY": "true",
+    "WORKERS_PUBLIC_CACHE_SECONDS": "60",
+    "WHATSAPP_NUMBER": "595995628862",
+    "NEXT_PUBLIC_SITE_URL": "https://productos.com.py",
+    "NEXT_PUBLIC_IMAGENES_URL": "https://imagenes.productos.com.py"
+  },
+  "r2_buckets": [{"binding":"IMAGES","bucket_name":"productos-images"}],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "productos-workers-staging",
+      "database_id": "5c87a1b7-adc8-4201-9326-c1d0ae09a49f",
+      "migrations_dir": "workers/d1/migrations"
+    }
+  ]
+}

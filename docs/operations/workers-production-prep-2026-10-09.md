@@ -1,0 +1,55 @@
+# Workers production preparation — 9 October 2026
+
+This extends draft PR14 on codex/workers-staging-20261009. It does not switch productos.com.py, merge main, migrate production data or reupload R2 images.
+
+## Catalog reconciliation
+
+Read-only staging D1 query:262products,9categories,821images,0users,0orders. All262variant SKUs match the selected fixture in C:/dev/workers-local-productos/catalog-public.json; name, slug, retail price, category, image count, enquiry mode and price visibility match. The live public sitemap lists the identical262product URLs. This does not verify all current live retail values through an authenticated export.
+
+The entire6609-row captured catalog-latest.csv was read and matched by DropiID. All262selected IDs have captured supplier cost; none had zero captured stock or retail at/below that cost. These are captured source facts, not live supplier checks. Stock/cost/retail values were not overwritten. Known sharpener IDs13535,9710,15839 remain a product-identity review, not proof of three distinct products.
+
+Evidence: E:/ai work/Artifacts/productos.new/2026-10-09/production-prep/CATALOG-AUDIT.json and CAPTURED-COST-RECONCILIATION.json. Read-only command from this checkout: pnpm exec tsx scripts/reconcile-workers-catalog.mts <artifact-directory>. The currently selected fixture path is a CLI-only local source; resolve it with the storage map before moving anything.
+
+## Public catalog cache and SEO
+
+Product cards disable prefetch, reducing unsolicited dynamic product requests. WORKERS_PUBLIC_CACHE_SECONDS=60 enables bounded Cache API HTML caching only for anonymous GET home/product/category requests without cookies, authorization, RSC/navigation headers, query strings, conditionals, range or explicit no-cache. Private/no-store responses, Set-Cookie, redirects, errors, non-HTML and unsupported Vary fields bypass. Admin/contact/search/API/actions never share that cache. Version metadata partitions entries on each deployment. Browsers revalidate; eligible edge HTML may be up to60seconds old. Cache infrastructure failures fall back to rendering. This remains an enquiry-only pilot with checkout/stock mutations blocked; do not reuse this policy for purchasing without reviewing invalidation and reservation semantics.
+
+The Worker still executes for Cache API hits, so hits reduce render/DB CPU but are not automatically free requests. Hosted cache-hit evidence must be recorded after deployment; local mock tests are not a speed benchmark.
+
+WORKERS_PRODUCTION_READY remains false. Staging robots/noindex remain active. The production switch only permits public indexing when the request origin matches a valid configured HTTPS NEXT_PUBLIC_SITE_URL outside workers.dev. Admin/auth remain noindex/private even with that switch. Before domain activation, use the real production URL for the build/runtime, verify canonical/sitemap/OG links and actual indexability, and verify backups/admin/contact. No production domain or DB config has been activated by this document.
+
+## Admin login
+
+No staging user exists. Production passwords cannot be read back; the source credential record is not available locally. The owner explicitly requested reusing the live login, which may be entered privately during staging account creation. From the existing checkout:
+
+```powershell
+cd C:/Projects/productos-workers-staging
+pnpm workers:create-owner
+```
+
+Enter the same admin email and, if it meets the12-character requirement, the same password privately when prompted. Password entry is hidden; no plaintext credential enters chat/files/arguments. This creates a separate staging owner, never resets an existing owner and does not change Hostinger. Open https://productos-workers-staging.marklundfaktura.workers.dev/admin/login afterward. Once the owner exists, authenticated save/category/supplier acceptance remains required; the disposable low-level test that assumes zero users must not run.
+
+## Outstanding provider and contact inputs
+
+GitHub CI was green before this change; the separate Cloudflare automatic build49145139-23e0-4968-ba16-c7fa8dcbc6b8 failed. Dashboard loading stalled and browser control timed out; available Builds API was previously403/code12004. The substantive Building/Deploying error is still needed. Direct deployment success is not an automatic-build fix.
+
+Live/contacto returned200 but had no wa.me or mailto links. Business WhatsApp and public email must come from the owner; no personal account email or invented phone is substituted. Contact/WhatsApp CTA completion is pending that input. Preserve truthful policies; no invented shipping terms, address or operating hours.
+
+Domain cutover is a later step: bind the reviewed production Worker as a Cloudflare Custom Domain, replacing the Hostinger website records through the supported flow. Keep imagenes R2/email/nameservers untouched. Verify apex/www redirect, TLS, home/category/product/contact/admin, R2 gallery and production revision. Rollback restores the recorded Hostinger CDN targets with DNS-only, but does not undo D1 writes. Leave PR14 draft/unmerged while authenticated acceptance and automatic deployment remain unresolved.
+
+## Deployed verification (10 October 2026 00:35 UTC / 9 October Paraguay)
+
+Runtime source 81139eb65f3b276320b2c537d4f24b32ffe1c897 was directly deployed as cd0d9f03-ade9-4314-bcfe-aa9854e647b9. Home/product/login/robots checks returned HTTP200, and unauthenticated /admin returned307 to login. No429/5xx occurred in these seven checks. Login still needs the private first-owner step above. These checks do not prove authenticated admin saves or full mobile navigation.
+
+Actual Vinext catalog responses carry private,no-store, so every observed cache check was BYPASS. The new cache intentionally respects that boundary; no cache-hit, CPU reduction or faster-render claim is supported. Product-card prefetch is disabled. Response wall times in this small Paraguay sample were about2.1-2.9seconds for anonymous home/product; these are not billable CPU or a statistical benchmark. Evidence: CACHE-HTTP-CHECKS.json beside the catalog audit.
+
+Checks: typecheck/lint/build:vinext PASS;17 Worker regression tests PASS; full local suite112files passed/76skipped and1103tests passed/846skipped using --testTimeout=120000. MySQL integration was skipped without TEST_DATABASE_URL; no production DB was used. Normal pre-push unit gate passed1067tests/2skipped. Remote D1 reconciliation was read-only; no account, product, image, migration or order writes occurred.
+
+The new automatic build036aa4a8-0aaa-4cef-be38-1ef48997ec46 also failed. Its final substantive error remains unavailable; direct deployment is successful but does not resolve Git-triggered deployment. PR14 stays draft/unmerged. Checkout, orders/payments, stock adjustments, CSV imports, image uploads, integrations/settings, user management and cron remain outside the native pilot acceptance.
+## Later staging login correction
+
+The owner has created the first staging account; earlier zero-user status is historical. A second creation was correctly refused. The subsequent successful-login local test exposed an unencoded raw Date parameter in the dashboard sales trend. The D1 build adapter now applies the UTC column encoder; no Hostinger domain code or schema changes. Explicit private reset is supported by `pnpm workers:create-owner --reset-password` using the existing owner email, a12+character password entered twice, and session-version invalidation. See workers-login-reset-2026-10-09.md and the dated login-reset report for final deployment/tests. Do not rerun disposable remote D1 tests that require zero users.
+
+## Owner login confirmed and email recovery prepared
+
+The owner now confirms successful staging login. Password visibility and Worker-native forgot/reset routes are implemented with a generated, applied staging-only D1 migration0002. Email delivery remains disabled pending verified sender onboarding and the EMAIL binding. Existing owner password/catalog/Hostinger are unchanged. See workers-admin-recovery-2026-10-09.md for activation and the remaining cutover checklist.

@@ -56,7 +56,7 @@ function buildSha(): string {
   }
 }
 
-const nextConfig: NextConfig = {
+const nextConfig = {
   // Generate the same server artifact that Hostinger publishes, also in CI.
   output: "standalone",
   agentRules: false,
@@ -91,6 +91,6 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: SECURITY_HEADERS }];
   },
-};
+} satisfies NextConfig;
 
 export default nextConfig;
