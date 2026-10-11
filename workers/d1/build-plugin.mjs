@@ -53,7 +53,35 @@ export function d1StagingPlugin(root) {
         code=code.replace(raw,encoded);
       }
       if(file.endsWith("/admin/(panel)/ajustes/page.tsx"))code=code.replaceAll("cloudinaryConfigured()", "false");
-      if(file.endsWith("/app/page.tsx"))code=code.replace("Consultá la información de tu pedido.","Consultá tus dudas por WhatsApp.");
+      if(file.endsWith("/proxy.ts")) {
+        const routes = 'export const RUTAS_CACHEADAS = ["/", "/categoria"] as const;';
+        const end = '  return withSecurityHeaders(response, nonce, isAdmin, reqId);';
+        if (!code.includes(routes) || !code.includes(end)) throw new Error("D1 public cache middleware source drift");
+        code = 'import { catalogRendererCacheControl } from ' + JSON.stringify(path.resolve(root,"workers/d1/public-response.mjs").replaceAll("\\","/")) + ';\n' + code;
+        code = code.replace(routes, 'export const RUTAS_CACHEADAS = ["/", "/categoria", "/producto"] as const;');
+        const cached = '  const cacheada = esRutaCacheada(request.nextUrl.pathname);';
+        if (!code.includes(cached)) throw new Error("D1 public cache nonce source drift");
+        code = code.replace(cached, '  const cacheada = esRutaCacheada(request.nextUrl.pathname) && (!request.nextUrl.pathname.startsWith("/producto/") || Boolean(catalogRendererCacheControl(request)));');
+        code = code.replace(end, `  const publicPolicy = !nonce && catalogRendererCacheControl(request);
+  if (publicPolicy) response.headers.set("Cache-Control", publicPolicy);
+${end}`);
+      }
+      if(file.endsWith("/app/page.tsx")) {
+        code=code.replace("Consultá la información de tu pedido.","Consultá tus dudas por WhatsApp.");
+        const repeated = `    Promise.all(
+      CATEGORIAS_INICIALES.map((category) =>
+        getCategoryProducts({
+          categorySlug: category.slug,
+          sort: "nuevos",
+          perPage: 1,
+        }).catch(() => null)
+      )
+    ),`;
+        if (!code.includes(repeated)) throw new Error("D1 homepage category query source drift");
+        code = 'import { getLatestCategoryProducts } from ' + JSON.stringify(path.resolve(root,"workers/d1/home-products.ts").replaceAll("\\","/")) + ';\n' + code;
+        code = code.replace(repeated, '    getLatestCategoryProducts(CATEGORIAS_INICIALES.map(category => category.slug)).catch(() => []),');
+        code = code.replace('  getCategoryProducts,\n', '');
+      }
       if(file.endsWith("/admin/login/page.tsx"))code=code.replace("<LoginForm next={next} />", "<LoginForm next={next} passwordRecoveryAvailable />");
       if(file.endsWith("/actions/admin-auth.ts")){
         code=code.replace('from "@/lib/rate-limit"','from "../../../workers/d1/login-limit"');

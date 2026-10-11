@@ -1,6 +1,6 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {anonymousCatalogRequest, catalogCacheSeconds, cacheableCatalogResponse, catalogResponse, productionPublicRequest} from "../../workers/d1/public-response.mjs";
+import {anonymousCatalogRequest, catalogCacheSeconds, cacheableCatalogResponse, catalogResponse, productionPublicRequest, catalogRendererCacheControl, PUBLIC_RENDER_TTL_HEADER} from "../../workers/d1/public-response.mjs";
 const url="https://stage.workers.dev/producto/cepillo";
 const request=(path=url,headers={})=>new Request(path,{headers:{accept:"text/html",...headers}});
 const env={WORKERS_PUBLIC_CACHE_SECONDS:"60",CF_VERSION_METADATA:{id:"version-one"}};
@@ -37,4 +37,29 @@ test("indexing needs explicit production switch AND the configured real origin",
  assert.equal(productionPublicRequest(request(),prod),false);
  assert.equal(productionPublicRequest(request(),{...prod,NEXT_PUBLIC_SITE_URL:"https://stage.workers.dev"}),false);
  assert.equal(productionPublicRequest(request("https://productos.com.py/"),{...prod,WORKERS_PRODUCTION_READY:"false"}),false);
+});
+
+test("reviewed renderer opts in only for anonymous HTML and strips client TTL spoofing",async()=>{
+ const cache=memoryCache(),pending=[],ctx={waitUntil:p=>pending.push(p)};
+ let rendered;
+ const render=async req=>{rendered=req;return new Response("catalog",{headers:{"content-type":"text/html","cache-control":catalogRendererCacheControl(req) || "private, no-store"}});};
+ const first=await catalogResponse(request(url,{[PUBLIC_RENDER_TTL_HEADER]:"300"}),env,ctx,render,cache);
+ assert.equal(rendered.headers.get(PUBLIC_RENDER_TTL_HEADER),"60");
+ assert.equal(first.headers.get("x-catalog-cache"),"MISS"); await Promise.all(pending);
+ for(const headers of [{cookie:"ecom_admin=x"},{rsc:"1"},{authorization:"Bearer x"}]){
+  const result=await catalogResponse(request(url,{...headers,[PUBLIC_RENDER_TTL_HEADER]:"300"}),env,ctx,render,cache);
+  assert.equal(rendered.headers.has(PUBLIC_RENDER_TTL_HEADER),false);
+  assert.equal(result.headers.get("cache-control"),"private, no-store");
+ }
+ const disabled=await catalogResponse(request(url,{[PUBLIC_RENDER_TTL_HEADER]:"300"}),{...env,WORKERS_PUBLIC_CACHE_SECONDS:"0"},ctx,render,cache);
+ assert.equal(rendered.headers.has(PUBLIC_RENDER_TTL_HEADER),false);
+ assert.equal(disabled.headers.get("x-catalog-cache"),"BYPASS");
+ for(const headers of [{"x-nonce":"random"},{"content-security-policy":"script-src 'nonce-random'"}])
+  assert.equal(cacheableCatalogResponse(new Response("x",{headers:{"content-type":"text/html",...headers}})),false);
+});
+
+test("current Vinext Vary fields are safe only when every corresponding request variant is absent",()=>{
+ const fields=["Next-Router-Segment-Prefetch","X-Vinext-Interception-Context","X-Vinext-Interception-Id","X-Vinext-Mounted-Slots","X-Vinext-Rsc-Render-Mode","X-Vinext-Rsc-State-Fingerprint"];
+ assert.equal(cacheableCatalogResponse(new Response("html",{headers:{"content-type":"text/html",vary:fields.join(", ")}})),true);
+ for(const field of fields)assert.equal(anonymousCatalogRequest(request(url,{[field]:"variant"})),false);
 });

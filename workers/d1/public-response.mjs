@@ -1,5 +1,6 @@
 import {protectStagingResponse} from "./policy.mjs";
 
+const representationHeaders = ["rsc", "next-router-state-tree", "next-router-prefetch", "next-router-segment-prefetch", "next-url", "x-vinext-interception-context", "x-vinext-interception-id", "x-vinext-mounted-slots", "x-vinext-rsc-render-mode", "x-vinext-rsc-state-fingerprint"];
 const catalogPath = (path) => path === "/" || /^\/(?:producto|categoria)\/[a-z0-9-]+\/?$/.test(path);
 export function productionPublicRequest(request, env) {
   if (env.WORKERS_PRODUCTION_READY !== "true") return false;
@@ -18,21 +19,28 @@ export function anonymousCatalogRequest(request) {
   const url = new URL(request.url);
   return request.method === "GET" && url.protocol === "https:" && catalogPath(url.pathname) &&
     !url.search && !request.headers.has("cookie") && !request.headers.has("authorization") &&
-    !request.headers.has("rsc") && !request.headers.has("next-router-state-tree") &&
-    !request.headers.has("next-action") && !request.headers.has("next-router-prefetch") &&
-    !request.headers.has("next-url") && !request.headers.has("range") &&
+    representationHeaders.every(header => !request.headers.has(header)) &&
+    !request.headers.has("next-action") && !request.headers.has("range") &&
     !request.headers.has("if-none-match") && !request.headers.has("if-modified-since") &&
     !/no-cache|no-store/i.test(request.headers.get("cache-control") || "") &&
     (request.headers.get("accept") || "").includes("text/html");
+}
+// Only the Worker wrapper may supply this header. It strips client values on every render.
+export const PUBLIC_RENDER_TTL_HEADER = "x-productos-public-render-ttl";
+export function catalogRendererCacheControl(request) {
+  const ttl = catalogCacheSeconds({WORKERS_PUBLIC_CACHE_SECONDS: request.headers.get(PUBLIC_RENDER_TTL_HEADER)});
+  return ttl && anonymousCatalogRequest(request) ? `public, max-age=0, s-maxage=${ttl}` : null;
 }
 export function cacheableCatalogResponse(response) {
   // HTML is the only representation stored. Framework RSC Vary fields cannot
   // alias a flight response because its request/response types are rejected.
   const vary = (response.headers.get("vary") || "").toLowerCase().split(",").map(v => v.trim());
   return response.status === 200 && !response.headers.has("set-cookie") &&
+    !response.headers.has("x-nonce") &&
+    !/\bnonce-/i.test(response.headers.get("content-security-policy") || "") &&
     !/private|no-store/i.test(response.headers.get("cache-control") || "") &&
     (response.headers.get("content-type") || "").includes("text/html") &&
-    vary.every(v => !v || ["rsc", "next-router-state-tree", "next-router-prefetch", "next-url", "accept-encoding"].includes(v));
+    vary.every(v => !v || [...representationHeaders, "accept-encoding"].includes(v));
 }
 function publicResponse(response, request, env, state, ttl) {
   const headers = new Headers(response.headers);
@@ -57,7 +65,12 @@ export async function catalogResponse(request, env, ctx, render, cacheStorage = 
       if (hit) return publicResponse(hit, request, env, "HIT", ttl);
     } catch { cache = undefined; }
   }
-  const response = await render();
+  // Framework ISR remains disabled. The reviewed anonymous catalog render
+  // opts in at middleware; explicit private/no-store response policies still win.
+  const renderHeaders = new Headers(request.headers);
+  renderHeaders.delete(PUBLIC_RENDER_TTL_HEADER);
+  if (eligible) renderHeaders.set(PUBLIC_RENDER_TTL_HEADER, String(ttl));
+  const response = await render(new Request(request, {headers: renderHeaders}));
   if (cache && cacheableCatalogResponse(response)) {
     const result = publicResponse(response, request, env, "MISS", ttl);
     ctx.waitUntil(cache.put(request, result.clone()).catch(() => {}));

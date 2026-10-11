@@ -230,10 +230,11 @@ const PRODUCT_COLUMNS = {
 
 /** Catálogo completo (home / demo). */
 export async function getCatalog(
-  options: { categorySlug?: string; limit?: number; featured?: boolean } = {},
+  options: { categorySlug?: string; limit?: number; featured?: boolean; productIds?: number[] } = {},
   executor?: Executor
 ): Promise<CatalogProduct[]> {
   const tx = executor ?? getDb();
+  if (options.productIds?.length === 0) return [];
   const rows = await tx
     .select(PRODUCT_COLUMNS)
     .from(products)
@@ -244,7 +245,8 @@ export async function getCatalog(
         options.categorySlug
           ? eq(categories.slug, options.categorySlug)
           : undefined,
-        options.featured ? eq(products.isFeatured, true) : undefined
+        options.featured ? eq(products.isFeatured, true) : undefined,
+        options.productIds ? inArray(products.id, options.productIds) : undefined
       )
     )
     // Los destacados se ordenan por fecha de publicación, no por categoría y
