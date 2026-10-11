@@ -24,11 +24,13 @@ allowBuilds:
   esbuild: true
   sharp: true
   unrs-resolver: true
+  workerd: true
 
 onlyBuiltDependencies:
   - esbuild
   - sharp
   - unrs-resolver
+  - workerd
 
 # GHSA-2v37-7h3g-55p8: `nanoid` <3.3.18 vía vite → postcss, sólo en el
 # toolchain de tests (vitest/@vitejs/plugin-react). No lo trae ninguna
@@ -43,3 +45,6 @@ overrides:
   uuid: "^11.1.1"
   "brace-expansion@1": "1.1.21"
   "brace-expansion@2": "2.1.7"
+
+minimumReleaseAgeExclude:
+  - vinext@1.1.0

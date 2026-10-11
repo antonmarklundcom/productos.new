@@ -475,3 +475,27 @@ REQUIRE_DATABASE_TESTS=""
 ```
 
 Set `REQUIRE_DATABASE_TESTS=1` to refuse integration skips. `pnpm test:full` requires a disposable TEST_DATABASE_URL, then runs typecheck, lint, all tests, build and browser tests. CI also refuses missing test database configuration.
+
+## Cloudflare Workers public pilot (separate branch)
+
+`HYPERDRIVE` is a Worker resource binding, not a public string environment variable or a DATABASE_URL fallback. Attach only a real configuration ID to the isolated staging Worker after origin TLS, firewall, SELECT-only grants and UTC compatibility are verified. Without a binding, the explicitly enabled staging-only PREVIEW_CATALOG_SNAPSHOT=true flag serves a visual catalog copy. With neither binding nor that flag, catalog rendering remains disabled with sanitized health diagnostics. This snapshot does not enable admin/checkout or prove database performance. Do not copy production session/setup/cron/payment secrets or R2 upload keys into this pilot. See [the current pilot report](operations/workers-hyperdrive-pilot-2026-10-09.md).
+
+The flag is versioned in staging wrangler.jsonc, not a Hostinger variable. See [deployed catalog demo and limits](operations/workers-catalog-demo-2026-10-09.md).
+
+## Native D1 staging on the Workers branch (2026-10-09)
+
+The current codex/workers-staging-20261009 branch defaults to WORKERS_D1_STAGING=true with a DB resource binding to the isolated productos-workers-staging D1 database. This supersedes the snapshot/Hyperdrive descriptions above for this branch. D1 is a binding, not DATABASE_URL. SESSION_SECRET is a new staging-only provider secret, read per request; NEXT_PUBLIC_SITE_URL/NEXT_PUBLIC_IMAGENES_URL are public build/runtime values. No production setup/payment/cron/R2 upload secrets are needed. Supported catalog admin requires its own private account; checkout/orders/stock/imports remain blocked. See [native D1 runbook](operations/workers-d1-staging-2026-10-09.md).
+
+
+### Workers catalog cache and production indexing (isolated branch)
+
+- `WORKERS_PUBLIC_CACHE_SECONDS`:0disables; integer30–300sets anonymous catalog HTML TTL. Staging currently60; private/cookie/RSC/Set-Cookie/no-store bypass. Does not enable checkout or change stock.
+- `WORKERS_PRODUCTION_READY`:defaults false; set true only for an accepted production release whose HTTPS `NEXT_PUBLIC_SITE_URL` matches the real custom-domain request. workers.dev remains noindex. This is not a deployment or domain switch.
+- `CF_VERSION_METADATA`:Wrangler version-metadata binding (not a secret); partitions cache per deployment.
+
+See [dated preparation](operations/workers-production-prep-2026-10-09.md). Existing R2 image URL stays unchanged.
+
+
+## Workers native admin password recovery
+
+Worker-only runtime configuration: ADMIN_PASSWORD_RESET_ENABLED=true and ADMIN_PASSWORD_RESET_FROM=<verified sender>, plus a native EMAIL send_email binding restricted with allowed_sender_addresses. No email API key or SMTP password is needed. Sender onboarding and an actual delivery test are required. Absent configuration disables the flow explicitly. Do not add these to Hostinger's .env.example. See [recovery runbook](operations/workers-admin-recovery-2026-10-09.md).

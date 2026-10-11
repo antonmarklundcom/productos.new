@@ -156,3 +156,9 @@ vite.config.ts.timestamp-*
 # Capturas de pantalla (plan-operacion §6.4): siempre al artifact de CI,
 # nunca a git.
 /docs/screenshots/
+.vinext/
+.wrangler/
+
+.workers-dry-run/
+.dev.vars
+.dev.vars.*

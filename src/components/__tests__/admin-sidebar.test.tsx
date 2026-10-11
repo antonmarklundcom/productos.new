@@ -162,4 +162,25 @@ describe("AdminSidebar", () => {
     fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
     expect(links()).toEqual(["Resumen", "Pedidos", productLabel]);
   });
+  it("keeps pending sections visible and routes them to their safe availability screen", () => {
+    render(
+      <AdminSidebar
+        items={[
+          ...items,
+          {
+            id: "ajustes",
+            label: "Ajustes",
+            href: "/admin/estado?seccion=ajustes",
+            availabilityLabel: "Pendiente",
+          },
+        ]}
+        userId={1}
+      />
+    );
+    const link = screen.getByRole("link", { name: "Ajustes Pendiente" });
+    expect(link).toHaveAttribute("href", "/admin/estado?seccion=ajustes");
+    expect(
+      screen.queryByRole("link", { name: "Usuarios" })
+    ).not.toBeInTheDocument();
+  });
 });

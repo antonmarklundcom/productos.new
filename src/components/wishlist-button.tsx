@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { catalogOnly } from "@/config/catalog-capabilities";
 import { Heart } from "lucide-react";
 import { toast } from "sonner";
 
@@ -74,6 +75,8 @@ export function WishlistButton({
       toast(t("favoritos.quitado"), { description: name });
     }
   }
+
+  if (catalogOnly) return null;
 
   if (size === "inline") {
     return (

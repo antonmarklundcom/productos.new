@@ -106,7 +106,8 @@ export function MobileStoreMenu({
   categories,
   links,
   account,
-}: NavigationProps & { account: ReactNode }) {
+  showOrderTracking = true,
+}: NavigationProps & { account: ReactNode; showOrderTracking?: boolean }) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
     const desktop = window.matchMedia("(min-width: 1024px)");
@@ -165,13 +166,13 @@ export function MobileStoreMenu({
                   {link.label}
                 </Link>
               ))}
-              <Link
+              {showOrderTracking ? <Link
                 href="/pedido/buscar"
                 onClick={() => setOpen(false)}
                 className="hover:bg-muted flex min-h-12 items-center rounded-lg px-3 py-3 text-sm font-medium"
               >
                 Seguí tu pedido
-              </Link>
+              </Link> : null}
               <div className="px-3 py-3" onClick={() => setOpen(false)}>
                 {account}
               </div>

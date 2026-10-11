@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { StoreSettingsSection } from "@/domain/store-settings-schema";
 import { t } from "@/i18n";
+import { catalogOnly } from "@/config/catalog-capabilities";
 
 /**
  * Cómo se lee cada campo del `FormData`:
@@ -242,7 +243,7 @@ export function HeroImagePanel({
           </Button>
         </form>
       ) : (
-        <p className="text-muted-foreground text-xs">{t("panel.ajustes.marca.sinCloudinary")}</p>
+        <p className="text-muted-foreground text-xs">{catalogOnly ? "La subida de nuevas imágenes todavía no está habilitada en este panel. Las imágenes existentes en R2 se conservan." : t("panel.ajustes.marca.sinCloudinary")}</p>
       )}
     </div>
   );
@@ -346,7 +347,7 @@ export function MarcaImagenPanel({
           </Button>
         </form>
       ) : (
-        <p className="text-muted-foreground text-xs">{t("panel.ajustes.marca.sinCloudinary")}</p>
+        <p className="text-muted-foreground text-xs">{catalogOnly ? "La subida de nuevas imágenes todavía no está habilitada en este panel. Las imágenes existentes en R2 se conservan." : t("panel.ajustes.marca.sinCloudinary")}</p>
       )}
     </div>
   );

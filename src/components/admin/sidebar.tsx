@@ -63,6 +63,7 @@ export type AdminNavItem = {
   label: string;
   testId?: string;
   badge?: number;
+  availabilityLabel?: string;
 };
 
 const preferenceEvent = "admin-menu-order-changed";
@@ -206,6 +207,11 @@ export function AdminSidebar({
                     <span className="min-w-0 flex-1 truncate">
                       {item.label}
                     </span>
+                    {item.availabilityLabel ? (
+                      <span className="bg-muted text-muted-foreground shrink-0 rounded-full px-2 py-0.5 text-[10px]">
+                        {item.availabilityLabel}
+                      </span>
+                    ) : null}
                     {item.badge ? (
                       <span className="bg-primary/10 text-primary rounded-full px-2 py-0.5 text-xs font-semibold">
                         {item.badge}
@@ -284,6 +290,7 @@ export function AdminSidebar({
                     ) : (
                       <Link
                         href={item.href}
+                        prefetch={item.availabilityLabel ? false : undefined}
                         data-testid={item.testId}
                         aria-current={active ? "page" : undefined}
                         aria-label={
@@ -291,7 +298,9 @@ export function AdminSidebar({
                             ? t("panel.nav.resenasPendientes", {
                                 n: item.badge,
                               })
-                            : undefined
+                            : item.availabilityLabel
+                              ? `${item.label} ${item.availabilityLabel}`
+                              : undefined
                         }
                         onClick={() => setMobileOpen(false)}
                         className={cn(

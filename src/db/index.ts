@@ -3,6 +3,7 @@ import type { PoolConnection } from 'mysql2';
 import mysql from 'mysql2/promise';
 
 import * as schema from './schema';
+import { currentRequestDatabase } from './request-context';
 
 /**
  * One pool per process. Hostinger caps concurrent connections per DB user —
@@ -62,6 +63,7 @@ function connectionString(): string {
 }
 
 export function getPool(): mysql.Pool {
+  if (currentRequestDatabase()) throw new Error('Workers preview cannot access the Hostinger pool');
   if (!globalThis.__ecomPool) {
     const pool = mysql.createPool({ uri: connectionString(), ...POOL_OPTIONS });
     // El pool de callbacks: el evento del pool de promesas trae la misma conexión
@@ -76,6 +78,8 @@ let cachedDb: Database | undefined;
 
 /** Lazily built so importing this module never requires DATABASE_URL. */
 export function getDb(): Database {
+  const requestDb = currentRequestDatabase();
+  if (requestDb) return requestDb;
   if (!cachedDb) {
     cachedDb = drizzle(getPool(), { schema, mode: 'default' });
   }
@@ -90,6 +94,7 @@ export const db: Database = new Proxy({} as Database, {
 });
 
 export async function closePool(): Promise<void> {
+  if (currentRequestDatabase()) throw new Error('Workers preview cannot close the Hostinger pool');
   if (globalThis.__ecomPool) {
     await globalThis.__ecomPool.end();
     globalThis.__ecomPool = undefined;

@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { catalogOnly } from "@/config/catalog-capabilities";
 import Link from "next/link";
 import Image from "next/image";
 import { PackageCheck } from "lucide-react";
@@ -38,10 +39,10 @@ export async function SiteHeader() {
       <div className="store-topline">
         <div className="store-width flex items-center justify-between gap-4">
           <span>Un lugar para encontrar lo que necesitás.</span>
-          <Link href="/pedido/buscar" className="flex items-center gap-2">
+          {!catalogOnly ? <Link href="/pedido/buscar" className="flex items-center gap-2">
             <PackageCheck size={14} aria-hidden />
             Seguí tu pedido
-          </Link>
+          </Link> : null}
         </div>
       </div>
       <div className="store-width flex min-w-0 items-center gap-2 py-4 sm:gap-5 lg:gap-12">
@@ -79,20 +80,21 @@ export async function SiteHeader() {
           <SearchBox className="store-search hidden flex-1 md:block" />
         </Suspense>
         <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-4">
-          <div className="hidden lg:block">
+          {!catalogOnly ? <div className="hidden lg:block">
             <Suspense fallback={null}>
               <CuentaHeaderEntry />
             </Suspense>
-          </div>
-          <WishlistHeaderLink />
-          <CartButton />
+          </div> : null}
+          {!catalogOnly ? <WishlistHeaderLink /> : null}
+          {!catalogOnly ? <CartButton /> : null}
           <MobileStoreMenu
             categories={categories}
             links={links}
-            account={
+            showOrderTracking={!catalogOnly}
+            account={!catalogOnly ?
               <Suspense fallback={null}>
                 <CuentaHeaderEntry />
-              </Suspense>
+              </Suspense> : null
             }
           />
         </div>

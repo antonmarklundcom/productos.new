@@ -1,8 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *));
-
 /*
  * Kit de piel (plan-crecimiento §6.2): `:root`/`.dark` viven en
  * `src/styles/temas/<nombre>.css`, no acá. Elegir tema = cambiar esta línea
@@ -12,6 +10,8 @@
  */
 @import "../styles/temas/botanico.css";
 @import "../styles/store.css";
+
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);

@@ -1,6 +1,7 @@
 "use client";
 
 import { Search } from "lucide-react";
+import { catalogOnly } from "@/config/catalog-capabilities";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 
@@ -53,7 +54,7 @@ export function SearchBox({ className }: { className?: string }) {
     */
     let cancelado = false;
     const timer = setTimeout(async () => {
-      const rows = buscable ? await sugerirProductos(cleaned) : [];
+      const rows = !catalogOnly && buscable ? await sugerirProductos(cleaned) : [];
       if (cancelado) return;
       setSuggestions(rows);
       setHighlighted(-1);

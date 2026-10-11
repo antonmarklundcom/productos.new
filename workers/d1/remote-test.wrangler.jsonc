@@ -1,0 +1,1 @@
+{"name":"productos-d1-readiness-client","compatibility_date":"2026-10-09","compatibility_flags":["nodejs_compat"],"d1_databases":[{"binding":"DB","database_name":"productos-workers-staging","database_id":"5c87a1b7-adc8-4201-9326-c1d0ae09a49f","remote":true}]}

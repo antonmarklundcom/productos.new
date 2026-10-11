@@ -46,6 +46,7 @@ export function ProductCard({
   return (
     <Link
       href={`/producto/${product.slug}`}
+      prefetch={false}
       data-testid={TESTIDS.productCard}
       data-slug={product.slug}
       className="store-product-card group border-border hover:border-foreground/20 focus-visible:ring-ring flex flex-col rounded-2xl border p-3 transition-colors focus-visible:ring-2 focus-visible:outline-none"

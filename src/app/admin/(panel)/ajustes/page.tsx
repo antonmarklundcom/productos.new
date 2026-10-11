@@ -11,6 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PAGINAS_DEFAULT } from "@/config/paginas-default";
+import { catalogOnly } from "@/config/catalog-capabilities";
 import { TIENDA } from "@/config/tienda";
 import { DEFAULT_REORDER_POINT } from "@/domain/admin-products";
 import { readStoreSettings } from "@/domain/store-settings";
@@ -292,6 +293,9 @@ function IdentidadSection({ settings }: { settings: StoreSettings }) {
 }
 
 function CuentasSection({ settings }: { settings: StoreSettings }) {
+  if (catalogOnly) return (
+    <Tarjeta id="cuentas" titulo={t("panel.ajustes.cuentas.titulo")} bajada="Las cuentas de cliente todavía no están habilitadas en esta versión de catálogo. Las consultas se reciben por WhatsApp."><p>Esta sección se habilitará cuando el flujo de cuentas esté probado en D1.</p></Tarjeta>
+  );
   const c = settings.cuentas;
   const porDefecto = TIENDA.cuentasClientes ? t("panel.ajustes.si") : t("panel.ajustes.no");
   return (

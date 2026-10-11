@@ -1029,6 +1029,9 @@ export const esPY = {
   "panel.login.meta": "Entrar",
   "panel.login.email": "Email",
   "panel.login.password": "Contraseña",
+  "panel.login.mostrarPassword": "Mostrar contraseña",
+  "panel.login.ocultarPassword": "Ocultar contraseña",
+  "panel.login.olvidoPassword": "¿Olvidaste tu contraseña?",
   "panel.login.entrar": "Entrar",
   "panel.login.entrando": "Entrando…",
 

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { catalogOnly } from "@/config/catalog-capabilities";
 import Link from "next/link";
 import { Mail, MessageCircle, MapPin, Clock, ArrowUpRight } from "lucide-react";
 import { contactoPublico } from "@/lib/comercio";
@@ -11,7 +12,9 @@ export function generateMetadata(): Metadata {
   return {
     title: "Contacto",
     description:
-      "Conocé nuestros canales de atención y encontrá ayuda para consultar el catálogo o seguir tu pedido.",
+      catalogOnly
+        ? "Consultá el catálogo, la disponibilidad y las opciones de entrega por WhatsApp."
+        : "Conocé nuestros canales de atención y encontrá ayuda para consultar el catálogo o seguir tu pedido.",
     ...(origin
       ? { alternates: { canonical: new URL("/contacto", origin).toString() } }
       : {}),
@@ -24,8 +27,9 @@ export default async function ContactPage() {
       <p className="eyebrow text-muted-foreground">Estamos para ayudarte</p>
       <h1 className="mt-3 text-4xl font-semibold tracking-tight">Hablemos.</h1>
       <p className="text-muted-foreground mt-4 max-w-xl text-sm leading-relaxed">
-        Encontrá acá nuestros canales de atención. Si ya tenés un pedido, guardá
-        su número para consultarlo.
+        {catalogOnly
+          ? "Consultá el catálogo, la disponibilidad y las opciones de entrega por nuestros canales de atención."
+          : "Encontrá acá nuestros canales de atención. Si ya tenés un pedido, guardá su número para consultarlo."}
       </p>
       <div className="mt-8 grid gap-4 sm:grid-cols-2">
         {contact.whatsapp ? (
@@ -75,13 +79,13 @@ export default async function ContactPage() {
           </p>
         </div>
       ) : null}
-      <Link
+      {!catalogOnly ? <Link
         href="/pedido/buscar"
         className="mt-8 inline-flex items-center gap-4 text-sm underline underline-offset-4"
       >
         Consultá un pedido
         <ArrowUpRight size={16} aria-hidden />
-      </Link>
+      </Link> : null}
     </main>
   );
 }
