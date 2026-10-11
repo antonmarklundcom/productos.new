@@ -9,8 +9,9 @@ const origin=values.origin||"https://productos.com.py", id=randomUUID(), events=
 if(origin!=="https://productos.com.py" && !/^https:\/\/[0-9a-f]{8}-productos-workers-staging\.marklundfaktura\.workers\.dev$/.test(origin))
  throw new Error("Benchmark origin must be Productos live or its existing Worker version URL");
 const summary=values=>{const sorted=values.filter(x=>typeof x==="number").sort((a,b)=>a-b);return {samples:sorted.length,meanMs:sorted.length?sorted.reduce((a,b)=>a+b,0)/sorted.length:null,p95Ms:sorted.length?sorted[Math.ceil(sorted.length*.95)-1]:null};};
-const tail=spawn(process.execPath,["node_modules/wrangler/wrangler-dist/cli.js","tail","--config","wrangler.jsonc","--format","json","--sampling-rate","1","--header",`x-productos-benchmark-id:${id}`],{stdio:["ignore","pipe","pipe"],windowsHide:true});
-let buffer="",ready=false;
+const tail=spawn(process.execPath,["node_modules/wrangler/wrangler-dist/cli.js","tail","--config","wrangler.jsonc","--format","json","--header",`x-productos-benchmark-id:${id}`],{stdio:["ignore","pipe","pipe"],windowsHide:true});
+let buffer="",ready=false,tailExit=null;const tailIssues=[];
+tail.on("exit",(code,signal)=>{tailExit={code,signal};});
 tail.stdout.on("data",chunk=>{
  buffer+=chunk;
  if(buffer.includes("Connected")||buffer.includes("created tail")) ready=true;
@@ -31,7 +32,11 @@ tail.stdout.on("data",chunk=>{
  if(buffer.length>250000)buffer=buffer.slice(-10000);
 });
 // Tail diagnostics may contain provider request details; never print or save them.
-tail.stderr.on("data",()=>{});
+tail.stderr.on("data",chunk=>{
+ const message=String(chunk);
+ for(const [pattern,label] of [[/sampling.*(?:0|1)/i,"sampling rate validation"],[/too many|maximum.*tail/i,"tail session limit"],[/auth|permission|403|401/i,"tail authorization"],[/ERROR/i,"tail startup error"]])
+  if(pattern.test(message)&&!tailIssues.includes(label))tailIssues.push(label);
+});
 const report={phase:values.phase,startedAt:new Date().toISOString(),origin,clientCountry:null,forcedCold:values.cold,samples:[],traces:events};
 try{
  for(let attempt=0;attempt<12&&!ready;attempt++)await pause(500);
@@ -49,6 +54,7 @@ try{
  await pause(5000);
  const cpu=events.map(e=>e.cpuMs).filter(x=>typeof x==="number");
  report.cpuSummary={samples:cpu.length,totalMs:cpu.reduce((a,b)=>a+b,0),meanMs:cpu.length?cpu.reduce((a,b)=>a+b,0)/cpu.length:null,source:cpu.length?"Header-filtered Cloudflare invocation tail":"Unavailable; HTTP timing is not CPU time"};
+ report.tailStatus={connected:ready||events.length>0,startupMessageObserved:ready,exit:tailExit,issues:tailIssues};
  report.cpuSummary.p95Ms=summary(cpu).p95Ms;
  report.wallSummary=summary(events.map(e=>e.wallMs));
  report.ttfbSummary=summary(report.samples.map(s=>s.headersMs));
