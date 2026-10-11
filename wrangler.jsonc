@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "productos-workers-staging",
+  "name": "productos",
   "compatibility_date": "2026-10-09",
   "compatibility_flags": [
     "nodejs_compat"
