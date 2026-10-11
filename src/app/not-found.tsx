@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { catalogOnly } from "@/config/catalog-capabilities";
 
 import { Button } from "@/components/ui/button";
 import { t } from "@/i18n";
@@ -13,9 +14,9 @@ export default function NotFound() {
         <Button asChild>
           <Link href="/">{t("error404.inicio")}</Link>
         </Button>
-        <Button asChild variant="outline">
+        {!catalogOnly ? <Button asChild variant="outline">
           <Link href="/pedido/buscar">{t("error404.buscarPedido")}</Link>
-        </Button>
+        </Button> : null}
       </div>
     </main>
   );

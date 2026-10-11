@@ -54,6 +54,16 @@ export function d1StagingPlugin(root) {
       }
       if(file.endsWith("/admin/(panel)/ajustes/page.tsx"))code=code.replaceAll("cloudinaryConfigured()", "false");
       if(file.endsWith("/proxy.ts")) {
+        // The owner uses existing automatic Cloudflare RUM injection. Cloudflare
+        // supplies the CSP nonce on dynamic pages; public nonce-free pages need
+        // its exact script host and beacon connection host, without changing admin.
+        for(const [from,to] of [
+          ['  const scriptHosts = [', '  const scriptHosts = [\n    ...(!isAdmin ? [" https://static.cloudflareinsights.com"] : []),'],
+          ['  const connectHosts = [', '  const connectHosts = [\n    ...(!isAdmin ? [" https://cloudflareinsights.com"] : []),'],
+        ]) {
+          if(!code.includes(from)) throw new Error("D1 Web Analytics CSP source drift");
+          code=code.replace(from,to);
+        }
         const routes = 'export const RUTAS_CACHEADAS = ["/", "/categoria"] as const;';
         const end = '  return withSecurityHeaders(response, nonce, isAdmin, reqId);';
         if (!code.includes(routes) || !code.includes(end)) throw new Error("D1 public cache middleware source drift");
@@ -128,7 +138,12 @@ ${end}`);
       const moduleIsServer=/^[\s]*["']use server["']/.test(code);
       const ast=ts.createSourceFile(file,code,ts.ScriptTarget.Latest,true,file.endsWith(".tsx")?ts.ScriptKind.TSX:ts.ScriptKind.TS);
       const edits=[];
+      // Public catalogue links must not issue uncached D1-backed flight renders
+      // for destinations a visitor never opens. Normal Next builds retain defaults.
+      const publicLinks = !/\/(?:admin|pedido|cuenta|actions)\//.test(file) && /import Link from ["']next\/link["']/.test(code);
       function walk(node){
+        if(publicLinks && (ts.isJsxOpeningElement(node)||ts.isJsxSelfClosingElement(node)) && node.tagName.getText(ast)==="Link" && !node.attributes.properties.some(attribute=>ts.isJsxAttribute(attribute)&&attribute.name.getText(ast)==="prefetch"))
+          edits.push({at:node.tagName.end,text:" prefetch={false}"});
         const isFunction=ts.isFunctionDeclaration(node)||ts.isArrowFunction(node)||ts.isFunctionExpression(node);
         if(isFunction&&node.body&&ts.isBlock(node.body)){
           const exported=ts.isFunctionDeclaration(node)&&node.modifiers?.some((m)=>m.kind===ts.SyntaxKind.ExportKeyword);

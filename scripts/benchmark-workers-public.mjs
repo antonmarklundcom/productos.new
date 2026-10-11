@@ -3,10 +3,13 @@ import {writeFile} from "node:fs/promises";
 import {setTimeout as pause} from "node:timers/promises";
 import {parseArgs} from "node:util";
 import {randomUUID} from "node:crypto";
-const {values}=parseArgs({options:{phase:{type:"string"},output:{type:"string"}}});
+const {values}=parseArgs({options:{phase:{type:"string"},output:{type:"string"},origin:{type:"string"},cold:{type:"boolean",default:false}}});
 if(!values.phase || !values.output) throw new Error("Use --phase before|after --output <absolute non-secret report path>");
-const origin="https://productos.com.py", id=randomUUID(), events=[];
-const tail=spawn(process.execPath,["node_modules/wrangler/wrangler-dist/cli.js","tail","--config","wrangler.jsonc","--format","json","--header",`x-productos-benchmark-id:${id}`],{stdio:["ignore","pipe","pipe"],windowsHide:true});
+const origin=values.origin||"https://productos.com.py", id=randomUUID(), events=[];
+if(origin!=="https://productos.com.py" && !/^https:\/\/[0-9a-f]{8}-productos-workers-staging\.marklundfaktura\.workers\.dev$/.test(origin))
+ throw new Error("Benchmark origin must be Productos live or its existing Worker version URL");
+const summary=values=>{const sorted=values.filter(x=>typeof x==="number").sort((a,b)=>a-b);return {samples:sorted.length,meanMs:sorted.length?sorted.reduce((a,b)=>a+b,0)/sorted.length:null,p95Ms:sorted.length?sorted[Math.ceil(sorted.length*.95)-1]:null};};
+const tail=spawn(process.execPath,["node_modules/wrangler/wrangler-dist/cli.js","tail","--config","wrangler.jsonc","--format","json","--sampling-rate","1","--header",`x-productos-benchmark-id:${id}`],{stdio:["ignore","pipe","pipe"],windowsHide:true});
 let buffer="",ready=false;
 tail.stdout.on("data",chunk=>{
  buffer+=chunk;
@@ -29,7 +32,7 @@ tail.stdout.on("data",chunk=>{
 });
 // Tail diagnostics may contain provider request details; never print or save them.
 tail.stderr.on("data",()=>{});
-const report={phase:values.phase,startedAt:new Date().toISOString(),origin,clientCountry:null,samples:[],traces:events};
+const report={phase:values.phase,startedAt:new Date().toISOString(),origin,clientCountry:null,forcedCold:values.cold,samples:[],traces:events};
 try{
  for(let attempt=0;attempt<12&&!ready;attempt++)await pause(500);
  const trace=await(await fetch(origin+"/cdn-cgi/trace")).text();
@@ -37,15 +40,20 @@ try{
  const paths=["/","/categoria/hogar-y-cocina","/producto/adaptador-para-grifo-360-dropi-11896"];
  for(const path of paths)for(let repeat=0;repeat<3;repeat++){
   const start=performance.now();
-  const response=await fetch(origin+path,{headers:{accept:"text/html","x-productos-benchmark-id":id},signal:AbortSignal.timeout(15000)});
+  const response=await fetch(origin+path,{headers:{accept:"text/html","x-productos-benchmark-id":id,...(values.cold?{"cache-control":"no-cache"}:{})},signal:AbortSignal.timeout(15000)});
   const headersMs=performance.now()-start,body=await response.arrayBuffer();
-  report.samples.push({path,repeat,status:response.status,headersMs,totalMs:performance.now()-start,bytes:body.byteLength,cache:response.headers.get("x-catalog-cache"),edge:response.headers.get("cf-ray")?.split("-").at(-1)});
+  report.samples.push({path,repeat,status:response.status,headersMs,totalMs:performance.now()-start,bytes:body.byteLength,cache:response.headers.get("x-catalog-cache"),placement:response.headers.get("x-profile-placement"),edge:response.headers.get("cf-ray")?.split("-").at(-1)});
   if(response.status!==200)throw new Error("Public benchmark stopped on HTTP "+response.status);
   await pause(1000);
  }
- await pause(2500);
+ await pause(5000);
  const cpu=events.map(e=>e.cpuMs).filter(x=>typeof x==="number");
  report.cpuSummary={samples:cpu.length,totalMs:cpu.reduce((a,b)=>a+b,0),meanMs:cpu.length?cpu.reduce((a,b)=>a+b,0)/cpu.length:null,source:cpu.length?"Header-filtered Cloudflare invocation tail":"Unavailable; HTTP timing is not CPU time"};
+ report.cpuSummary.p95Ms=summary(cpu).p95Ms;
+ report.wallSummary=summary(events.map(e=>e.wallMs));
+ report.ttfbSummary=summary(report.samples.map(s=>s.headersMs));
+ report.cacheSummary={requests:report.samples.length,hits:report.samples.filter(s=>s.cache==="HIT").length,misses:report.samples.filter(s=>s.cache==="MISS").length,bypasses:report.samples.filter(s=>s.cache==="BYPASS").length};
+ report.cacheSummary.hitRate=report.cacheSummary.hits/report.cacheSummary.requests;
  report.finishedAt=new Date().toISOString();
  await writeFile(values.output,JSON.stringify(report,null,2)+"\n");
  console.log(JSON.stringify({phase:values.phase,country:report.clientCountry,requests:report.samples.length,cpu:report.cpuSummary,cache:report.samples.map(s=>s.cache),output:values.output}));

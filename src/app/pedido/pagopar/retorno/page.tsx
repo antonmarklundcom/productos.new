@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { catalogOnly } from "@/config/catalog-capabilities";
 import { redirect } from "next/navigation";
 
 import { getOrderByPagoparHash, orderUrl } from "@/domain/order-access";
@@ -35,6 +36,7 @@ export default async function PagoparRetornoPage({
 }: {
   searchParams: SearchParams;
 }) {
+  if (catalogOnly) redirect("/");
   const query = await searchParams;
   // `hash_pedido` es el nombre que usa Pagopar en todo lo demás (protocol.ts);
   // `hashPedido` queda como alias por si el redirect llega con otra casing.

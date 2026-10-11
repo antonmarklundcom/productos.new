@@ -6,15 +6,16 @@ export async function latestCategoryProductIds(binding, slugs, limit = 4) {
   const requested = slugs.map((_, index) => `(?, ${index})`).join(",");
   const result = await binding.prepare(`
     WITH requested(slug, position) AS (VALUES ${requested}),
-    ranked AS (
-      SELECT p.id, r.position,
-        ROW_NUMBER() OVER (PARTITION BY c.id ORDER BY p.published_at DESC, p.id DESC) category_rank
-      FROM products p JOIN categories c ON c.id = p.category_id
-      JOIN requested r ON r.slug = c.slug
-      WHERE p.is_active = 1 AND p.published_at IS NOT NULL AND c.is_active = 1
-        AND EXISTS (SELECT 1 FROM variants v WHERE v.product_id = p.id AND v.is_active = 1)
+    picks AS MATERIALIZED (
+      SELECT r.position, (
+        SELECT p.id FROM products p
+        WHERE p.category_id = c.id AND p.is_active = 1 AND p.published_at IS NOT NULL
+          AND EXISTS (SELECT 1 FROM variants v WHERE v.product_id = p.id AND v.is_active = 1)
+        ORDER BY p.published_at DESC, p.id DESC LIMIT 1
+      ) id
+      FROM requested r JOIN categories c ON c.slug = r.slug WHERE c.is_active = 1
     )
-    SELECT id FROM ranked WHERE category_rank = 1 ORDER BY position LIMIT ?
+    SELECT id FROM picks WHERE id IS NOT NULL ORDER BY position LIMIT ?
   `).bind(...slugs, limit).all();
   return result.results.map(row => row.id);
 }

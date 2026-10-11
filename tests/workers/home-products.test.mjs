@@ -27,12 +27,13 @@ test("homepage latest selection keeps category order and excludes unpublished/in
 });
 test("Workers middleware and homepage transformations fail on source drift and parse correctly",()=>{
  const root=path.resolve(import.meta.dirname,'../..'),plugin=d1StagingPlugin(root);
- for(const name of ['src/proxy.ts','src/app/page.tsx']){
+ for(const name of ['src/proxy.ts','src/app/page.tsx','src/components/store-navigation.tsx']){
   const file=path.join(root,name),code=plugin.transform(readFileSync(file,'utf8'),file).code;
   const result=ts.transpileModule(code,{compilerOptions:{jsx:ts.JsxEmit.ReactJSX,module:ts.ModuleKind.ESNext},reportDiagnostics:true});
   assert.equal(result.diagnostics?.filter(d=>d.category===ts.DiagnosticCategory.Error).length,0);
-  assert.throws(()=>plugin.transform('source changed',file),/source drift/);
-  if(name.includes('proxy')) {assert.match(code,/catalogRendererCacheControl\(request\)/);assert.match(code,/startsWith\("\/producto\/"\)/);}
-  else {assert.match(code,/getLatestCategoryProducts\(CATEGORIAS_INICIALES/);assert.doesNotMatch(code,/getCategoryProducts\(/);}
+  if(!name.includes('store-navigation')) assert.throws(()=>plugin.transform('source changed',file),/source drift/);
+  if(name.includes('proxy')) {assert.match(code,/catalogRendererCacheControl\(request\)/);assert.match(code,/startsWith\("\/producto\/"\)/);assert.match(code,/!isAdmin.*static\.cloudflareinsights\.com/);assert.match(code,/!isAdmin.*https:\/\/cloudflareinsights\.com/);}
+  else if(name.includes('app/page')) {assert.match(code,/getLatestCategoryProducts\(CATEGORIAS_INICIALES/);assert.doesNotMatch(code,/getCategoryProducts\(/);}
+  if(!name.includes('proxy')) assert.match(code,/<Link prefetch=\{false\}/);
  }
 });
