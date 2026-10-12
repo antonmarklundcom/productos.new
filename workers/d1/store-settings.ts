@@ -10,6 +10,7 @@ import {
 import { log, mensajeDe } from "../../src/lib/log";
 import { getNativeDb, type NativeDatabase } from "./database";
 import { storeSettings } from "./schema";
+import { publicRead } from "./public-catalog";
 import { writeD1SettingsSection } from "./store-settings-write";
 export { StoreSettingsError } from "./store-settings-write";
 export {
@@ -45,7 +46,7 @@ export async function readStoreSettings(
 }
 export const getStoreSettings = cache(async (): Promise<StoreSettings> => {
   try {
-    return (await readStoreSettings()).settings;
+    return await publicRead("settings", async () => (await readStoreSettings()).settings);
   } catch (error) {
     log.warn(
       "no se pudieron leer los ajustes de la tienda; van los de siempre",

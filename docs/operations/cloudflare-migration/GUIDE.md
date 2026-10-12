@@ -155,3 +155,7 @@ Useful example requests:
 - “Use $cloudflare-workers-deploy to diagnose this failed Git build; compare its source/version/config with the working direct deployment and preserve the Node build.”
 
 Canonical source: C:/Projects/productos-workers-staging/docs/operations/cloudflare-migration/GUIDE.md. The installed Codex reference node-migration-playbook.md is a deliberate same-content copy. Refer to the dated Productos findings for project-specific commands/status; do not apply its IDs or thresholds to another site.
+
+## Public navigation and regional latency
+
+For delayed clicks, RSC/HTML cache differences, database round-trip reduction, bounded intent prefetch and measured placement decisions, use [Regional latency lessons](REGIONAL-LATENCY.md). This reference records the actual Paraguay comparison and freshness/privacy invariants rather than promising a universal region or TTL.

@@ -3,6 +3,7 @@ import { drizzle, type AnyD1Database } from "drizzle-orm/d1";
 import { SQLiteAsyncDialect } from "drizzle-orm/sqlite-core";
 import type { SQL } from "drizzle-orm";
 import * as schema from "./schema";
+import type { publicReadContext } from "./public-data-cache.mjs";
 
 export type D1Binding = AnyD1Database;
 const createDatabase = (binding: D1Binding) => drizzle(binding, { schema });
@@ -13,7 +14,8 @@ export type ImagesBucket = {
   put(key:string,value:Uint8Array,options:{httpMetadata:{contentType:string;cacheControl:string}}):Promise<unknown>;
   delete(keys:string[]):Promise<void>;
 };
-const bindingsScope=new AsyncLocalStorage<{IMAGES?:ImagesBucket}>();
+type D1RuntimeBindings = {IMAGES?:ImagesBucket; PUBLIC_CATALOG?: ReturnType<typeof publicReadContext>};
+const bindingsScope=new AsyncLocalStorage<D1RuntimeBindings>();
 export function getD1Bindings(){return bindingsScope.getStore()??{};}
 const secretScope = new AsyncLocalStorage<string | undefined>();
 export function getD1SessionSecret(): string | undefined { return secretScope.getStore(); }
@@ -49,7 +51,7 @@ export async function closePool(): Promise<void> { /* D1 has no connection pool.
 
 /** Keep context across streamed RSC/HTML responses and cancellation. */
 export async function withD1Database(
-  binding: D1Binding, operation: () => Promise<Response>, sessionSecret?: string, bindings:{IMAGES?:ImagesBucket}={},
+  binding: D1Binding, operation: () => Promise<Response>, sessionSecret?: string, bindings:D1RuntimeBindings={},
 ): Promise<Response> {
   const database = createDatabase(binding);
   const response = await bindingsScope.run(bindings,()=>secretScope.run(sessionSecret, () => scope.run(database, operation)));

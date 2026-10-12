@@ -5,6 +5,7 @@ import path from "node:path";
 import { readFileSync } from "node:fs";
 import { publicBuildDefines } from "./workers/public-build-env.mjs";
 import { d1StagingPlugin } from "./workers/d1/build-plugin.mjs";
+import { PUBLIC_PREFETCH_CACHE_SECONDS } from "./workers/d1/public-cache-budget.mjs";
 import nextConfig from "./next.config";
 
 export default defineConfig({
@@ -23,7 +24,7 @@ export default defineConfig({
     },
     // Keep shared headers/env, but Workers emits its own bundle. Node standalone
     // packaging tries to resolve Cloudflare virtual Wasm modules as npm packages.
-    vinext({ nextConfig: { ...nextConfig, output: undefined } }),
+    vinext({ nextConfig: { ...nextConfig, experimental: {...nextConfig.experimental, staleTimes: {static: PUBLIC_PREFETCH_CACHE_SECONDS, dynamic: 0}}, output: undefined } }),
     cloudflare({
       viteEnvironment: {
         name: "rsc",

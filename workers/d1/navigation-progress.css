@@ -1,0 +1,4 @@
+.catalog-navigation-progress {position:fixed;inset:0 0 auto;height:3px;z-index:1000;overflow:hidden;background:color-mix(in srgb,currentColor 12%,transparent);pointer-events:none}
+.catalog-navigation-progress > div {height:100%;width:35%;background:var(--primary,#2563eb);animation:catalog-progress 1s ease-in-out infinite}
+@keyframes catalog-progress {from {transform:translateX(-100%)} to {transform:translateX(385%)}}
+@media (prefers-reduced-motion:reduce) {.catalog-navigation-progress > div {animation:none;width:100%}}

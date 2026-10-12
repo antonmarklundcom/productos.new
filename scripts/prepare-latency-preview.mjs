@@ -1,0 +1,11 @@
+import {readFile,writeFile,copyFile} from "node:fs/promises";
+const name="productos-latency-preview-20261012";
+const config=JSON.parse(await readFile("dist/server/wrangler.json","utf8"));
+if(config.name!=="productos" || config.main!=="index.js")throw Error("Unexpected production build configuration");
+config.name=name;config.topLevelName=name;config.main="latency-preview-entry.mjs";config.workers_dev=true;
+delete config.routes;delete config.route;delete config.placement;
+config.triggers={};config.vars={...config.vars,WORKERS_PRODUCTION_READY:"false",WORKERS_PUBLIC_DIAGNOSTICS:"true",WORKERS_PUBLIC_CACHE_SECONDS:"60"};
+await copyFile("workers/d1/read-only-preview.mjs","dist/server/read-only-preview.mjs");
+await writeFile("dist/server/latency-preview-entry.mjs",'import worker from "./index.js";\nimport {makeReadOnlyPreview} from "./read-only-preview.mjs";\nexport default makeReadOnlyPreview(worker);\n');
+await writeFile("dist/server/wrangler.latency-preview.json",JSON.stringify(config,null,2)+"\n");
+console.log("Prepared read-only "+name+" configuration locally. Nothing deployed; no production configuration changed.");

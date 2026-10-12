@@ -28,6 +28,13 @@ export function d1StagingPlugin(root) {
       if(!file.startsWith(root.replaceAll("\\","/")+"/src/"))return;
       if(file.endsWith("/admin/(panel)/page.tsx"))return {code: `export const dynamic = "force-dynamic"; export { default } from ${JSON.stringify(path.resolve(root,"workers/d1/admin-summary.tsx").replaceAll("\\","/"))};`,map:null};
       let code=original;
+      // Vite's earlier @ alias resolver can consume importer-specific aliases.
+      // Rewrite only reviewed public import sites before resolution instead.
+      const publicModule=JSON.stringify(path.resolve(root,"workers/d1/public-catalog.ts").replaceAll("\\","/"));
+      const publicPage=["/app/page.tsx","/app/producto/[slug]/page.tsx","/app/categoria/[slug]/page.tsx"].some(suffix=>file.endsWith(suffix));
+      if(publicPage)code=code.replace(/(["'])@\/db\/queries\1/g,publicModule);
+      if(file.endsWith("/app/producto/[slug]/page.tsx"))code=code.replace(/(["'])@\/domain\/reviews\1/g,publicModule);
+      code=code.replace(/(["'])@\/components\/store-categories\1/g,publicModule);
       code=code.replace(/(["'])\.\/supplier-costs\1/g, JSON.stringify(path.resolve(root,"workers/d1/supplier-costs.ts").replaceAll("\\","/")));
       code=code.replace(/(["'])\.\/store-settings\1/g, JSON.stringify(path.resolve(root,"workers/d1/store-settings.ts").replaceAll("\\","/")));
       // Exact, reviewed clock translation in modules used by this pilot. No
@@ -88,7 +95,7 @@ ${end}`);
       )
     ),`;
         if (!code.includes(repeated)) throw new Error("D1 homepage category query source drift");
-        code = 'import { getLatestCategoryProducts } from ' + JSON.stringify(path.resolve(root,"workers/d1/home-products.ts").replaceAll("\\","/")) + ';\n' + code;
+        code = 'import { getLatestCategoryProducts } from ' + JSON.stringify(path.resolve(root,"workers/d1/public-catalog.ts").replaceAll("\\","/")) + ';\n' + code;
         code = code.replace(repeated, '    getLatestCategoryProducts(CATEGORIAS_INICIALES.map(category => category.slug)).catch(() => []),');
         code = code.replace('  getCategoryProducts,\n', '');
       }
@@ -135,6 +142,16 @@ ${end}`);
       if(file.endsWith("/actions/admin-products.ts"))code=code.replace(/^(\s*["']use server["'];)/,'$1\nimport { applyD1CatalogImport, uploadD1ProductImage, removeD1ProductImage } from '+JSON.stringify(path.resolve(root,"workers/d1/catalog-actions.ts").replaceAll("\\","/"))+';');
       // An action ID can be posted to a different page. Route filtering alone
       // is insufficient: deny unported actions at their implementation boundary.
+      if(file.endsWith("/app/layout.tsx")) {
+        const header="          <SiteHeader />";
+        if(!code.includes(header))throw new Error("D1 navigation progress layout source drift");
+        code='import { Suspense as NavigationSuspense } from "react";\nimport { NavigationProgress } from '+JSON.stringify(path.resolve(root,"workers/d1/navigation-progress.tsx").replaceAll("\\","/"))+';\n'+code;
+        code=code.replace(header,'          <NavigationSuspense fallback={null}><NavigationProgress /></NavigationSuspense>\n'+header);
+      }
+      if(file.endsWith("/components/search-box.tsx")||file.endsWith("/components/catalog-filters.tsx")) {
+        code=code.replace(/^(\s*["']use client["'];)/,'$1\nimport { navigateWithProgress } from '+JSON.stringify(path.resolve(root,"workers/d1/navigation-progress.tsx").replaceAll("\\","/"))+';');
+        code=code.replaceAll("router.push(","navigateWithProgress(router, ");
+      }
       const moduleIsServer=/^[\s]*["']use server["']/.test(code);
       const ast=ts.createSourceFile(file,code,ts.ScriptTarget.Latest,true,file.endsWith(".tsx")?ts.ScriptKind.TSX:ts.ScriptKind.TS);
       const edits=[];
@@ -159,6 +176,11 @@ ${end}`);
         ts.forEachChild(node,walk);
       }
       walk(ast);
+      if(publicLinks) {
+        const replacement='import { CatalogLink as Link } from '+JSON.stringify(path.resolve(root,"workers/d1/navigation-progress.tsx").replaceAll("\\","/"))+';';
+        const match=/import Link from ["']next\/link["'];?/.exec(code);
+        edits.push({at:match.index,end:match.index+match[0].length,text:replacement});
+      }
       for(const edit of edits.sort((a,b)=>b.at-a.at))code=code.slice(0,edit.at)+edit.text+code.slice(edit.end??edit.at);
       return code===original?undefined:{code,map:null};
     },
