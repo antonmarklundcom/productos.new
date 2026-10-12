@@ -23,6 +23,26 @@ beforeEach(() => {
 });
 afterEach(() => {cleanup();vi.useRealTimers();});
 describe("Workers storefront navigation", () => {
+  it("does not prefetch after a quick touch tap has already started navigation", () => {
+    window.history.replaceState({},"","/categoria/quick-touch-review");
+    render(<><NavigationProgress/><CatalogLink href="/producto/quick-touch-review">Quick tap</CatalogLink></>);
+    const link=screen.getByText("Quick tap");
+    fireEvent.touchStart(link);act(()=>vi.advanceTimersByTime(60));fireEvent.click(link);
+    act(()=>vi.advanceTimersByTime(120));expect(state.prefetch).not.toHaveBeenCalled();
+    expect(screen.getByRole("status")).toHaveTextContent("Cargando");
+  });
+  it("cancels touch-scroll and cancelled gestures while preserving stationary touch intent", () => {
+    window.history.replaceState({},"","/categoria/touch-review");
+    const move=vi.fn(),cancel=vi.fn();
+    render(<CatalogLink href="/producto/touch-review" onTouchMove={move} onTouchCancel={cancel}>Touch product</CatalogLink>);
+    const link=screen.getByText("Touch product");
+    fireEvent.touchStart(link);fireEvent.touchMove(link);
+    act(()=>vi.advanceTimersByTime(120));expect(state.prefetch).not.toHaveBeenCalled();expect(move).toHaveBeenCalledOnce();
+    fireEvent.touchStart(link);fireEvent.touchCancel(link);
+    act(()=>vi.advanceTimersByTime(120));expect(state.prefetch).not.toHaveBeenCalled();expect(cancel).toHaveBeenCalledOnce();
+    fireEvent.touchStart(link);act(()=>vi.advanceTimersByTime(120));
+    expect(state.prefetch).toHaveBeenCalledTimes(1);expect(state.prefetch.mock.calls[0]?.[0]).toBe("/producto/touch-review");
+  });
   it("shows feedback immediately, clears on route change and preserves same-page/modified clicks", () => {
     const ui=()=> <><div id="contenido" /><NavigationProgress /><CatalogLink href="/producto/first">Product</CatalogLink><CatalogLink href="#details">Anchor</CatalogLink></>;
     const result=render(ui());

@@ -73,3 +73,19 @@ Vinext 1.1.0 APIs/freshness were verified against the installed `dist/shims/navi
 - C:/Projects/productos-latency-20261011/workers/d1/public-response.mjs: Absolute HTML expiry and fallback protection.
 - C:/Projects/productos-latency-20261011/workers/d1/store-settings.ts: Share safe public settings reads.
 - C:/Projects/productos-latency-20261011/workers/preview-entry.mjs: Create public context and optional preview timings.
+
+## 12 October 2026 — Review fixes and measured preview acceptance
+
+Owner now authorizes PR creation, merge and production deployment. The earlier review-only restriction is superseded.
+
+Fixed touchmove/touchcancel cancellation and quick-tap cancellation so scrolling or an already-started navigation cannot issue a delayed speculative render. Added meaningful component regressions. SQL projections now rank bounded candidates using ROW_NUMBER and explicitly order the outer selection and variant/image JSON aggregates, with stable product-id tie breaks. Shuffled 60-product fixtures exercise sorting and pagination; disposable local D1 verifies aggregate syntax and JSON object types.
+
+The separate preview generator strips custom routes, cron and placement and uses a mutation-denying entry wrapper. Preview permits public GET/HEAD only; admin/actions/setup remain inaccessible and robots/noindex prevent indexing. Existing D1/R2 are read without migrations, seeds or uploads. Production deploy uses dist/server/wrangler.json, never the preview configuration.
+
+Matched 45-request default-edge versus 45-request near-D1 trials from Paraguay: GRU edge median HTML MISS 421 ms, HIT 74 ms, warm RSC 96 ms; remote ORD median MISS 499 ms, HIT 253 ms, warm RSC 295 ms. Choose default edge placement. Canonical RSC redirects were followed to actual 200 text/x-component responses; redirect latency is not navigation latency. Warm RSC probes follow HTML warming, so these are data-cache results, not all cold-click results. Cold home samples remain 1.0–1.4 s; category/product samples usually 0.27–0.46 s. Isolate/network variation remains. Preview diagnostics buffer RSC; production diagnostics remain disabled.
+
+Browser preview category click immediately exposed Cargando pagina, reached the category heading and produced no console warnings/errors. Real cellular-carrier/phone acceptance remains unmeasured. No promise of zero latency on all clicks.
+
+Validation: typecheck/lint/build PASS; 59 Workers tests PASS; full suite 1116 PASS/846 integration SKIP using --maxWorkers=2. Initial unconstrained full run failed with 13 resource-contention failures while building concurrently; bounded retry passed without changing assertions/timeouts. First local SQL smoke used the wrong persistence directory; corrected same-fixture comparison passed. See C:/AI research and to do/productos-performance-20261011/handoff for retained evidence.
+
+Release protocol: commit and push reviewed branch, create PR, require normal checks/MariaDB tests/browser e2e, merge into main, verify automatic Cloudflare build and source/version. If needed deploy the exact reviewed generated production bundle with existing variables retained. Immediately verify live HTTPS/canonical/robots/health/private cache bypass/product/category/gallery/RSC. Before release active accepted version is 826ccf6e-cfae-40f4-ae2d-60421ab87225 (latest deployment timestamp; deployments list is ascending). Rollback that version if the new release fails acceptance, then revert Git through a normal PR to prevent automatic redeployment.

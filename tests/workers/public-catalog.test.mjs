@@ -3,6 +3,7 @@ import {test} from "node:test";
 import {DatabaseSync} from "node:sqlite";
 import {readFileSync} from "node:fs";
 import path from "node:path";
+import {getPlatformProxy} from "wrangler";
 import {d1StagingPlugin} from "../../workers/d1/build-plugin.mjs";
 import {catalogRead, categoryRead, featuredRead, productRead, relatedRead, latestRead} from "../../workers/d1/public-catalog-sql.mjs";
 import {publicReadContext, cachedPublicRead} from "../../workers/d1/public-data-cache.mjs";
@@ -159,4 +160,88 @@ test("failed public readers do not cache successful-looking fallback HTML", asyn
  const response=await catalogResponse(req,env,ctx,async()=>new Response("fallback",{headers:{"content-type":"text/html"}}),storage,context);
  assert.equal(response.headers.get("x-catalog-cache"),"BYPASS");assert.equal(response.headers.get("cache-control"),"private, no-store");
  assert.equal(pending.length,0);
+});
+
+function shuffledOrderingFixture() {
+ const rows=Array.from({length:60},(_,index)=>{
+   const id=(index*17)%60+1;
+   return {id,slug:"shuffle-"+id,name:"Item "+String((id*19)%60).padStart(2,"0"),
+     price:10000+((id*13)%17)*1000,showPrice:id%11!==0,publishedAt:"2026-01-"+String((id*7)%19+1).padStart(2,"0"),brand:id%2?"Brand A":null};
+ });
+ const statements=["INSERT INTO categories(id,slug,name,is_active) VALUES(1,'shuffle','Shuffle',1)"];
+ for(const row of rows) {
+   statements.push(`INSERT INTO products(id,slug,name,category_id,brand,published_at,is_active,show_price,is_featured)
+     VALUES(${row.id},'${row.slug}','${row.name}',1,${row.brand?"'Brand A'":"NULL"},'${row.publishedAt}',1,${Number(row.showPrice)},${Number(row.id%3===0)})`);
+   for(const position of [3,1,2]) {
+     statements.push(`INSERT INTO variants(product_id,sku,label,price_pyg,on_hand,position,is_active)
+       VALUES(${row.id},'SKU-${row.id}-${position}','Option ${position}',${row.price+(position-1)*1000},10,${position},1)`);
+     statements.push(`INSERT INTO product_images(product_id,cloudinary_id,position) VALUES(${row.id},'image-${row.id}-${position}',${position})`);
+   }
+ }
+ return {rows,statements};
+}
+function expectedCategoryOrder(rows,sort) {
+ return [...rows].sort((a,b)=>{
+   let result=0;
+   if(sort.startsWith("precio-"))result=Number(!a.showPrice)-Number(!b.showPrice)||
+     (a.showPrice&&b.showPrice?(a.price-b.price)*(sort==="precio-desc"?-1:1):0);
+   else if(sort==="nuevos")result=b.publishedAt.localeCompare(a.publishedAt);
+   else result=a.name.localeCompare(b.name);
+   return result||a.id-b.id;
+ });
+}
+async function assertShuffledOrder(db,rows) {
+ for(const sort of ["relevancia","precio-asc","precio-desc","nuevos"]) {
+   const expected=expectedCategoryOrder(rows,sort),actual=[];
+   for(const page of [1,2]) {
+     const result=await categoryRead(db,{categorySlug:"shuffle",sort,page,perPage:30});
+     assert.equal(result.total,60);assert.equal(result.totalPages,2);
+     assert.deepEqual(result.products.map(product=>product.slug),expected.slice((page-1)*30,page*30).map(row=>row.slug),sort+" page "+page);
+     for(const product of result.products) {
+       assert.deepEqual(product.variants.map(variant=>variant.sku),[1,2,3].map(position=>"SKU-"+product.id+"-"+position));
+       assert.equal(product.image.cloudinaryId,"image-"+product.id+"-1");
+     }
+     actual.push(...result.products.map(product=>product.slug));
+   }
+   assert.deepEqual(actual,expected.map(row=>row.slug));
+ }
+ const detail=(await productRead(db,"shuffle-42")).product;
+ assert.deepEqual(detail.images.map(image=>image.cloudinaryId),[1,2,3].map(position=>"image-42-"+position));
+ const featured=await featuredRead(db,60);
+ assert.deepEqual(featured.map(product=>product.slug),expectedCategoryOrder(rows.filter(row=>row.id%3===0),"nuevos").map(row=>row.slug));
+ const catalog=await catalogRead(db,{categorySlug:"shuffle",limit:60});
+ assert.deepEqual(catalog.map(product=>product.slug),expectedCategoryOrder(rows,"relevancia").map(row=>row.slug));
+ const input=rows.find(row=>row.id===42),limit=4;
+ const related=await relatedRead(db,{productId:42,categorySlug:"shuffle",brand:input.brand,pricePyg:input.price},limit);
+ const expectedRelated=rows.filter(row=>row.id!==42).sort((a,b)=>{
+   const brand=Number(a.brand!==input.brand)-Number(b.brand!==input.brand);
+   const price=Number(a.showPrice)-Number(b.showPrice)||(a.showPrice&&b.showPrice?Math.abs(a.price-input.price)-Math.abs(b.price-input.price):0);
+   return brand||price||a.name.localeCompare(b.name)||a.id-b.id;
+ }).slice(0,limit);
+ assert.deepEqual(related.map(product=>product.slug),expectedRelated.map(row=>row.slug));
+}
+test("explicit ordering survives shuffled 60-product input, price ties and two pages in SQLite",async()=>{
+ const sqlite=new DatabaseSync(":memory:");
+ try {
+   for(const name of ["0000_useful_mattie_franklin","0001_fancy_warhawk","0002_boring_roulette"])
+     sqlite.exec(readFileSync(`workers/d1/migrations/${name}.sql`,"utf8"));
+   const {rows,statements}=shuffledOrderingFixture();for(const statement of statements)sqlite.exec(statement);
+   // Discourage relying on today's incidental table scan/subquery ordering.
+   sqlite.exec("PRAGMA reverse_unordered_selects=ON");
+   const db={prepare(sql){const statement={sql,args:[],bind(...args){return {...statement,args};}};return statement;},
+     async batch(statements){return statements.map(statement=>({success:true,results:sqlite.prepare(statement.sql).all(...statement.args)}));}};
+   await assertShuffledOrder(db,rows);
+ } finally {sqlite.close();}
+});
+test("aggregate ORDER BY and ranked projection work on actual local D1 with 60 shuffled products",{timeout:120000},async()=>{
+ const platform=await getPlatformProxy({configPath:"workers/d1/local-settings-test.wrangler.jsonc",persist:false});
+ try {
+   const db=platform.env.DB;
+   for(const name of ["0000_useful_mattie_franklin","0001_fancy_warhawk","0002_boring_roulette"])
+     for(const statement of readFileSync(`workers/d1/migrations/${name}.sql`,"utf8").split("--> statement-breakpoint"))if(statement.trim())await db.prepare(statement).run();
+   const {rows,statements}=shuffledOrderingFixture();
+   // Keep each batch within the local D1 statement limit; never use remote bindings.
+   for(let offset=0;offset<statements.length;offset+=80)await db.batch(statements.slice(offset,offset+80).map(sql=>db.prepare(sql)));
+   await assertShuffledOrder(db,rows);
+ } finally {await platform.dispose();}
 });

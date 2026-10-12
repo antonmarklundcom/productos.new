@@ -50,7 +50,7 @@ export function NavigationProgress() {
 // Only explicit intent prefetches. No viewport prefetch or speculative catalogue fan-out.
 let budgetRoute = "", prefetched = new Set<string>();
 export const CatalogLink = forwardRef<HTMLAnchorElement, ComponentProps<typeof Link>>(function CatalogLink(
-  {href, onNavigate, onMouseEnter, onMouseLeave, onFocus, onBlur, onTouchStart, ...props}, ref,
+  {href, onNavigate, onMouseEnter, onMouseLeave, onFocus, onBlur, onTouchStart, onTouchMove, onTouchCancel, ...props}, ref,
 ) {
   const router = useRouter();
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -81,6 +81,7 @@ export const CatalogLink = forwardRef<HTMLAnchorElement, ComponentProps<typeof L
   };
   return <Link {...props} ref={ref} href={href} prefetch={false}
     onNavigate={event => {
+      cancel(); // A quick tap must not start a second prefetch after navigation begins.
       let cancelled = false;
       onNavigate?.({preventDefault() { cancelled = true; event.preventDefault(); }});
       if (!cancelled && typeof href === "string") begin(href);
@@ -89,5 +90,7 @@ export const CatalogLink = forwardRef<HTMLAnchorElement, ComponentProps<typeof L
     onMouseLeave={event => { onMouseLeave?.(event); cancel(); }}
     onFocus={event => { onFocus?.(event); if (!event.defaultPrevented) intent(); }}
     onBlur={event => { onBlur?.(event); cancel(); }}
-    onTouchStart={event => { onTouchStart?.(event); if (!event.defaultPrevented) intent(); }} />;
+    onTouchStart={event => { onTouchStart?.(event); if (!event.defaultPrevented) intent(); }}
+    onTouchMove={event => { onTouchMove?.(event); cancel(); }}
+    onTouchCancel={event => { onTouchCancel?.(event); cancel(); }} />;
 });

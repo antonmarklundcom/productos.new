@@ -2,7 +2,8 @@
 const published = "p.is_active = 1 AND p.published_at IS NOT NULL AND c.is_active = 1";
 const minPrice = "MIN(CASE WHEN p.show_price = 1 THEN v.price_pyg ELSE NULL END)";
 const columns = `p.id, p.slug, p.name, p.description, p.brand, p.iva_rate AS ivaRate,
- p.sale_mode AS saleMode, p.show_price AS showPrice, c.name AS categoryName, c.slug AS categorySlug`;
+ p.sale_mode AS saleMode, p.show_price AS showPrice, c.name AS categoryName, c.slug AS categorySlug,
+ p.published_at AS publishedAt, c.position AS categoryPosition`;
 const joins = "FROM products p JOIN categories c ON c.id = p.category_id";
 const projection = `SELECT s.*,
  (SELECT json_group_array(json_object(
@@ -11,12 +12,12 @@ const projection = `SELECT s.*,
    'compareAtPyg', CASE WHEN s.showPrice = 1 THEN v.compare_at_pyg ELSE NULL END,
    'available', MAX(0, v.on_hand - COALESCE((SELECT SUM(r.qty) FROM stock_reservations r
      WHERE r.variant_id = v.id AND r.state = 'held' AND r.expires_at > CURRENT_TIMESTAMP), 0))
- )) FROM (SELECT * FROM variants WHERE product_id = s.id AND is_active = 1 ORDER BY position) v) AS variantJson,
- (SELECT json_group_array(json_object('cloudinaryId', i.cloudinary_id, 'blurDataUrl', i.blur_data_url, 'alt', i.alt))
-   FROM (SELECT cloudinary_id, blur_data_url, alt FROM product_images WHERE product_id = s.id ORDER BY position) i) AS imageJson,
+ ) ORDER BY v.position, v.id) FROM variants v WHERE v.product_id = s.id AND v.is_active = 1) AS variantJson,
+ (SELECT json_group_array(json_object('cloudinaryId', i.cloudinary_id, 'blurDataUrl', i.blur_data_url, 'alt', i.alt) ORDER BY i.position, i.id)
+   FROM product_images i WHERE i.product_id = s.id) AS imageJson,
  (SELECT COUNT(*) FROM product_reviews r WHERE r.product_id = s.id AND r.status = 'approved') AS ratingCount,
  (SELECT ROUND(AVG(r.rating), 1) FROM product_reviews r WHERE r.product_id = s.id AND r.status = 'approved') AS ratingAverage
- FROM selected s`;
+ FROM selected s ORDER BY s.rn`;
 function hydrate(row, detail = false) {
  const images = JSON.parse(row.imageJson || "[]");
  return {
@@ -36,7 +37,11 @@ export async function readBatch(db, statements) {
  if (results.some(result => !result.success)) throw new Error("D1_PUBLIC_CATALOG_BATCH_FAILED");
  return results.map(result => result.results);
 }
-function projected(sql, args) { return {sql: `WITH selected AS (${sql}) ${projection}`, args}; }
+function projected(sql, args, order = "id ASC") {
+ // Rank the bounded candidate set using its selected aliases. This avoids
+ // repeating bound ranking parameters and guarantees the outer result order.
+ return {sql: `WITH candidates AS (${sql}), selected AS (SELECT *, ROW_NUMBER() OVER (ORDER BY ${order}) AS rn FROM candidates) ${projection}`, args};
+}
 export async function catalogRead(db, options = {}) {
  if (options.productIds?.length === 0) return [];
  const conditions = [published], args = [];
@@ -45,15 +50,15 @@ export async function catalogRead(db, options = {}) {
  if (options.productIds) { conditions.push(`p.id IN (${options.productIds.map(() => "?").join(",")})`); args.push(...options.productIds); }
  args.push(options.limit ?? 100);
  const [rows] = await readBatch(db, [projected(`SELECT ${columns} ${joins} WHERE ${conditions.join(" AND ")}
-  ORDER BY ${options.featured ? "p.published_at DESC" : "c.position ASC, p.name ASC"} LIMIT ?`, args)]);
+  ORDER BY ${options.featured ? "p.published_at DESC, p.id ASC" : "c.position ASC, p.name ASC, p.id ASC"} LIMIT ?`, args, options.featured ? "publishedAt DESC, id ASC" : "categoryPosition ASC, name ASC, id ASC")]);
  return rows.map(row => hydrate(row));
 }
 export async function featuredRead(db, limit = 8) {
  const selection = `SELECT ${columns} ${joins} WHERE ${published}`;
  const [featured, fallback] = await readBatch(db, [
-  projected(`${selection} AND p.is_featured = 1 ORDER BY p.published_at DESC LIMIT ?`, [limit]),
+  projected(`${selection} AND p.is_featured = 1 ORDER BY p.published_at DESC, p.id ASC LIMIT ?`, [limit], "publishedAt DESC, id ASC"),
   projected(`${selection} AND NOT EXISTS (SELECT 1 ${joins} WHERE ${published} AND p.is_featured = 1)
-    ORDER BY c.position ASC, p.name ASC LIMIT ?`, [limit]),
+    ORDER BY c.position ASC, p.name ASC, p.id ASC LIMIT ?`, [limit], "categoryPosition ASC, name ASC, id ASC"),
  ]);
  return (featured.length ? featured : fallback).map(row => hydrate(row));
 }
@@ -78,9 +83,10 @@ export async function categoryRead(db, query) {
  const order = query.sort === "precio-asc" ? "minPrice IS NULL, minPrice ASC" :
    query.sort === "precio-desc" ? "minPrice IS NULL, minPrice DESC" :
    query.sort === "nuevos" ? "p.published_at DESC" : "p.name ASC";
+ const rankedOrder = query.sort === "nuevos" ? "publishedAt DESC, id ASC" : order.replace("p.name", "name") + ", id ASC";
  const [rows, counted] = await readBatch(db, [
-  projected(`SELECT ${columns}, ${minPrice} AS minPrice ${from} ORDER BY ${order} LIMIT ? OFFSET ?`,
-    [...args, perPage, (page - 1) * perPage]),
+  projected(`SELECT ${columns}, ${minPrice} AS minPrice ${from} ORDER BY ${order}, p.id ASC LIMIT ? OFFSET ?`,
+    [...args, perPage, (page - 1) * perPage], rankedOrder),
   {sql: `SELECT COUNT(*) AS total FROM (SELECT p.id ${from})`, args},
  ]);
  const total = counted[0].total;
@@ -89,14 +95,15 @@ export async function categoryRead(db, query) {
 export async function relatedRead(db, input, limit = 4) {
  // This Workers deployment is an enquiry catalogue with guarded order actions.
  // Keep held-stock and approved ratings; skip only co-purchase ranking.
- const args = [input.categorySlug, input.productId, input.brand];
+ const args = [input.brand];
  let proximity = "CASE WHEN 1 THEN 0 END";
  if (input.pricePyg !== undefined) { proximity = `ABS(CAST(${minPrice} AS INTEGER) - ?)`; args.push(input.pricePyg); }
- args.push(limit * 3);
- const [rows] = await readBatch(db, [projected(`SELECT ${columns}, ${minPrice} AS minPrice ${joins}
+ args.push(input.categorySlug, input.productId, limit * 3);
+ const [rows] = await readBatch(db, [projected(`SELECT ${columns}, ${minPrice} AS minPrice,
+  CASE WHEN p.brand IS ? THEN 0 ELSE 1 END AS brandRank, ${proximity} AS priceDistance ${joins}
   JOIN variants v ON v.product_id = p.id AND v.is_active = 1 AND v.on_hand > 0
   WHERE ${published} AND c.slug = ? AND p.id != ? GROUP BY p.id
-  ORDER BY CASE WHEN p.brand IS ? THEN 0 ELSE 1 END, ${proximity}, p.name ASC LIMIT ?`, args)]);
+  ORDER BY brandRank, priceDistance, p.name ASC, p.id ASC LIMIT ?`, args, "brandRank, priceDistance, name ASC, id ASC")]);
  return rows.map(row => hydrate(row)).filter(product => product.variants.some(variant => variant.available > 0)).slice(0, limit);
 }
 export async function latestRead(db, slugs) {
@@ -106,7 +113,7 @@ export async function latestRead(db, slugs) {
   AND c.slug IN (${slugs.map(() => "?").join(",")})
   AND p.id = (SELECT newer.id FROM products newer WHERE newer.category_id = c.id AND newer.is_active = 1
     AND newer.published_at IS NOT NULL AND EXISTS (SELECT 1 FROM variants v WHERE v.product_id = newer.id AND v.is_active = 1)
-    ORDER BY newer.published_at DESC, newer.id DESC LIMIT 1)`, slugs)]);
+    ORDER BY newer.published_at DESC, newer.id DESC LIMIT 1)`, slugs, "categoryPosition ASC, id ASC")]);
  const bySlug = new Map(rows.map(row => [row.categorySlug, hydrate(row)]));
  return slugs.flatMap(slug => bySlug.has(slug) ? [{products: [bySlug.get(slug)]}] : []).slice(0, 4);
 }

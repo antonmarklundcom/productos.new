@@ -1,0 +1,17 @@
+# Regional latency lessons for Node-to-Workers conversions
+
+Use this when a migrated public site has a delayed click followed by a fast page swap. First identify whether the browser is waiting on an RSC/server render, network/database round trips, CPU, or client work. Measure navigation responses separately from cached HTML landings. Follow canonical RSC redirects and validate the response representation before timing it.
+
+Keep public data reads bounded and batched. Count dependent phases, not only queries: sequential edge-to-database trips can dominate elapsed time even with modest CPU. Share header/footer data within a request. Preserve stable SQL ordering: ordered subqueries do not guarantee final or aggregate order; explicitly order result projections and JSON aggregates. Verify syntax against the actual database runtime with shuffled fixtures.
+
+Prefer version-scoped public DTO caches when HTML and client navigation both need the same data. Use allowlisted fields and publication/hidden-price filters. Cookie/auth/action/private responses bypass shared caches. Never cache failed-reader fallbacks as valid catalogue results. Bound local memory and concurrent fills. Propagate absolute data expiry into HTML TTL so cache layers cannot extend freshness indefinitely. Account for framework client-prefetch TTL too; do not copy Productos's 30+30-second budget to transactional stock without a suitable correctness policy.
+
+Give immediate navigation feedback through the framework's actual navigation API. Restrict speculative prefetch to explicit intent, a small route budget, and supported links; respect Save-Data/slow connections. Cancel touch intent on move/cancel, and cancel pending timers when navigation begins. Mobile scrolling is not purchase intent. Prefetch may increase requests even when it improves latency.
+
+Measure default edge placement against execution near the database using the same revision, dataset, routes, expiry and client region. Moving the Worker also moves Cache API execution and may slow warm hits. Do not enable placement on reputation alone. If database misses remain unacceptable, consider a separate near-database backend with an edge frontend/cache, or static catalogue publishing, as scoped follow-up designs.
+
+Workers waiting time is not CPU billing; D1 rows read are not query count. Cache hits still invoke an application Worker. Report account-wide headroom and other service meters separately. Check current pricing and asset routing before cost claims.
+
+Productos 12 October 2026 evidence: 45 probes per placement from PY ingress GRU. Default edge median MISS/HIT/warm RSC 421/74/96 ms; near-D1 remote ORD 499/253/295 ms. Default edge won warm performance. Warm RSC here follows HTML warming. Cold homepage still 1–1.4 s. Local 1116 tests passed/846 integration skipped; 59 Workers tests passed. These small synthetic samples are not a monthly bill or cellular-network guarantee. Versioned operation evidence: latency-implementation-2026-10-11.md and the owner handoff directory.
+
+Public-preview isolation: distinct Worker/no production routes, noindex/robots disallow, deny mutations/admin/setup/actions before invoking the app, and explicitly record whether the data binding itself is writable. Deploy production from the reviewed generated production config, never a diagnostic preview entry. Inspect latest deployment timestamps rather than assuming the first listed version is current. Preserve rollback/source correspondence and verify real HTTPS after merge/deploy.
