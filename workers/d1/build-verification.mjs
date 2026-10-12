@@ -1,3 +1,7 @@
+export function verifyNativePublicBundle(serverJavaScript) {
+  for (const marker of ["D1_PUBLIC_CATALOG_BATCH_FAILED", "product:v1:", "category:v1:", "related:v1:", "catalog-data-v1-", "x-catalog-expires-at", "catalog-navigation-progress"])
+    if (!serverJavaScript.includes(marker)) throw new Error("Workers bundle omitted public latency adapters; review aliases before deploying.");
+}
 /** Catch alias regressions that typechecks and direct native-domain tests miss. */
 export function verifyNativeSettingsBundle(serverJavaScript) {
   if (!serverJavaScript.includes("D1_SETTINGS_SAVE_MISSING_RESULT") || !serverJavaScript.includes("json_set"))

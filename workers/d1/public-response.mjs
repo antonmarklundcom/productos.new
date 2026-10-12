@@ -42,15 +42,17 @@ export function cacheableCatalogResponse(response) {
     (response.headers.get("content-type") || "").includes("text/html") &&
     vary.every(v => !v || [...representationHeaders, "accept-encoding"].includes(v));
 }
-function publicResponse(response, request, env, state, ttl) {
+function publicResponse(response, request, env, state, ttl, expiresAt) {
   const headers = new Headers(response.headers);
   headers.set("cache-control", `public, max-age=0, s-maxage=${ttl}`);
   headers.set("x-catalog-cache", state);
+  headers.set("x-catalog-expires-at", String(expiresAt));
+  headers.set("date", new Date().toUTCString());
   if (productionPublicRequest(request, env)) headers.delete("x-robots-tag");
   else headers.set("x-robots-tag", "noindex, nofollow, noarchive");
   return new Response(response.body, {status:response.status,statusText:response.statusText,headers});
 }
-export async function catalogResponse(request, env, ctx, render, cacheStorage = globalThis.caches) {
+export async function catalogResponse(request, env, ctx, render, cacheStorage = globalThis.caches, dataContext) {
   const ttl = catalogCacheSeconds(env);
   const version = env.CF_VERSION_METADATA?.id;
   // The explicit switch is restricted to this enquiry catalog pilot. Stock,
@@ -62,7 +64,9 @@ export async function catalogResponse(request, env, ctx, render, cacheStorage = 
     try {
       cache = await cacheStorage.open(`catalog-html-${version}`);
       const hit = await cache.match(request);
-      if (hit) return publicResponse(hit, request, env, "HIT", ttl);
+      const expiresAt = Number(hit?.headers.get("x-catalog-expires-at") || 0);
+      const remaining = Math.floor((expiresAt - Date.now()) / 1000);
+      if (hit && remaining >= 1) return publicResponse(hit, request, env, "HIT", remaining, expiresAt);
     } catch { cache = undefined; }
   }
   // Framework ISR remains disabled. The reviewed anonymous catalog render
@@ -70,11 +74,19 @@ export async function catalogResponse(request, env, ctx, render, cacheStorage = 
   const renderHeaders = new Headers(request.headers);
   renderHeaders.delete(PUBLIC_RENDER_TTL_HEADER);
   if (eligible) renderHeaders.set(PUBLIC_RENDER_TTL_HEADER, String(ttl));
-  const response = await render(new Request(request, {headers: renderHeaders}));
-  if (cache && cacheableCatalogResponse(response)) {
-    const result = publicResponse(response, request, env, "MISS", ttl);
-    ctx.waitUntil(cache.put(request, result.clone()).catch(() => {}));
-    return result;
+  let response = await render(new Request(request, {headers: renderHeaders}));
+  if (cache && cacheableCatalogResponse(response) && !dataContext?.failed) {
+    // Finish anonymous HTML so all streamed readers have recorded their expiry.
+    // RSC keeps streaming and never enters this response cache.
+    const body = await response.arrayBuffer();
+    response = new Response(body, {status:response.status,statusText:response.statusText,headers:response.headers});
+    const expiresAt = Math.min(Date.now() + ttl * 1000, dataContext?.expiresAt ?? Infinity);
+    const remaining = Math.floor((expiresAt - Date.now()) / 1000);
+    if (remaining >= 1) {
+      const result = publicResponse(response, request, env, "MISS", remaining, expiresAt);
+      ctx.waitUntil(cache.put(request, result.clone()).catch(() => {}));
+      return result;
+    }
   }
   const result = protectStagingResponse(response);
   result.headers.set("x-catalog-cache", "BYPASS");

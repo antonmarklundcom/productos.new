@@ -7,6 +7,8 @@ import { serveCatalogDemo } from "./catalog-demo.mjs";
 import { getNativeDb, withD1Database } from "./d1/database";
 import { d1StagingRoute, protectStagingResponse } from "./d1/policy.mjs";
 import { catalogResponse, productionPublicRequest } from "./d1/public-response.mjs";
+import { catalogOnly } from "./d1/catalog-capabilities";
+import { publicReadContext } from "./d1/public-data-cache.mjs";
 import { canonicalDomainResponse } from "./catalog-domain.mjs";
 import { handleAdminRecovery } from "./d1/admin-recovery.mjs";
 export * from "vinext/server/fetch-handler";
@@ -22,13 +24,24 @@ const previewWorker = {
       if (!env.DB) return protectStagingResponse(Response.json({ok:false,db:false,mode:"d1-staging"},{status:503}));
       const recovery = await handleAdminRecovery(request, env, ctx);
       if (recovery) return recovery;
+      const publicEnv = catalogOnly ? env : {...env, WORKERS_PUBLIC_CACHE_SECONDS: "0"};
+      const publicCatalog = publicReadContext(request, publicEnv, ctx);
       return withD1Database(env.DB, async () => {
         if (["/api/health","/health"].includes(new URL(request.url).pathname)) {
           const [row] = await getNativeDb().all(sql`SELECT (SELECT COUNT(*) FROM products) products, (SELECT COUNT(*) FROM product_images) images, (SELECT COUNT(*) FROM categories) categories`);
           return protectStagingResponse(Response.json({ok:true,db:true,mode:"d1-staging",counts:row,cron:false}));
         }
-        return catalogResponse(request, env, ctx, (renderRequest) => app.fetch(renderRequest,env,ctx));
-      }, env.SESSION_SECRET, env);
+        const response = await catalogResponse(request, publicEnv, ctx, (renderRequest) => app.fetch(renderRequest,env,ctx), globalThis.caches, publicCatalog);
+        if (env.WORKERS_PUBLIC_DIAGNOSTICS !== "true") return response;
+        // Preview-only opt-in: finish RSC to observe late readers. Do not enable
+        // this for normal shoppers: it deliberately buffers diagnostic responses.
+        const body = await response.arrayBuffer();
+        const headers = new Headers(response.headers);
+        headers.set("x-catalog-public-loads", String(publicCatalog.loads.length));
+        const timings = publicCatalog.loads.map((load,index) => `catalog_${load.reader}_${index};dur=${load.durationMs}`).join(", ");
+        if (timings) headers.append("server-timing", timings);
+        return new Response(body, {status: response.status,statusText:response.statusText,headers});
+      }, env.SESSION_SECRET, {...env, PUBLIC_CATALOG: publicCatalog});
     }
     return handlePreviewRequest(request, async (anonymous) => {
       if (!env.HYPERDRIVE && env.PREVIEW_CATALOG_SNAPSHOT === "true")
