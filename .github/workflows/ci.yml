@@ -132,6 +132,12 @@ jobs:
       - run: pnpm test
         timeout-minutes: 8
 
+      # The live Cloudflare Workers catalogue (workers/**) has its own node:test
+      # suite; without this step it only ran after merge.
+      - name: Workers tests
+        run: pnpm test:workers-preview
+        timeout-minutes: 5
+
       - run: pnpm build
 
       - name: Isolated Hostinger standalone runtime

@@ -48,6 +48,9 @@ function publicResponse(response, request, env, state, ttl, expiresAt) {
   headers.set("x-catalog-cache", state);
   headers.set("x-catalog-expires-at", String(expiresAt));
   headers.set("date", new Date().toUTCString());
+  // A HIT replays the stored render: its x-request-id belongs to the first
+  // visitor and would point log correlation at the wrong request.
+  if (state === "HIT") headers.delete("x-request-id");
   if (productionPublicRequest(request, env)) headers.delete("x-robots-tag");
   else headers.set("x-robots-tag", "noindex, nofollow, noarchive");
   return new Response(response.body, {status:response.status,statusText:response.statusText,headers});

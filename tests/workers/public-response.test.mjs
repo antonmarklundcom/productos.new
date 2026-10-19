@@ -63,3 +63,12 @@ test("current Vinext Vary fields are safe only when every corresponding request 
  assert.equal(cacheableCatalogResponse(new Response("html",{headers:{"content-type":"text/html",vary:fields.join(", ")}})),true);
  for(const field of fields)assert.equal(anonymousCatalogRequest(request(url,{[field]:"variant"})),false);
 });
+
+test("a cache HIT does not replay the first visitor's x-request-id",async()=>{
+ const cache=memoryCache(),pending=[],ctx={waitUntil:p=>pending.push(p)};
+ const render=async()=>new Response("catalog",{headers:{"content-type":"text/html","x-request-id":"first-visitor-id"}});
+ const first=await catalogResponse(request(),env,ctx,render,cache);
+ assert.equal(first.headers.get("x-catalog-cache"),"MISS");assert.equal(first.headers.get("x-request-id"),"first-visitor-id");await Promise.all(pending);
+ const second=await catalogResponse(request(),env,ctx,render,cache);
+ assert.equal(second.headers.get("x-catalog-cache"),"HIT");assert.equal(second.headers.has("x-request-id"),false);
+});
