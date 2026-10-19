@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
-import vinext from "vinext";
+import vinext, { type NextConfig as VinextNextConfig } from "vinext";
+import type { NextConfig } from "next";
 import { cloudflare } from "@cloudflare/vite-plugin";
 import path from "node:path";
 import { readFileSync } from "node:fs";
@@ -7,6 +8,28 @@ import { publicBuildDefines } from "./workers/public-build-env.mjs";
 import { d1StagingPlugin } from "./workers/d1/build-plugin.mjs";
 import { PUBLIC_PREFETCH_CACHE_SECONDS } from "./workers/d1/public-cache-budget.mjs";
 import nextConfig from "./next.config";
+
+// Hostinger's builder re-types next.config.ts as a plain Next `NextConfig`
+// (env values may be `undefined`, `typescript` has no index signature, ...),
+// which vinext's own `NextConfig` rejects. Keep only string env values and
+// hand vinext its config type at this one boundary, so the type check passes
+// both there and locally.
+const sharedNextConfig: NextConfig = nextConfig;
+const workersNextConfig = {
+  ...sharedNextConfig,
+  env: Object.fromEntries(
+    Object.entries(sharedNextConfig.env ?? {}).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    ),
+  ),
+  experimental: {
+    ...sharedNextConfig.experimental,
+    staleTimes: { static: PUBLIC_PREFETCH_CACHE_SECONDS, dynamic: 0 },
+  },
+  // Keep shared headers/env, but Workers emits its own bundle. Node standalone
+  // packaging tries to resolve Cloudflare virtual Wasm modules as npm packages.
+  output: undefined,
+} as VinextNextConfig;
 
 export default defineConfig({
   define: publicBuildDefines(readFileSync(path.resolve(import.meta.dirname, "wrangler.jsonc"), "utf8"), process.env),
@@ -22,9 +45,7 @@ export default defineConfig({
           return code.replace(/export const revalidate = \d+;/g, "export const revalidate = 0;");
       },
     },
-    // Keep shared headers/env, but Workers emits its own bundle. Node standalone
-    // packaging tries to resolve Cloudflare virtual Wasm modules as npm packages.
-    vinext({ nextConfig: { ...nextConfig, experimental: {...nextConfig.experimental, staleTimes: {static: PUBLIC_PREFETCH_CACHE_SECONDS, dynamic: 0}}, output: undefined } }),
+    vinext({ nextConfig: workersNextConfig }),
     cloudflare({
       viteEnvironment: {
         name: "rsc",
