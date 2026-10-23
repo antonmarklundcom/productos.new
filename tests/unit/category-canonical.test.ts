@@ -7,9 +7,10 @@ vi.mock("@/db/queries", () => ({
   }),
   getCategories: async () => [],
   getBrands: async () => [],
-  getCategoryProducts: vi.fn(),
+  getCategoryProducts: vi.fn(async () => ({ products: [], total: 24, page: 1, perPage: 12, totalPages: 2 })),
   isCatalogSort: vi.fn(),
 }));
+import { getCategoryProducts } from "@/db/queries";
 import { generateMetadata } from "@/app/categoria/[slug]/page";
 describe("category pagination canonicals", () => {
   afterEach(() => vi.unstubAllEnvs());
@@ -38,4 +39,17 @@ describe("category pagination canonicals", () => {
       expect(metadata.robots).toEqual(robots);
     }
   );
+});
+
+it.each([{ page: "3" }, { page: "999" }, { page: "2", marca: "few" }])("rejects impossible category metadata %j", async (query) => {
+  vi.mocked(getCategoryProducts).mockResolvedValueOnce({ products: [], total: 1, page: Number(query.page), perPage: 12, totalPages: 1 });
+  await expect(generateMetadata({ params: Promise.resolve({ slug: "rings" }), searchParams: Promise.resolve(query) })).rejects.toThrow();
+});
+it("marks a failed category reader unavailable for indexing", async () => {
+  vi.mocked(getCategoryProducts).mockRejectedValueOnce(new Error("private synthetic database detail"));
+  const diagnostic = vi.spyOn(console, "error").mockImplementation(() => {});
+  const metadata = await generateMetadata({ params: Promise.resolve({ slug: "rings" }), searchParams: Promise.resolve({page: "999"}) });
+  expect(metadata.robots).toEqual({ index: false, follow: true });
+  expect(diagnostic).toHaveBeenCalledWith("CATEGORY_PRODUCTS_UNAVAILABLE");
+  diagnostic.mockRestore();
 });

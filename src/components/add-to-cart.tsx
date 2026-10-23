@@ -1,5 +1,6 @@
 "use client";
 
+import { effectiveSaleMode } from "@/lib/catalog-policy";
 import { useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 
@@ -44,8 +45,9 @@ export function AddToCart({
   productUrl?: string | null;
   inquiryLinks?: Record<number, string>;
 }) {
+  const saleMode = effectiveSaleMode(product.saleMode);
   const purchasable =
-    (product.saleMode ?? "stock") === "stock" && product.showPrice !== false;
+    saleMode === "stock" && product.showPrice !== false;
   const add = useCart((state) => state.add);
   const firstAvailable = product.variants.find(
     (variant) => variant.available > 0
@@ -132,7 +134,7 @@ export function AddToCart({
           ) : (
             <span className="text-sm">
               {t(
-                product.saleMode === "enquiry"
+                saleMode === "enquiry"
                   ? "producto.soloConsulta"
                   : "producto.muestra"
               )}
@@ -192,7 +194,7 @@ export function AddToCart({
           ) : null}
         </div>
       ) : selected &&
-        product.saleMode === "enquiry" &&
+        saleMode === "enquiry" &&
         inquiryLinks[selected.id] ? (
         <a
           href={inquiryLinks[selected.id]}

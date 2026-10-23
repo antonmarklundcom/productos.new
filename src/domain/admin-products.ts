@@ -15,6 +15,7 @@ import type {
   AdminProductMode,
 } from "@/lib/admin-product-sort";
 import { EXPORT_MAX_ROWS } from "@/lib/csv";
+import { literalContains } from "@/lib/sql-like";
 import { parseRef } from "@/lib/imagenes-r2";
 
 import type { MessageKey, Params } from "@/i18n";
@@ -230,10 +231,6 @@ function costExpressions(ready: boolean) {
   };
 }
 
-function escapeLike(term: string): string {
-  return term.replace(/[\\%_]/g, (char) => `\\${char}`);
-}
-
 /** El filtro del listado, compartido con el export para que bajen lo mismo. */
 function productWhere(options: AdminProductFilters, costsReady = false) {
   const term = options.search?.trim();
@@ -241,7 +238,7 @@ function productWhere(options: AdminProductFilters, costsReady = false) {
   const variantCount = sql`(SELECT COUNT(*) FROM \`variants\` AS vc WHERE vc.\`product_id\` = \`products\`.\`id\`)`;
   return and(
     term
-      ? sql`(${products.name} LIKE ${`%${escapeLike(term)}%`} OR ${products.slug} LIKE ${`%${escapeLike(term)}%`} OR CAST(${products.id} AS CHAR) = ${term} OR ${products.dropiUrl} LIKE ${`%${escapeLike(term)}%`} OR EXISTS (SELECT 1 FROM \`variants\` AS sv WHERE sv.\`product_id\` = \`products\`.\`id\` AND sv.\`sku\` LIKE ${`%${escapeLike(term)}%`}))`
+      ? sql`(${literalContains(products.name, term)} OR ${literalContains(products.slug, term)} OR CAST(${products.id} AS CHAR) = ${term} OR ${literalContains(products.dropiUrl, term)} OR EXISTS (SELECT 1 FROM \`variants\` AS sv WHERE sv.\`product_id\` = \`products\`.\`id\` AND ${literalContains(sql`sv.\`sku\``, term)}))`
       : undefined,
     options.categoryId
       ? eq(products.categoryId, options.categoryId)

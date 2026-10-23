@@ -4,7 +4,7 @@ import { categories, productImages, products, variants } from "./schema";
 import { parseCatalogo } from "../../src/domain/catalog-import";
 import type { CatalogImportPlan } from "../../src/domain/catalog-import-plan";
 import { catalogDuplicateWarnings } from "../../src/lib/catalog-duplicates";
-import { slugify } from "../../src/lib/slug";
+import { catalogCategoryAliases, resolveCatalogCategory } from "./catalog-category-identity";
 
 /** Four bounded reads rather than thousands of SQL placeholders. */
 export async function buildCatalogImportPlan(csvText:string):Promise<CatalogImportPlan>{
@@ -16,15 +16,15 @@ export async function buildCatalogImportPlan(csvText:string):Promise<CatalogImpo
     db.select({sku:variants.sku,productSlug:products.slug}).from(variants).innerJoin(products,eq(variants.productId,products.id)),
     db.select().from(productImages),
   ]);
-  const categoryIdPorSlug=new Map<string,number>();
-  for(const row of categoryRows){categoryIdPorSlug.set(row.slug,row.id);categoryIdPorSlug.set(slugify(row.name),row.id);}
+  const categoryIdPorSlug=catalogCategoryAliases(categoryRows).ids;
   const owner=new Map(variantRows.map(row=>[row.sku,row.productSlug]));
   const existing=new Map(productRows.map(row=>[row.slug,row]));
   const refs=new Map<number,string[]>();
   for(const row of photos){const list=refs.get(row.productId)??[];list.push(row.cloudinaryId);refs.set(row.productId,list);}
   const newCategories=new Map<string,string>();let variantsNew=0,variantsUpdate=0,photosNew=0;
   for(const p of parsed.productos){
-    const category=slugify(p.categoryName);if(!categoryIdPorSlug.has(category))newCategories.set(category,p.categoryName);
+    try { const category=resolveCatalogCategory(p.categoryName,categoryRows);if(category.id===undefined)newCategories.set(category.slug,p.categoryName); } catch(error) { parsed.errores.push((error as Error).message); }
+    if(p.saleMode==="stock")parsed.errores.push(`${p.name}: este catálogo admite consulta o muestra; la compra con stock no está habilitada.`);
     for(const v of p.variants){if(owner.has(v.sku)){variantsUpdate++;if(owner.get(v.sku)!==p.slug)parsed.errores.push(`El SKU ${v.sku} pertenece a otro producto.`);}else variantsNew++;}
     if(!(refs.get(existing.get(p.slug)?.id??-1)?.length)){
       photosNew+=p.fotos.length;

@@ -21,3 +21,31 @@ export function protectStagingResponse(response) {
   headers.set("cache-control", "private, no-store");
   return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
 }
+
+/** Bound actual bytes before Vinext's form/action parser, regardless of headers. */
+export async function boundedAdminRequest(request) {
+  if (request.method !== "POST" || !request.body) return request;
+  const reader = request.body.getReader();
+  const chunks = [];
+  let size = 0;
+  try {
+    while (true) {
+      const part = await reader.read();
+      if (part.done) break;
+      size += part.value.byteLength;
+      if (size > 1048576) {
+        await reader.cancel().catch(() => {});
+        return new Response("Request too large.", {status:413});
+      }
+      chunks.push(part.value);
+    }
+  } catch {
+    return new Response("Invalid request body.", {status:400});
+  } finally { reader.releaseLock(); }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  const headers = new Headers(request.headers);
+  headers.set("content-length", String(size));
+  return new Request(request, {body:bytes, headers});
+}

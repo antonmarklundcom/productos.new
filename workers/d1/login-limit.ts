@@ -1,11 +1,29 @@
 import { sql } from "drizzle-orm";
 import { getNativeDb } from "./database";
+import {
+  MAX_LOGIN_WINDOW_MS,
+  pruneLoginLimits,
+} from "./login-limit-policy.mjs";
 export { LOGIN_LIMIT, LOGIN_WINDOW_MS } from "../../src/lib/rate-limit";
 type Result = { ok: boolean; remaining: number; retryAfterSeconds: number };
-const keyDigest = async (value: string) => Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)))).map((n) => n.toString(16).padStart(2, "0")).join("");
+const keyDigest = async (value: string) =>
+  Array.from(
+    new Uint8Array(
+      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))
+    )
+  )
+    .map((n) => n.toString(16).padStart(2, "0"))
+    .join("");
 
 /** Shared atomic counters, including email and IP, across Worker isolates. */
-export async function rateLimit(key: string, options: {limit: number; windowMs: number}, now = Date.now()): Promise<Result> {
+export async function rateLimit(
+  key: string,
+  options: { limit: number; windowMs: number },
+  now = Date.now()
+): Promise<Result> {
+  if (options.windowMs > MAX_LOGIN_WINDOW_MS || options.windowMs <= 0)
+    throw new Error("D1_LOGIN_LIMIT_WINDOW_UNSUPPORTED");
+  await pruneLoginLimits(getNativeDb().$client, now);
   const digest = await keyDigest(key);
   const [row] = await getNativeDb().all<{ hits: number; starts: number }>(sql`
     INSERT INTO workers_login_limits (key, starts, hits)
@@ -16,10 +34,21 @@ export async function rateLimit(key: string, options: {limit: number; windowMs: 
     RETURNING hits, starts
   `);
   if (!row) throw new Error("D1_STAGING_LOGIN_LIMIT_UNAVAILABLE");
-  return {ok: row.hits <= options.limit, remaining: Math.max(0, options.limit-row.hits), retryAfterSeconds: row.hits <= options.limit ? 0 : Math.max(1, Math.ceil((row.starts + options.windowMs-now)/1000))};
+  return {
+    ok: row.hits <= options.limit,
+    remaining: Math.max(0, options.limit - row.hits),
+    retryAfterSeconds:
+      row.hits <= options.limit
+        ? 0
+        : Math.max(1, Math.ceil((row.starts + options.windowMs - now) / 1000)),
+  };
 }
 export async function resetRateLimitKey(key: string) {
   const digest = await keyDigest(key);
-  await getNativeDb().run(sql`DELETE FROM workers_login_limits WHERE key = ${digest}`);
+  await getNativeDb().run(
+    sql`DELETE FROM workers_login_limits WHERE key = ${digest}`
+  );
 }
-export function clientIp(headers: Headers) { return headers.get("cf-connecting-ip") || "local-preview"; }
+export function clientIp(headers: Headers) {
+  return headers.get("cf-connecting-ip") || "local-preview";
+}

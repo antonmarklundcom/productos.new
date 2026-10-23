@@ -100,9 +100,14 @@ ${end}`);
         code = code.replace('  getCategoryProducts,\n', '');
       }
       if(file.endsWith("/admin/login/page.tsx"))code=code.replace("<LoginForm next={next} />", "<LoginForm next={next} passwordRecoveryAvailable />");
+      if(file.endsWith("/lib/admin-guard.ts")){
+        const fallback='redirect("/admin/pedidos")';
+        if(!code.includes(fallback))throw new Error("D1 admin capability fallback source drift");
+        code=code.replace(fallback, 'redirect("/admin/estado?seccion=pedidos")');
+      }
       if(file.endsWith("/actions/admin-auth.ts")){
         code=code.replace('from "@/lib/rate-limit"','from "../../../workers/d1/login-limit"');
-        code=code.replaceAll("= rateLimit(","= await rateLimit(").replace(/^(\s*)resetRateLimitKey\(/gm,"$1await resetRateLimitKey(");
+        code=code.replaceAll("= rateLimit(","= await rateLimit(").replaceAll("? rateLimit(","? await rateLimit(").replace(/^(\s*)resetRateLimitKey\(/gm,"$1await resetRateLimitKey(");
       }
       if(file.endsWith("/actions/admin-products.ts")){
         const start=code.indexOf("    await db.transaction(async (tx) => {");

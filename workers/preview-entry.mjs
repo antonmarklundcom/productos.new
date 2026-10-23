@@ -5,7 +5,7 @@ import { handlePreviewRequest } from "./preview-policy.mjs";
 import { PreviewDatabaseError, withPreviewDatabase } from "./hyperdrive-database";
 import { serveCatalogDemo } from "./catalog-demo.mjs";
 import { getNativeDb, withD1Database } from "./d1/database";
-import { d1StagingRoute, protectStagingResponse } from "./d1/policy.mjs";
+import { d1StagingRoute, protectStagingResponse, boundedAdminRequest } from "./d1/policy.mjs";
 import { catalogResponse, productionPublicRequest } from "./d1/public-response.mjs";
 import { catalogOnly } from "./d1/catalog-capabilities";
 import { publicReadContext } from "./d1/public-data-cache.mjs";
@@ -20,6 +20,9 @@ const previewWorker = {
     if (env.WORKERS_D1_STAGING === "true") {
       const blocked = d1StagingRoute(request);
       if (blocked) return protectStagingResponse(blocked);
+      const bounded = await boundedAdminRequest(request);
+      if (bounded instanceof Response) return protectStagingResponse(bounded);
+      request = bounded;
       if (new URL(request.url).pathname === "/robots.txt" && !productionPublicRequest(request, env)) return protectStagingResponse(new Response("User-agent: *\nDisallow: /\n"));
       if (!env.DB) return protectStagingResponse(Response.json({ok:false,db:false,mode:"d1-staging"},{status:503}));
       const recovery = await handleAdminRecovery(request, env, ctx);

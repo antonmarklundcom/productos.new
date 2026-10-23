@@ -1,3 +1,4 @@
+import { effectiveSaleMode } from "@/lib/catalog-policy";
 import { productInquiryLinks } from "@/domain/product-inquiries";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -205,7 +206,7 @@ export default async function ProductPage({ params }: { params: Params }) {
       )
       .filter((src): src is string => src !== null),
     variants: product.variants,
-    saleMode: product.saleMode,
+    saleMode: effectiveSaleMode(product.saleMode),
     showPrice: product.showPrice,
     rating,
     // Envío y devoluciones para Google, sólo con lo que el dueño cargó.
@@ -332,7 +333,7 @@ export default async function ProductPage({ params }: { params: Params }) {
             </div>
           ) : null}
 
-          {(product.saleMode ?? "stock") === "stock" &&
+          {effectiveSaleMode(product.saleMode) === "stock" &&
           product.showPrice !== false ? (
             <dl className="border-border text-muted-foreground mt-6 grid grid-cols-2 gap-2 border-t pt-6 text-sm">
               <dt>{t("producto.iva")}</dt>
@@ -414,7 +415,7 @@ export default async function ProductPage({ params }: { params: Params }) {
       ) : null}
 
       {ajustes.vidriera.barraCompraMovil &&
-      (product.saleMode ?? "stock") === "stock" &&
+      effectiveSaleMode(product.saleMode) === "stock" &&
       product.showPrice !== false &&
       product.variants.length > 0 ? (
         <StickyBuyBar

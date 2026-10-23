@@ -12,7 +12,7 @@ import {catalogResponse} from "../../workers/d1/public-response.mjs";
 function fixture() {
  const sqlite = new DatabaseSync(":memory:");
  sqlite.exec("PRAGMA foreign_keys=ON");
- for (const name of ["0000_useful_mattie_franklin", "0001_fancy_warhawk", "0002_boring_roulette"])
+ for (const name of ["0000_useful_mattie_franklin", "0001_fancy_warhawk", "0002_boring_roulette","0003_oval_masked_marvel"])
    sqlite.exec(readFileSync(`workers/d1/migrations/${name}.sql`, "utf8"));
  sqlite.exec("PRAGMA foreign_keys=ON");
  sqlite.exec(`INSERT INTO orders(id,order_number,access_token,customer_name,customer_phone,ship_city,ship_address,payment_method)
@@ -223,7 +223,7 @@ async function assertShuffledOrder(db,rows) {
 test("explicit ordering survives shuffled 60-product input, price ties and two pages in SQLite",async()=>{
  const sqlite=new DatabaseSync(":memory:");
  try {
-   for(const name of ["0000_useful_mattie_franklin","0001_fancy_warhawk","0002_boring_roulette"])
+   for(const name of ["0000_useful_mattie_franklin","0001_fancy_warhawk","0002_boring_roulette","0003_oval_masked_marvel"])
      sqlite.exec(readFileSync(`workers/d1/migrations/${name}.sql`,"utf8"));
    const {rows,statements}=shuffledOrderingFixture();for(const statement of statements)sqlite.exec(statement);
    // Discourage relying on today's incidental table scan/subquery ordering.
@@ -237,7 +237,7 @@ test("aggregate ORDER BY and ranked projection work on actual local D1 with 60 s
  const platform=await getPlatformProxy({configPath:"workers/d1/local-settings-test.wrangler.jsonc",persist:false});
  try {
    const db=platform.env.DB;
-   for(const name of ["0000_useful_mattie_franklin","0001_fancy_warhawk","0002_boring_roulette"])
+   for(const name of ["0000_useful_mattie_franklin","0001_fancy_warhawk","0002_boring_roulette","0003_oval_masked_marvel"])
      for(const statement of readFileSync(`workers/d1/migrations/${name}.sql`,"utf8").split("--> statement-breakpoint"))if(statement.trim())await db.prepare(statement).run();
    const {rows,statements}=shuffledOrderingFixture();
    // Keep each batch within the local D1 statement limit; never use remote bindings.

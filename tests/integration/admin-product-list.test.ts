@@ -271,6 +271,22 @@ describe.skipIf(!hasTestDb)("listAdminProducts", () => {
     expect(page.rows.map((row) => row.name)).toEqual(["Nuevo", "Viejo"]);
   });
 
+  it("matches literal wildcard, escape and backslash characters in both list and export", async () => {
+    const categoryId = await createCategory();
+    const id = await makeProduct({
+      name: String.raw`Cable A_B 100% !bang folder\name`,
+      categoryId,
+      variants: [{ pricePyg: 50_000, onHand: 3 }],
+    });
+    const other = await makeProduct({ name: "Cable AXB ordinary", categoryId, variants: [{ pricePyg: 50_000, onHand: 3 }] });
+    await getTestDb().update(variants).set({ sku: "USB_C_100%" }).where(eq(variants.productId, id));
+    for (const term of ["A_B", "100%", "USB_C_100%", "!bang", String.raw`folder\name`]) {
+      expect((await listAdminProducts({ search: term })).rows.map((row) => row.id)).toEqual([id]);
+      expect((await listVariantsForExport({ search: term })).map((row) => row.sku)).toEqual(["USB_C_100%"]);
+    }
+    expect((await listAdminProducts({ search: "Cable" })).rows.map((row) => row.id)).toEqual(expect.arrayContaining([id, other]));
+  });
+
   it("searches supplier IDs and SKUs and keeps combined publication/mode/price filters in the export", async () => {
     const categoryId = await createCategory();
     const id = await makeProduct({

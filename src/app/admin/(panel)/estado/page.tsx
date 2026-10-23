@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { requireAdminSession } from "@/lib/admin-guard";
+import { can } from "@/lib/permissions";
 import { catalogOnly } from "@/config/catalog-capabilities";
 import { notFound } from "next/navigation";
 
@@ -63,6 +65,7 @@ export default async function AvailabilityPage({
   searchParams: Promise<{ seccion?: string }>;
 }) {
   if (!catalogOnly) notFound();
+  const actor = await requireAdminSession();
   const { seccion } = await searchParams;
   const section =
     seccion && Object.hasOwn(sections, seccion) ? sections[seccion] : null;
@@ -88,12 +91,16 @@ export default async function AvailabilityPage({
         publicación, categorías y ajustes.
       </p>
       <div className="flex flex-wrap gap-4">
-        <Link href="/admin/productos" className="underline">
-          Gestionar productos
-        </Link>
-        <Link href="/admin/categorias" className="underline">
-          Gestionar categorías
-        </Link>
+        {can(actor.role, "productos") && (
+          <Link href="/admin/productos" className="underline">
+            Gestionar productos
+          </Link>
+        )}
+        {can(actor.role, "categorias") && (
+          <Link href="/admin/categorias" className="underline">
+            Gestionar categorías
+          </Link>
+        )}
         <Link href="/" className="underline">
           Ver tienda
         </Link>

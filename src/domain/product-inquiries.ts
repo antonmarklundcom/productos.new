@@ -1,3 +1,4 @@
+import { effectiveSaleMode } from "@/lib/catalog-policy";
 import type { CatalogProductDetail } from "@/db/queries";
 import { waLinkPublico } from "@/lib/comercio";
 import { siteOrigin } from "@/lib/site-url";
@@ -7,7 +8,7 @@ import { t } from "@/i18n";
 export async function productInquiryLinks(
   product: CatalogProductDetail
 ): Promise<Record<number, string>> {
-  if (product.saleMode !== "enquiry") return {};
+  if (effectiveSaleMode(product.saleMode) !== "enquiry") return {};
   const origin = siteOrigin();
   const links: Record<number, string> = {};
   for (const variant of product.variants) {

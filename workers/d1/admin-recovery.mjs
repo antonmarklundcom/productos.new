@@ -1,13 +1,15 @@
 import bcrypt from 'bcryptjs';
+import { MAX_LOGIN_WINDOW_MS, pruneLoginLimits } from './login-limit-policy.mjs';
 
 const TTL = 15 * 60 * 1000;
-const WINDOW = 60 * 60 * 1000;
+const WINDOW = MAX_LOGIN_WINDOW_MS;
 const GENERIC = 'Si hay una cuenta activa con ese email, recibirás un enlace válido por 15 minutos. Revisá también tu carpeta de spam.';
 const digest = async value => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))).map(n => n.toString(16).padStart(2, '0')).join('');
 const randomToken = () => Array.from(crypto.getRandomValues(new Uint8Array(32))).map(n => n.toString(16).padStart(2, '0')).join('');
 const escape = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 async function allow(db, key, maximum, now) {
+  await pruneLoginLimits(db, now);
   const result = await db.prepare(`INSERT INTO workers_login_limits (key, starts, hits) VALUES (?, ?, 1)
     ON CONFLICT(key) DO UPDATE SET hits = CASE WHEN starts + ? <= ? THEN 1 ELSE MIN(hits + 1, ?) END,
     starts = CASE WHEN starts + ? <= ? THEN ? ELSE starts END RETURNING hits`).bind(await digest(key), now, WINDOW, now, maximum + 1, WINDOW, now, now).first();
