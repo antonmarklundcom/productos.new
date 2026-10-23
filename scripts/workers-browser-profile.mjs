@@ -107,6 +107,12 @@ try {
           await page.waitForTimeout(250);
           const values = await page.evaluate(() => {
             const nav = performance.getEntriesByType("navigation")[0];
+            const imageSources = new Set(
+              [...document.images].flatMap((image) => [
+                image.currentSrc,
+                image.src,
+              ])
+            );
             return {
               ttfbMs: nav.responseStart - nav.requestStart,
               responseMs: nav.responseEnd - nav.requestStart,
@@ -115,12 +121,24 @@ try {
               cls: window.__fixtureVitals.cls,
               images: performance
                 .getEntriesByType("resource")
-                .filter((e) => e.initiatorType === "img")
+                .filter(
+                  (e) => e.initiatorType === "img" || imageSources.has(e.name)
+                )
                 .map((e) => ({
+                  initiator: e.initiatorType,
+                  status: e.responseStatus ?? null,
                   startMs: e.startTime,
                   durationMs: e.duration,
                   encodedBytes: e.encodedBodySize,
                 })),
+              imageElements: [...document.images].map((image) => ({
+                width: image.naturalWidth,
+                height: image.naturalHeight,
+                complete: image.complete,
+                loading: image.loading,
+                priority: image.fetchPriority,
+                top: image.getBoundingClientRect().top,
+              })),
               offscreenEager: [...document.images].filter(
                 (i) =>
                   i.loading !== "lazy" &&

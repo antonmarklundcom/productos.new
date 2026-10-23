@@ -5,7 +5,8 @@ const fixtureWorker = {
     const external = new URL(request.url);
     if (
       external.pathname.startsWith("/assets/") ||
-      external.pathname.startsWith("/_next/")
+      external.pathname.startsWith("/_next/") ||
+      external.pathname.startsWith("/placeholders/")
     )
       return env.ASSETS.fetch(request);
     const internal = new URL(

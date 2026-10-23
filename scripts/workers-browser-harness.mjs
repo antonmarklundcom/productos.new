@@ -75,7 +75,9 @@ export async function createHarness({
                       ? "text/javascript"
                       : target.endsWith(".css")
                         ? "text/css"
-                        : "application/octet-stream",
+                        : target.endsWith(".svg")
+                          ? "image/svg+xml"
+                          : "application/octet-stream",
                   },
                 });
               } catch {

@@ -11,7 +11,6 @@ jobs:
     env:
       CI: "true"
       WRANGLER_SEND_METRICS: "false"
-      WORKERS_BROWSER_OUTPUT: "${{ runner.temp }}/productos-workers-browser"
       WORKERS_BROWSER_REPORT: "test-results/workers-browser.json"
     steps:
       - uses: actions/checkout@v4
@@ -24,6 +23,8 @@ jobs:
       - run: pnpm build:vinext
       - run: pnpm test:workers-durability
       - run: pnpm test:workers-browser
+        env:
+          WORKERS_BROWSER_OUTPUT: ${{ runner.temp }}/productos-workers-browser
       - uses: actions/upload-artifact@v4
         if: always()
         with:

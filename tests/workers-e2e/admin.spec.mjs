@@ -169,11 +169,13 @@ test("authenticated owner/staff save readback, real multipart image and direct r
     }
     await ctx.close();
   }
-  const large = await page.request.post(h.baseURL + "/admin/productos/1", {
+  const large = await fetch(h.baseURL + "/admin/productos/1", {
+    method: "POST",
     headers: { origin: h.baseURL, "content-type": "application/octet-stream" },
-    data: Buffer.alloc(1048577),
+    body: Buffer.alloc(1048577),
   });
-  expect(large.status()).toBe(413);
+  expect(large.status).toBe(413);
+  await large.body?.cancel().catch(() => {});
 });
 
 test("catalog import preview and confirm use actual client action references", async ({
