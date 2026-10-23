@@ -55,3 +55,24 @@ it("keeps the final valid search page reachable", async () => {
   expect(screen.getByRole("link", {name: /anterior/i})).toHaveAttribute("href", "/buscar?q=cable&page=1");
   expect(screen.queryByRole("link", {name: /siguiente/i})).toBeNull();
 });
+
+it("keeps a search outage available on a high page", async () => {
+  readers.search.mockRejectedValueOnce(new Error("SECRET SQL synthetic"));
+  const outage = render(await SearchPage({ searchParams: Promise.resolve({q: "cable", page: "999"}) }));
+  expect(screen.getByText("El catálogo todavía no está disponible.")).toBeInTheDocument();
+  expect(outage.container.textContent).not.toContain("SECRET SQL");
+});
+it("skips the catalog read for short queries even on a high page", async () => {
+  readers.search.mockClear();
+  const props = { searchParams: Promise.resolve({q: " a ", page: "999"}) };
+  render(await SearchPage(props));
+  expect(readers.search).not.toHaveBeenCalled();
+  expect(screen.queryByRole("navigation")).toBeNull();
+  expect(screen.queryByText("El catálogo todavía no está disponible.")).toBeNull();
+});
+it("parses the first query values and preserves the encoded search in continuation links", async () => {
+  readers.search.mockResolvedValueOnce({ products: [{id: 1, name: "Cable"}], total: 41, page: 1, totalPages: 2 });
+  render(await SearchPage({ searchParams: Promise.resolve({q: [" cable & usb ", "ignored"], page: ["invalid", "999"]}) }));
+  expect(readers.search).toHaveBeenLastCalledWith("cable & usb", {page: 1});
+  expect(screen.getByRole("link", {name: /siguiente/i})).toHaveAttribute("href", "/buscar?q=cable%20%26%20usb&page=2");
+});
