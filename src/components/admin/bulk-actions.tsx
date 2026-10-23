@@ -1,5 +1,6 @@
 "use client";
 
+import { catalogCapabilities } from "@/lib/catalog-policy";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -85,6 +86,7 @@ export function BulkActionsBar({
         </Button>
       </div>
 
+      {!catalogCapabilities.bulkProducts ? <p className="text-muted-foreground text-xs">Las acciones masivas y la duplicación no están habilitadas. Podés editar cada producto individualmente.</p> : null}
       {error ? (
         <p role="alert" className="border-destructive/40 text-destructive rounded-lg border p-2 text-xs">
           {error}
@@ -97,7 +99,7 @@ export function BulkActionsBar({
           size="sm"
           variant="outline"
           data-testid={TESTIDS.adminBulkActivate}
-          disabled={isPending}
+          disabled={isPending || !catalogCapabilities.bulkProducts}
           onClick={() => setActive(true)}
         >
           {isPending ? t("panel.masivo.aplicando") : t("panel.masivo.activar")}
@@ -107,7 +109,7 @@ export function BulkActionsBar({
           size="sm"
           variant="outline"
           data-testid={TESTIDS.adminBulkDeactivate}
-          disabled={isPending}
+          disabled={isPending || !catalogCapabilities.bulkProducts}
           onClick={() => setActive(false)}
         >
           {isPending ? t("panel.masivo.aplicando") : t("panel.masivo.desactivar")}
@@ -119,7 +121,7 @@ export function BulkActionsBar({
           value={categoryId}
           onChange={(event) => setCategoryId(event.target.value)}
           className="border-input bg-background h-9 rounded-md border px-2 text-sm"
-          disabled={isPending}
+          disabled={isPending || !catalogCapabilities.bulkProducts}
         >
           <option value="">{t("panel.masivo.elegiCategoria")}</option>
           {categories.map((category) => (
@@ -133,13 +135,13 @@ export function BulkActionsBar({
           size="sm"
           variant="outline"
           data-testid={TESTIDS.adminBulkMoveCategoryConfirm}
-          disabled={isPending || !categoryId}
+          disabled={isPending || !categoryId || !catalogCapabilities.bulkProducts}
           onClick={moveCategory}
         >
           {t("panel.masivo.moverConfirmar")}
         </Button>
 
-        {canBulkPrice ? (
+        {canBulkPrice && catalogCapabilities.bulkProducts ? (
           <BulkPriceDialog
             productIds={productIds}
             onApplied={() => {
@@ -175,7 +177,7 @@ export function DuplicateProductButton({ productId }: { productId: number }) {
         variant="outline"
         size="sm"
         data-testid={TESTIDS.adminProductDuplicate}
-        disabled={isPending}
+        disabled={isPending || !catalogCapabilities.bulkProducts}
         onClick={() => {
           setError(null);
           startTransition(async () => {
@@ -191,6 +193,7 @@ export function DuplicateProductButton({ productId }: { productId: number }) {
       >
         {isPending ? t("panel.producto.duplicando") : t("panel.producto.duplicar")}
       </Button>
+      {!catalogCapabilities.bulkProducts ? <p className="text-muted-foreground text-xs">La duplicación no está habilitada en este catálogo.</p> : null}
     </div>
   );
 }

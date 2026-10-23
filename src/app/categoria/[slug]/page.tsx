@@ -85,6 +85,8 @@ export async function generateMetadata({
   const parsedPage = Number(first(query.page));
   const page =
     Number.isSafeInteger(parsedPage) && parsedPage > 1 ? parsedPage : 1;
+  const { result, unavailable } = await loadProducts(slug, JSON.stringify(query));
+  if (!unavailable && page > result.totalPages) notFound();
   const filtered = Object.keys(query).some(
     (key) => key !== "page" && Boolean(first(query[key]))
   );
@@ -98,7 +100,7 @@ export async function generateMetadata({
   return {
     title: category.name,
     description,
-    ...(filtered ? { robots: { index: false, follow: true } } : {}),
+    ...(filtered || unavailable ? { robots: { index: false, follow: true } } : {}),
     ...(canonical ? { alternates: { canonical } } : {}),
   };
 }
@@ -106,6 +108,24 @@ export async function generateMetadata({
 function first(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
+
+// Request memoization also lets metadata validate the exact filtered page.
+const loadProducts = cache(async (slug: string, serializedQuery: string) => {
+  const query = JSON.parse(serializedQuery) as Awaited<SearchParams>;
+  const requestedPage = Number(first(query.page));
+  const page = Number.isSafeInteger(requestedPage) && requestedPage > 1 ? requestedPage : 1;
+  const sort = first(query.orden);
+  const { min, max } = parsePriceRange(first(query.precio));
+  try {
+    const result = await getCategoryProducts({ categorySlug: slug, brand: first(query.marca),
+      minPricePyg: min, maxPricePyg: max, sort: isCatalogSort(sort) ? sort : "relevancia", page });
+    return { result, unavailable: false };
+  } catch {
+    // Fixed diagnostic only: database/SQL details and user query stay private.
+    console.error("CATEGORY_PRODUCTS_UNAVAILABLE");
+    return { result: { products: [], total: 0, page, perPage: 12, totalPages: 1 }, unavailable: true };
+  }
+});
 
 export default async function CategoryPage({
   params,
@@ -126,32 +146,11 @@ export default async function CategoryPage({
   // encabezado de texto de siempre (plan-operacion §6.3).
   const categoryImageUrl = productImageUrl(category.imageCloudinaryId, "hero");
 
-  const sortParam = first(query.orden);
-  const { min, max } = parsePriceRange(first(query.precio));
-  const requestedPage = Number(first(query.page));
-  const page =
-    Number.isSafeInteger(requestedPage) && requestedPage > 1
-      ? requestedPage
-      : 1;
-
   const { vidriera } = await getStoreSettings();
-  const [result, brands] = await Promise.all([
-    getCategoryProducts({
-      categorySlug: slug,
-      brand: first(query.marca),
-      minPricePyg: min,
-      maxPricePyg: max,
-      sort: isCatalogSort(sortParam) ? sortParam : "relevancia",
-      page,
-    }).catch(() => ({
-      products: [],
-      total: 0,
-      page: 1,
-      perPage: 12,
-      totalPages: 1,
-    })),
-    getBrands(slug).catch(() => []),
+  const [{ result, unavailable }, brands] = await Promise.all([
+    loadProducts(slug, JSON.stringify(query)), getBrands(slug).catch(() => []),
   ]);
+  if (!unavailable && result.page > result.totalPages) notFound();
 
   const buildPageHref = (target: number) => {
     const next = new URLSearchParams();
@@ -210,10 +209,10 @@ export default async function CategoryPage({
           {category.name}
         </h1>
       </div>
-      <p className="text-muted-foreground mt-1 text-sm">
+      {!unavailable ? <p className="text-muted-foreground mt-1 text-sm">
         {tPlural("catalogo.productos", result.total)} ·{" "}
         {t("catalogo.ivaIncluidoNota")}
-      </p>
+      </p> : null}
 
       {/* Sin foto ni descripción cargadas (O7, `/admin/categorias`), esta
           página queda exactamente igual que antes de esta sección. */}
@@ -247,7 +246,13 @@ export default async function CategoryPage({
         </Suspense>
       </div>
 
-      {result.products.length === 0 ? (
+      {unavailable ? (
+        <div role="status" className="mt-8 rounded-xl border p-10 text-center">
+          <p>El catálogo no está disponible temporalmente.</p>
+          <p className="mt-1 text-sm">Volvé a intentarlo en unos momentos.</p>
+          <Button asChild variant="outline" className="mt-4"><a href={buildPageHref(result.page)}>Reintentar</a></Button>
+        </div>
+      ) : result.products.length === 0 ? (
         <div className="border-border mt-8 rounded-xl border border-dashed p-10 text-center">
           <p className="font-medium">{t("categoria.sinResultados")}</p>
           <p className="text-muted-foreground mt-1 text-sm">

@@ -34,7 +34,7 @@ export async function applyD1CatalogImport(data:FormData):Promise<CatalogImportA
         newPhotos++;
       }
     }
-    const written=await writeD1CatalogBatch(db.$client,selected,data.get("pisarStock")==="true");refresh();
+    const written=await writeD1CatalogBatch(db.$client,selected,data.get("pisarStock")==="true",plan.categoriaIdPorSlug);refresh();
     return{ok:true,productosNuevos:plan.productosNuevos,productosActualizar:plan.productosActualizar,variantesNuevas:plan.variantesNuevas,variantesActualizar:plan.variantesActualizar,categoriasNuevas:plan.categoriasNuevas,pisaStock:data.get("pisarStock")==="true",fotosNuevas:plan.fotosNuevas,variantesEscritas:written.variantsWritten,fotosSubidas:newPhotos,fotosOmitidas:0,fotosFallidas:[],nextOffset:offset+selected.length<plan.productos.length?offset+selected.length:null,totalProducts:plan.productos.length};
   }catch(error){return{ok:false,errores:[adminActionError("applyCatalogImport",error).error]};}
 }

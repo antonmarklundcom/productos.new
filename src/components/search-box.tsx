@@ -3,7 +3,7 @@
 import { Search } from "lucide-react";
 import { catalogOnly } from "@/config/catalog-capabilities";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 
 import { sugerirProductos } from "@/app/actions/search-suggest";
 import type { SearchSuggestion } from "@/db/queries";
@@ -26,10 +26,29 @@ const DEBOUNCE_MS = 250;
  * para cerrar la lista; si no corre, el navegador hace exactamente lo mismo
  * con el `action`.
  */
+// One browser-local draft for the responsive header instances. URL changes
+// invalidate it immediately; renders never write state or erase same-URL typing.
+let searchDraft: { query: string; value: string } | null = null;
+const draftListeners = new Set<() => void>();
+const subscribeDraft = (listener: () => void) => { draftListeners.add(listener); return () => { draftListeners.delete(listener); }; };
+const getDraft = () => searchDraft;
+const getServerDraft = () => null;
+
 export function SearchBox({ className }: { className?: string }) {
   const router = useRouter();
   const params = useSearchParams();
-  const [term, setTerm] = useState(params.get("q") ?? "");
+  const committedQuery = params.get("q") ?? "";
+  const draft = useSyncExternalStore(subscribeDraft, getDraft, getServerDraft);
+  const term = draft?.query === committedQuery ? draft.value : committedQuery;
+  const setTerm = (value: string) => {
+    searchDraft = { query: committedQuery, value };
+    draftListeners.forEach((listener) => listener());
+  };
+  useEffect(() => {
+    // Reset on history/client navigation, including returning to a former query.
+    searchDraft = { query: committedQuery, value: committedQuery };
+    draftListeners.forEach((listener) => listener());
+  }, [committedQuery]);
   const [suggestions, setSuggestions] = useState<SearchSuggestion[]>([]);
   const [open, setOpen] = useState(false);
   const [highlighted, setHighlighted] = useState(-1);

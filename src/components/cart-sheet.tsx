@@ -1,5 +1,6 @@
 "use client";
 
+import { catalogCapabilities } from "@/lib/catalog-policy";
 import Link from "next/link";
 import { useTransition } from "react";
 import { Loader2, ShoppingBag, Trash2 } from "lucide-react";
@@ -42,6 +43,8 @@ export function CartSheet() {
     remove,
   } = useCart();
   const subtotal = cartSubtotal(lines);
+
+  if (!catalogCapabilities.checkout) return null;
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => (open ? undefined : close())}>

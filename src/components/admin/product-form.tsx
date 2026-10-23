@@ -1,5 +1,6 @@
 "use client";
 
+import { catalogCapabilities, effectiveSaleMode } from "@/lib/catalog-policy";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -58,7 +59,7 @@ export function ProductForm({
         startTransition(async () => {
           const result = await saveProduct({
             productId: defaults.productId,
-            saleMode: String(data.get("saleMode") ?? "stock"),
+            saleMode: String(data.get("saleMode") ?? (catalogCapabilities.checkout ? "stock" : "enquiry")),
             showPrice: data.get("showPrice") === "on",
             slug: String(data.get("slug") ?? ""),
             name: String(data.get("name") ?? ""),
@@ -133,13 +134,14 @@ export function ProductForm({
         <select
           id="saleMode"
           name="saleMode"
-          defaultValue={defaults.saleMode ?? "stock"}
+          defaultValue={effectiveSaleMode(defaults.saleMode)}
           className="rounded border p-2"
         >
-          <option value="stock">{t("panel.producto.modo.stock")}</option>
+          <option value="stock" disabled={!catalogCapabilities.checkout}>{t("panel.producto.modo.stock")}</option>
           <option value="enquiry">{t("panel.producto.modo.enquiry")}</option>
           <option value="showcase">{t("panel.producto.modo.showcase")}</option>
         </select>
+        {!catalogCapabilities.checkout ? <p className="text-muted-foreground text-xs">La compra con stock no está habilitada. Los productos con ese modo se muestran para consulta; elegí consulta o muestra para nuevos productos.</p> : null}
         <label className="flex gap-2">
           <input
             type="checkbox"

@@ -1,5 +1,6 @@
 "use client";
 
+import { catalogCapabilities } from "@/lib/catalog-policy";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -83,10 +84,12 @@ function VariantRow({ productId, variant }: { productId: number; variant: Varian
         <Button type="button" size="sm" variant="outline" onClick={() => setEditing((v) => !v)}>
           {editing ? t("panel.variante.cancelar") : t("panel.variante.editar")}
         </Button>
-        <Button type="button" size="sm" variant="outline" onClick={() => setAdjusting((v) => !v)}>
+        <Button type="button" size="sm" variant="outline" disabled={!catalogCapabilities.adjustStock} onClick={() => setAdjusting((v) => !v)}>
           {adjusting ? t("panel.variante.cancelar") : t("panel.variante.ajustarStock")}
         </Button>
       </div>
+
+      {!catalogCapabilities.adjustStock ? <p className="text-muted-foreground mt-2 text-xs">El ajuste de stock no está habilitado en este catálogo.</p> : null}
 
       {editing ? (
         <div className="mt-3">
@@ -98,7 +101,7 @@ function VariantRow({ productId, variant }: { productId: number; variant: Varian
         </div>
       ) : null}
 
-      {adjusting ? (
+      {catalogCapabilities.adjustStock && adjusting ? (
         <div className="mt-3">
           <StockAdjustForm
             productId={productId}

@@ -2,25 +2,32 @@ import { randomUUID } from "node:crypto";
 import type { D1Binding } from "./database";
 import type { CatalogoProducto } from "../../src/domain/catalog-import";
 import { normalizeDropiUrl } from "../../src/domain/catalog-import";
-import { slugify } from "../../src/lib/slug";
+import { resolveCatalogCategory, type ImportCategory } from "./catalog-category-identity";
+import { slugify as slugifyCategory } from "../../src/lib/slug";
 import { parseRef } from "../../src/lib/imagenes-r2";
 
 /** Each five-product D1 batch commits categories, catalog, costs and photos together. */
-export async function writeD1CatalogBatch(binding:D1Binding,items:readonly CatalogoProducto[],overwriteStock=false){
+export async function writeD1CatalogBatch(binding:D1Binding,items:readonly CatalogoProducto[],overwriteStock=false,expectedCategoryIds?:ReadonlyMap<string,number>){
   if(!items.length||items.length>5)throw new Error("Usá de uno a cinco productos por lote.");
   const statements:ReturnType<D1Binding["prepare"]>[]=[];
   const guard="catalog-import-"+randomUUID();
   const prepare=(text:string,values:(string|number|null)[]=[])=>binding.prepare(text).bind(...values);
+  const categoryRows: Array<ImportCategory & {is_active:number}>=(await binding.prepare("SELECT id,slug,name,is_active FROM categories ORDER BY id").all<ImportCategory & {is_active:number}>()).results;
+  // Guard the read-to-batch gap inside the same atomic batch as every write.
+  const snapshot=JSON.stringify(categoryRows.map(row=>[row.id,row.slug,row.name,row.is_active]));
+  statements.push(prepare(`INSERT INTO counters(name,value) VALUES(?,CASE WHEN (SELECT json_group_array(json_array(id,slug,name,is_active)) FROM (SELECT id,slug,name,is_active FROM categories ORDER BY id))=? THEN 0 ELSE -1 END)`,[guard,snapshot]));
   let variantsWritten=0;
   for(const p of items){
-    const category=slugify(p.categoryName),dropi=normalizeDropiUrl(p.dropiUrl);
+    const resolved=resolveCatalogCategory(p.categoryName,categoryRows),category=resolved.slug,dropi=normalizeDropiUrl(p.dropiUrl);
+    if(expectedCategoryIds && expectedCategoryIds.get(slugifyCategory(p.categoryName))!==resolved.id)throw new Error("Las categorías cambiaron; revisá la importación nuevamente.");
+    if(p.saleMode==="stock")throw new Error("Este catálogo admite consulta o muestra; la compra con stock no está habilitada.");
     if(!p.slug||!category||!p.variants.length||p.variants.length>50)throw new Error("Producto o variantes inválidos.");
-    statements.push(prepare(`INSERT INTO categories(slug,name,position,is_active) VALUES(?,?,(SELECT COALESCE(MAX(position),-1)+1 FROM categories),1) ON CONFLICT(slug) DO NOTHING`,[category,p.categoryName]));
+    if(resolved.id===undefined)statements.push(prepare(`INSERT INTO categories(slug,name,position,is_active) VALUES(?,?,(SELECT COALESCE(MAX(position),-1)+1 FROM categories),1) ON CONFLICT(slug) DO NOTHING`,[category,p.categoryName]));
     const updates=["name=excluded.name","description=excluded.description","category_id=excluded.category_id","brand=excluded.brand","iva_rate=excluded.iva_rate","is_active=1","published_at=COALESCE(products.published_at,CURRENT_TIMESTAMP)","updated_at=CURRENT_TIMESTAMP"];
     if(p.saleMode!==undefined)updates.push("sale_mode=excluded.sale_mode");
     if(p.showPrice!==undefined)updates.push("show_price=excluded.show_price");
     if(dropi!==undefined)updates.push("dropi_url=excluded.dropi_url");
-    statements.push(prepare(`INSERT INTO products(slug,name,description,category_id,brand,iva_rate,sale_mode,show_price,dropi_url,is_active,published_at) VALUES(?,?,?,(SELECT id FROM categories WHERE slug=?),?,?,?,?,?,1,CURRENT_TIMESTAMP) ON CONFLICT(slug) DO UPDATE SET ${updates.join(",")}`,[p.slug,p.name,p.description,category,p.brand,p.ivaRate,p.saleMode??"stock",p.showPrice===false?0:1,dropi??null]));
+    statements.push(prepare(`INSERT INTO products(slug,name,description,category_id,brand,iva_rate,sale_mode,show_price,dropi_url,is_active,published_at) VALUES(?,?,?,(SELECT id FROM categories WHERE slug=?),?,?,?,?,?,1,CURRENT_TIMESTAMP) ON CONFLICT(slug) DO UPDATE SET ${updates.join(",")}`,[p.slug,p.name,p.description,category,p.brand,p.ivaRate,p.saleMode??"enquiry",p.showPrice===false?0:1,dropi??null]));
     for(const [position,v] of p.variants.entries()){
       for(const value of [v.pricePyg,v.onHand,v.compareAtPyg,v.unitCostPyg])if(value!=null&&(!Number.isSafeInteger(value)||value<0))throw new Error("Usá guaraníes enteros y stock no negativo.");
       if(!v.sku||(v.costSource?.length??0)>200)throw new Error("SKU o fuente de costo inválidos.");

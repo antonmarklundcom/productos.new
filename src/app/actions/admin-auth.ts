@@ -55,10 +55,11 @@ export async function loginAdmin(formData: FormData): Promise<LoginResult> {
   const email = parsed.data.email.toLowerCase();
   const options = { limit: LOGIN_LIMIT, windowMs: LOGIN_WINDOW_MS };
   const byIp = rateLimit(`login:ip:${ip}`, options);
-  const byEmail = rateLimit(`login:email:${email}`, options);
+  // Do not allocate attacker-selected email counters after the IP is exhausted.
+  const byEmail = byIp.ok ? rateLimit(`login:email:${email}`, options) : byIp;
 
-  if (!byIp.ok || !byEmail.ok) {
-    const seconds = Math.max(byIp.retryAfterSeconds, byEmail.retryAfterSeconds);
+  if (!byEmail.ok) {
+    const seconds = byEmail.retryAfterSeconds;
     const minutes = Math.ceil(seconds / 60);
     return {
       ok: false,

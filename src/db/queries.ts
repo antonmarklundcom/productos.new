@@ -433,48 +433,44 @@ export async function searchProducts(
   options: { limit?: number } = {},
   executor?: Executor
 ): Promise<CatalogProduct[]> {
+  return (await searchProductsPage(term, { perPage: options.limit ?? 40 }, executor)).products;
+}
+
+/** Count and page use the same selected match strategy, even beyond page one. */
+export async function searchProductsPage(
+  term: string,
+  options: { page?: number; perPage?: number } = {},
+  executor?: Executor
+): Promise<PagedProducts> {
   const tx = executor ?? getDb();
-  const cleaned = term
-    .trim()
-    .replace(/[+\-><()~*"@]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (cleaned.length < 2) return [];
-
-  const limit = options.limit ?? 40;
-  const booleanTerm = cleaned
-    .split(" ")
-    .map((word) => `${word}*`)
-    .join(" ");
-
-  const matched = await tx
-    .select(PRODUCT_COLUMNS)
-    .from(products)
-    .innerJoin(categories, eq(products.categoryId, categories.id))
-    .where(
-      and(
-        PUBLISHED(),
-        sql`MATCH(${products.name}, ${products.description}) AGAINST (${booleanTerm} IN BOOLEAN MODE)`
-      )
-    )
-    .limit(limit);
-
-  if (matched.length > 0) return hydrate(tx, matched);
-
+  const page = Number.isSafeInteger(options.page) && options.page! > 1 ? options.page! : 1;
+  const perPage = Math.max(1, options.perPage ?? 40);
+  const cleaned = term.trim().replace(/[+\-><()~*"@]/g, " ").replace(/\s+/g, " ").trim();
+  const empty = { products: [], total: 0, page, perPage, totalPages: 1 };
+  if (cleaned.length < 2) return empty;
+  const booleanTerm = cleaned.split(" ").map((word) => `${word}*`).join(" ");
+  const fulltext = sql`MATCH(${products.name}, ${products.description}) AGAINST (${booleanTerm} IN BOOLEAN MODE)`;
   const like = `%${cleaned}%`;
-  const fallback = await tx
-    .select(PRODUCT_COLUMNS)
-    .from(products)
+  const fallback = sql`(${products.name} LIKE ${like} OR ${products.brand} LIKE ${like})`;
+  const countMatches = async (match: typeof fulltext) => {
+    const [row] = await tx.select({ total: count() }).from(products)
+      .innerJoin(categories, eq(products.categoryId, categories.id))
+      .where(and(PUBLISHED(), match));
+    return Number(row?.total ?? 0);
+  };
+  let predicate = fulltext;
+  let total = await countMatches(predicate);
+  if (total === 0) {
+    predicate = fallback;
+    total = await countMatches(predicate);
+  }
+  const rows = total === 0 ? [] : await tx.select(PRODUCT_COLUMNS).from(products)
     .innerJoin(categories, eq(products.categoryId, categories.id))
-    .where(
-      and(
-        PUBLISHED(),
-        sql`(${products.name} LIKE ${like} OR ${products.brand} LIKE ${like})`
-      )
-    )
-    .limit(limit);
-
-  return hydrate(tx, fallback);
+    .where(and(PUBLISHED(), predicate))
+    .orderBy(asc(products.name), asc(products.id))
+    .limit(perPage).offset((page - 1) * perPage);
+  return { products: await hydrate(tx, rows), total, page, perPage,
+    totalPages: Math.max(1, Math.ceil(total / perPage)) };
 }
 
 export type SearchSuggestion = {

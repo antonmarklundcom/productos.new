@@ -1,5 +1,7 @@
 # Recovering a store from an automatic backup
 
+> Runtime selection (23 October 2026): the procedures below target the MySQL/Cloudinary application. The active Workers catalogue uses D1/R2; use [Workers recovery and release checks](operations/workers-recovery.md). Do not point these legacy commands at D1 or infer that their cron runs in the catalogue deployment.
+
 Keep recovery credentials outside the database being backed up: the exact `SESSION_SECRET` used for encrypted integrations, Cloudinary account identity/API credentials, the database administrator credentials, repository revision and access to the hosting account. Use a secure password manager or a separate protected recovery vault. A database dump cannot bootstrap access to the service that stores that dump.
 
 The automatic backup is a private authenticated raw Cloudinary asset. Obtain its public ID and download it through an authenticated account tool or a short-lived signed `private_download_url` for the raw asset. Do not make the backup public or paste its URL into logs/tickets. Cloudinary documents [account downloads](https://cloudinary.com/documentation/ts_how_can_i_download_my_accounts_assets) and [signed private downloads](https://cloudinary.com/documentation/image_upload_api_reference#private_download_url). The audit did not verify the exact authenticated-raw download control in this account's Media Library; rehearse retrieval while the live application is still healthy.

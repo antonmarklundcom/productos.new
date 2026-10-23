@@ -1,3 +1,4 @@
+import { effectiveSaleMode } from "@/lib/catalog-policy";
 import Link from "next/link";
 
 import { PriceTag } from "@/components/price-tag";
@@ -106,12 +107,12 @@ export function ProductCard({
             />
           ) : null}
           <div className="mt-2 flex items-center gap-2">
-            {(product.saleMode ?? "stock") === "stock" ? (
+            {effectiveSaleMode(product.saleMode) === "stock" ? (
               <StockBadge available={totalAvailable} />
             ) : (
               <span className="text-xs">
                 {t(
-                  product.saleMode === "enquiry"
+                  effectiveSaleMode(product.saleMode) === "enquiry"
                     ? "producto.soloConsulta"
                     : "producto.muestra"
                 )}

@@ -9,6 +9,7 @@ function fixture(){
  const sqlite=new DatabaseSync(':memory:');
  sqlite.exec("PRAGMA foreign_keys=ON; CREATE TABLE users(id INTEGER PRIMARY KEY,email TEXT,session_version INTEGER DEFAULT 1,is_active INTEGER DEFAULT 1,password_hash TEXT); CREATE TABLE workers_login_limits(key TEXT PRIMARY KEY,starts INTEGER,hits INTEGER);");
  sqlite.exec(readFileSync(new URL('../../workers/d1/migrations/0002_boring_roulette.sql',import.meta.url),'utf8').replaceAll('--> statement-breakpoint',''));
+ sqlite.exec(readFileSync(new URL('../../workers/d1/migrations/0003_oval_masked_marvel.sql',import.meta.url),'utf8'));
  sqlite.exec("INSERT INTO users(id,email,password_hash) VALUES(1,'qa@example.invalid','initial');");
  const db={prepare(sql){return{bind(...values){return{first:async()=>sqlite.prepare(sql).get(...values),run:async()=>({meta:{changes:Number(sqlite.prepare(sql).run(...values).changes)}}),sql,values};}};},async batch(statements){sqlite.exec('BEGIN');try{const r=statements.map(s=>({meta:{changes:Number(sqlite.prepare(s.sql).run(...s.values).changes)}}));sqlite.exec('COMMIT');return r;}catch(e){sqlite.exec('ROLLBACK');throw e;}}};
  const emails=[];const pending=[];

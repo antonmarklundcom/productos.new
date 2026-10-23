@@ -1,5 +1,11 @@
 # KNOWN-ISSUES.md
 
+## How to use this ledger — 23 October 2026
+
+The unsigned-subtraction examples and full-client-dictionary example below are already fixed; they remain historical guidance, not open implementation tasks. Keep the signed-arithmetic rule for new MySQL money/stock expressions. The compatibility observations for ESLint 10/TypeScript 7 are dated experiments: current package.json pins ESLint 9 and TypeScript 6, and no major upgrade was attempted in this task. Do not infer an upgrade requirement from an old example.
+
+The current Workers deployment uses native D1/R2 and a catalogue-only capability boundary. For its backup/release procedure use [Workers recovery](docs/operations/workers-recovery.md); the MySQL backup and Cloudinary-size note below describes the retained alternate runtime. New review findings and their acceptance are recorded in docs/operations/review-fixes-2026-10-23.md.
+
 Cosas menores o bloqueadas que aparecieron durante las fases de `fable/plan.md`
 y que no valían un desvío. Cada entrada dice qué es, por qué no se arregló y
 cuál sería el arreglo. Si una entrada se resuelve, se borra.
