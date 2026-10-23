@@ -1,6 +1,13 @@
 import path from "node:path";
 import ts from "typescript";
 const normalize=(value)=>value.replaceAll("\\", "/").replace(/\.(?:mjs|ts|tsx)$/, "");
+/** Critical source adapters must fail closed when template source changes. */
+export function replaceRequired(source, find, replacement, label, expected = 1) {
+  const matches = typeof find === "string" ? source.split(find).length - 1 :
+    [...source.matchAll(new RegExp(find.source, find.flags.includes("g") ? find.flags : find.flags + "g"))].length;
+  if (matches !== expected) throw new Error("D1 source drift [" + label + "]: expected " + expected + " match(es), found " + matches);
+  return source.replace(find, replacement);
+}
 const allowedActions={
   "admin-auth":new Set(["loginAdmin","logoutAdmin"]),
   "admin-products":new Set(["saveProduct","saveProductVariant","saveVariantSupplierCost","previewCatalogImport","applyCatalogImport","uploadProductImage","removeProductImage"]),
@@ -31,8 +38,8 @@ export function d1StagingPlugin(root) {
       // Vite's earlier @ alias resolver can consume importer-specific aliases.
       // Rewrite only reviewed public import sites before resolution instead.
       const publicModule=JSON.stringify(path.resolve(root,"workers/d1/public-catalog.ts").replaceAll("\\","/"));
-      const publicPage=["/app/page.tsx","/app/producto/[slug]/page.tsx","/app/categoria/[slug]/page.tsx"].some(suffix=>file.endsWith(suffix));
-      if(publicPage)code=code.replace(/(["'])@\/db\/queries\1/g,publicModule);
+      const publicPage=["/app/page.tsx","/app/producto/[slug]/page.tsx","/app/categoria/[slug]/page.tsx","/app/buscar/page.tsx"].some(suffix=>file.endsWith(suffix));
+      if(publicPage)code=replaceRequired(code,/(["'])@\/db\/queries\1/g,publicModule,"public reader import");
       if(file.endsWith("/app/producto/[slug]/page.tsx"))code=code.replace(/(["'])@\/domain\/reviews\1/g,publicModule);
       code=code.replace(/(["'])@\/components\/store-categories\1/g,publicModule);
       code=code.replace(/(["'])\.\/supplier-costs\1/g, JSON.stringify(path.resolve(root,"workers/d1/supplier-costs.ts").replaceAll("\\","/")));
@@ -106,8 +113,10 @@ ${end}`);
         code=code.replace(fallback, 'redirect("/admin/estado?seccion=pedidos")');
       }
       if(file.endsWith("/actions/admin-auth.ts")){
-        code=code.replace('from "@/lib/rate-limit"','from "../../../workers/d1/login-limit"');
-        code=code.replaceAll("= rateLimit(","= await rateLimit(").replaceAll("? rateLimit(","? await rateLimit(").replace(/^(\s*)resetRateLimitKey\(/gm,"$1await resetRateLimitKey(");
+        code=replaceRequired(code,'from "@/lib/rate-limit"','from "../../../workers/d1/login-limit"',"login limiter import");
+        code=replaceRequired(code,"= rateLimit(","= await rateLimit(","IP limiter await");
+        code=replaceRequired(code,"? rateLimit(","? await rateLimit(","email limiter short circuit await");
+        code=replaceRequired(code,/^(\s*)resetRateLimitKey\(/gm,"$1await resetRateLimitKey(","limiter reset awaits",2);
       }
       if(file.endsWith("/actions/admin-products.ts")){
         const start=code.indexOf("    await db.transaction(async (tx) => {");
@@ -126,14 +135,14 @@ ${end}`);
         code=code.replace("        {children}",'<p role="status" className="mb-5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">Catálogo de consultas: productos, categorías, proveedores y ajustes están disponibles. Las secciones marcadas «Pendiente» explican lo que falta para habilitarlas.</p>\n        {children}');
       }
       if(file.endsWith("/components/admin/product-images.tsx")){
-        code=code.replace(/^(\s*["']use client["'];)/,'$1\nimport { prepareR2ImageForm } from "@/lib/prepare-r2-images";');
-        code=code.replace('            const result = await uploadProductImage(data);','            try { await prepareR2ImageForm(data); } catch(error) { setError(error instanceof Error ? error.message : "No se pudo preparar la foto."); return; }\n            const result = await uploadProductImage(data);');
+        code=replaceRequired(code,/^(\s*["']use client["'];)/,'$1\nimport { prepareR2ImageForm } from "@/lib/prepare-r2-images";',"image client directive");
+        code=replaceRequired(code,'            const result = await uploadProductImage(data);','            await prepareR2ImageForm(data, prepareOptions); if (prepareOptions.signal.aborted) return;\n            const result = await uploadProductImage(data);',"image preparation handoff");
       }
       if(file.endsWith("/components/admin/catalog-import.tsx")){
-        code=code.replace('    if (!file) {','    if(file && file.size>800*1024){toast.error("Dividí la planilla en archivos de hasta 800 KB y 500 productos.");return null;}\n    if (!file) {');
-        code=code.replace('      const result = await applyCatalogImport(formData);', `      const sendBatch = async (): Promise<Awaited<ReturnType<typeof applyCatalogImport>> & {nextOffset?:number|null}> => {
+        code=replaceRequired(code,'    if (!file) {','    if(file && file.size>800*1024){toast.error("Dividí la planilla en archivos de hasta 800 KB y 500 productos.");return null;}\n    if (!file) {',"catalog file bound");
+        code=replaceRequired(code,'      const result = await applyCatalogImport(formData);', `      const sendBatch = async (): Promise<Awaited<ReturnType<typeof applyCatalogImport>> & {nextOffset?:number|null}> => {
         try { return await applyCatalogImport(formData); }
-        catch { return {ok:false,errores:["Se interrumpió la conexión. El último lote puede haberse guardado; revisá los productos antes de reintentar. Reimportar la misma planilla no duplica los SKU."]}; }
+        catch { return {ok:false,errores:["Se interrumpió la conexión. Volvé a elegir el mismo archivo y opciones para continuar: los recibos guardados evitan repetir los lotes confirmados."]}; }
       };
       let result = await sendBatch();
       let saved=0, variants=0, photos=0;
@@ -141,10 +150,10 @@ ${end}`);
         formData.set("batchOffset",String(saved));toast.message(\`Importados \${saved} productos; guardando el siguiente lote…\`);
         result=await sendBatch();}
       if(result.ok){result.variantesEscritas+=variants;result.fotosSubidas+=photos;}
-      if(!result.ok && saved)result.errores.unshift(\`Se confirmó el guardado de \${saved} productos. Revisá el último lote antes de reintentar; no se duplican los SKU.\`);`);
+      if(!result.ok && saved)result.errores.unshift(\`Se confirmó el guardado de \${saved} productos. Volvé a intentar con el mismo archivo y opciones para continuar desde los recibos confirmados.\`);`,"catalog batch handoff");
       }
       if(file.endsWith("/actions/admin-products.ts"))code=code.replace('if (file.size > MAX_CATALOG_FILE_BYTES)', 'if (file.size > 800 * 1024)');
-      if(file.endsWith("/actions/admin-products.ts"))code=code.replace(/^(\s*["']use server["'];)/,'$1\nimport { applyD1CatalogImport, uploadD1ProductImage, removeD1ProductImage } from '+JSON.stringify(path.resolve(root,"workers/d1/catalog-actions.ts").replaceAll("\\","/"))+';');
+      if(file.endsWith("/actions/admin-products.ts"))code=code.replace(/^(\s*["']use server["'];)/,'$1\nimport { applyD1CatalogImport, uploadD1ProductImage, removeD1ProductImage, saveD1Product, saveD1ProductVariant } from '+JSON.stringify(path.resolve(root,"workers/d1/catalog-actions.ts").replaceAll("\\","/"))+';');
       // An action ID can be posted to a different page. Route filtering alone
       // is insufficient: deny unported actions at their implementation boundary.
       if(file.endsWith("/app/layout.tsx")) {
@@ -160,6 +169,8 @@ ${end}`);
       const moduleIsServer=/^[\s]*["']use server["']/.test(code);
       const ast=ts.createSourceFile(file,code,ts.ScriptTarget.Latest,true,file.endsWith(".tsx")?ts.ScriptKind.TSX:ts.ScriptKind.TS);
       const edits=[];
+      const nativeActions={saveProduct:"saveD1Product(input)",saveProductVariant:"saveD1ProductVariant(input)",applyCatalogImport:"applyD1CatalogImport(formData)",uploadProductImage:"uploadD1ProductImage(formData)",removeProductImage:"removeD1ProductImage(input)"};
+      const nativeReplaced=new Set();
       // Public catalogue links must not issue uncached D1-backed flight renders
       // for destinations a visitor never opens. Normal Next builds retain defaults.
       const publicLinks = !/\/(?:admin|pedido|cuenta|actions)\//.test(file) && /import Link from ["']next\/link["']/.test(code);
@@ -173,14 +184,16 @@ ${end}`);
           if((moduleIsServer&&exported)||inline){
             const name=node.name?.getText(ast);
             const actionModule=path.basename(file,".ts");
-            const native={applyCatalogImport:"applyD1CatalogImport(formData)",uploadProductImage:"uploadD1ProductImage(formData)",removeProductImage:"removeD1ProductImage(input)"};
-            if(actionModule==="admin-products"&&native[name]){edits.push({at:node.body.getStart(ast)+1,end:node.body.end-1,text:"\nreturn "+native[name]+";\n"});return;}
+            if(actionModule==="admin-products"&&nativeActions[name]){nativeReplaced.add(name);edits.push({at:node.body.getStart(ast)+1,end:node.body.end-1,text:"\nreturn "+nativeActions[name]+";\n"});return;}
             if(!allowedActions[actionModule]?.has(name))edits.push({at:node.body.getStart(ast)+1,text:'\nthrow new Error("Esta función todavía no está habilitada en la prueba D1.");\n'});
           }
         }
         ts.forEachChild(node,walk);
       }
       walk(ast);
+      if(file.endsWith("/actions/admin-products.ts"))
+        for(const name of Object.keys(nativeActions))
+          if(!nativeReplaced.has(name))throw new Error("D1 source drift [native action routing]: missing " + name);
       if(publicLinks) {
         const replacement='import { CatalogLink as Link } from '+JSON.stringify(path.resolve(root,"workers/d1/navigation-progress.tsx").replaceAll("\\","/"))+';';
         const match=/import Link from ["']next\/link["'];?/.exec(code);

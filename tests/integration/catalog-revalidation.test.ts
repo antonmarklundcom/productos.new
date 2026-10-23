@@ -43,9 +43,11 @@ describe.skipIf(!hasTestDb)("catalog updates invalidate public pages", () => {
       .select()
       .from(variants)
       .where(eq(variants.id, variantId));
+    const [product] = await getTestDb().select({revision: products.revision}).from(products).where(eq(products.id, productId));
     expect(
       await saveProductVariant({
         productId,
+        expectedRevision: product!.revision,
         variantId,
         sku: variant!.sku,
         label: "Updated",

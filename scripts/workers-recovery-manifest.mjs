@@ -1,0 +1,5 @@
+import assert from 'node:assert/strict';
+import {sha256} from './workers-media-integrity.mjs';
+export function validateRecoveryManifest(expected,actual){for(const f of ['format','revision','migrations','schemaSha256','counts','sqlSha256','media'])assert.deepEqual(actual[f],expected[f],`RECOVERY_MANIFEST_MISMATCH: ${f}`);assert.equal(actual.format,1);assert.ok(Number.isFinite(Date.parse(actual.capturedAt)),'RECOVERY_TIMESTAMP_INVALID');}
+export async function verifyRecoveryObjects(bucket,media){for(const e of media){const o=await bucket.get(e.key);assert.ok(o,'RECOVERY_IMAGE_MISSING');const b=Buffer.from(await o.arrayBuffer());assert.equal(b.length,e.size,'RECOVERY_IMAGE_SIZE');assert.equal(sha256(b),e.sha256,'RECOVERY_IMAGE_HASH');assert.equal(o.httpMetadata?.contentType,e.contentType,'RECOVERY_IMAGE_TYPE');if(e.contentType==='image/png'&&e.width!=null){assert.ok(b.length>=24,'RECOVERY_IMAGE_HEADER');assert.equal(b.readUInt32BE(16),e.width,'RECOVERY_IMAGE_WIDTH');assert.equal(b.readUInt32BE(20),e.height,'RECOVERY_IMAGE_HEIGHT');}}}
+

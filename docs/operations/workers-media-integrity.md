@@ -1,0 +1,9 @@
+# Read-only media integrity inventory
+
+23 October 2026. Run `node scripts/workers-media-integrity.mjs authorized-inventory.json`. There is no provider client, scan, deletion, repair or schedule capability. Obtain inventories only under separate authorization. Keep real inventories private; CLI output contains object keys and record IDs and should not enter public reports.
+
+Input is JSON with `referencePages`, `objectPages`, optional `now` (milliseconds) and optional `graceMs` (default 24 hours, a conservative local reporting assumption, not an approved cleanup policy). Each page has `items`, `complete: true` and optional `nextCursor`; the final page must have no continuation. Reference items have `id` and `variants`, each with key, sha256, size, width and height. Object items have the same metadata plus ISO `uploaded`, optional `pending` and `ambiguous`. An inventory collector must finish both paginated snapshots and certify completeness; this offline tool cannot verify provider cursor authenticity or cross-store consistency.
+
+Output classifies missing referenced objects, absent variants/metadata, hash/size/dimension mismatches, old unreferenced candidate orphans and protected recent/unknown/future/pending/ambiguous objects. Candidate orphan is an investigation label only. References with missing variants cannot establish that every unreferenced object is unneeded. Absent hash/dimensions are incomplete, never silently counted as verified. Duplicate bucket keys and incomplete pagination fail closed. R2 ETags must not be substituted for SHA256 without independent verification.
+
+No candidate list authorizes cleanup. Any later cleanup needs owner approval, complete inventory coverage, an agreed grace period, uncertainty resolution and an independent recoverable copy. D1/R2 writes have no shared transaction: uncertain acknowledgement can leave committed references or recent objects that must be preserved.

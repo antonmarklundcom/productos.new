@@ -1,7 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { safeError } from "@/lib/safe-error";
 import { count, eq, inArray, sql } from "drizzle-orm";
 
-import { categories, productImages, products, variants } from "@/db/schema";
+import { catalogAudit, categories, productImages, products, variants } from "@/db/schema";
 import { getDb } from "@/db";
 import { slugify } from "@/lib/slug";
 import { parseRef } from "@/lib/imagenes-r2";
@@ -281,9 +282,18 @@ const FOTOS_CONCURRENCIA = 4;
  */
 export async function applyCatalogFotos(
   productos: readonly CatalogoProducto[],
-  executor?: Executor
+  executor?: Executor,
+  actorId?:number
 ): Promise<CatalogFotosResult> {
   const tx = executor ?? getDb();
+  const addImage=async(input:Parameters<typeof addProductImage>[0])=>{
+    if(actorId===undefined)return addProductImage(input,executor);
+    await tx.transaction(async handle=>{
+      await addProductImage(input,handle);
+      const [version]=await handle.select({revision:products.revision}).from(products).where(eq(products.id,input.productId));
+      await handle.insert(catalogAudit).values({id:randomUUID(),actorId,operation:"import-image",recordType:"product",recordId:input.productId,revision:version!.revision,fields:JSON.stringify(["images"])});
+    });
+  };
   const conFotos = productos.filter((p) => p.fotos.length > 0);
   if (conFotos.length === 0) {
     return { fotosSubidas: 0, fotosOmitidas: 0, fotosFallidas: [] };
@@ -336,7 +346,7 @@ export async function applyCatalogFotos(
         if (url.startsWith("r2:")) {
           try {
             if (!parseRef(url)) throw new Error("Referencia de foto inválida.");
-            await addProductImage(
+            await addImage(
               {
                 productId: grupo.productId,
                 cloudinaryId: url,
@@ -344,8 +354,7 @@ export async function applyCatalogFotos(
                   index === 0
                     ? grupo.nombre
                     : `${grupo.nombre} — foto ${index + 1}`,
-              },
-              tx
+              }
             );
             fotosSubidas += 1;
           } catch (error) {
@@ -366,7 +375,7 @@ export async function applyCatalogFotos(
             folder: carpetaProductos(),
             resource_type: "image",
           });
-          await addProductImage(
+          await addImage(
             {
               productId: grupo.productId,
               cloudinaryId: uploaded.public_id,
@@ -374,8 +383,7 @@ export async function applyCatalogFotos(
                 index === 0
                   ? grupo.nombre
                   : `${grupo.nombre} — foto ${index + 1}`,
-            },
-            tx
+            }
           );
           fotosSubidas += 1;
         } catch (error) {

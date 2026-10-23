@@ -1,0 +1,1 @@
+ALTER TABLE `catalog_import_runs` ADD `summary_json` text DEFAULT '{}' NOT NULL;

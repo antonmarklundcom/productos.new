@@ -171,6 +171,7 @@ export const products = mysqlTable(
   "products",
   {
     id: int("id").autoincrement().primaryKey(),
+    revision: int("revision").notNull().default(1),
     slug: varchar("slug", { length: 160 }).notNull(),
     name: varchar("name", { length: 200 }).notNull(),
     saleMode: mysqlEnum("sale_mode", ["stock", "enquiry", "showcase"])
@@ -1532,6 +1533,7 @@ export const notificationOutbox = mysqlTable(
 );
 
 export const BACKUP_TABLES = [
+  "catalog_audit",
   "notification_outbox",
   "operation_keys",
   // Sin dependencias.
@@ -1576,3 +1578,8 @@ export const BACKUP_TABLES = [
 ] as const;
 
 export type BackupTable = (typeof BACKUP_TABLES)[number];
+
+/** Protected metadata only: no raw files, prices or integration values. */
+export const catalogAudit = mysqlTable("catalog_audit", {
+ id: varchar("id", {length:100}).primaryKey(), actorId: int("actor_id").notNull(), operation: varchar("operation", {length:40}).notNull(), recordType: varchar("record_type", {length:20}).notNull(), recordId: int("record_id").notNull(), revision: int("revision").notNull(), fields: text("fields").notNull(), createdAt: timestamp("created_at").notNull().defaultNow(),
+}, t => [index("catalog_audit_record_idx").on(t.recordType,t.recordId,t.createdAt)]);

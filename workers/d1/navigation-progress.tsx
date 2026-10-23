@@ -5,17 +5,21 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { forwardRef, useEffect, useRef, type ComponentProps } from "react";
 import { create } from "zustand";
 import "./navigation-progress.css";
+import { mayFocusRoute, focusRouteHeading } from "./navigation-focus";
 
 const useNavigation = create<{pending: boolean; destination: string | null}>(() => ({pending: false, destination: null}));
+let focusIntent: {path: string; source: Element | null} | null = null;
 let timeout: ReturnType<typeof setTimeout> | undefined;
 function finish() {
   clearTimeout(timeout);
+  focusIntent = null;
   useNavigation.setState({pending: false, destination: null});
 }
 function begin(href: string) {
   const next = new URL(href, window.location.href);
   if (next.origin !== window.location.origin ||
     (next.pathname === window.location.pathname && next.search === window.location.search)) return;
+  focusIntent = next.pathname !== window.location.pathname ? {path: next.pathname, source: document.activeElement} : null;
   useNavigation.setState({pending: true, destination: next.pathname + next.search});
   clearTimeout(timeout);
   timeout = setTimeout(finish, 15000);
@@ -30,8 +34,15 @@ export function NavigationProgress() {
   const pending = useNavigation(state => state.pending);
   const previous = useRef(route);
   useEffect(() => {
-    if (previous.current !== route) { previous.current = route; finish(); }
-  }, [route]);
+    if (previous.current !== route) {
+      const intent = focusIntent;
+      previous.current = route;
+      finish();
+      if (mayFocusRoute({ initiated: !!intent, changedPath: intent?.path === pathname,
+        source: intent?.source ?? null, active: document.activeElement,
+        modalOpen: !!document.querySelector('[role="dialog"][data-state="open"],dialog[open]') })) focusRouteHeading();
+    }
+  }, [route, pathname]);
   useEffect(() => {
     const content = document.getElementById("contenido");
     content?.setAttribute("aria-busy", String(pending));

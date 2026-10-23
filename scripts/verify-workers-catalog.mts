@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync,readdirSync } from "node:fs";
 import { getPlatformProxy } from "wrangler";
 import type { AnyD1Database } from "drizzle-orm/d1";
 import sharp from "sharp";
@@ -13,8 +13,8 @@ import type { CatalogoProducto } from "../src/domain/catalog-import";
 const platform=await getPlatformProxy<{DB:AnyD1Database}>({configPath:"workers/d1/local-settings-test.wrangler.jsonc",persist:false});
 try{
   const db=platform.env.DB;
-  for(const name of ["0000_useful_mattie_franklin","0001_fancy_warhawk","0002_boring_roulette"]){
-    for(const statement of readFileSync(`workers/d1/migrations/${name}.sql`,"utf8").split("--> statement-breakpoint"))if(statement.trim())await db.prepare(statement).run();
+  for(const name of readdirSync("workers/d1/migrations").filter(name=>name.endsWith(".sql")).sort()){
+    for(const statement of readFileSync(`workers/d1/migrations/${name}`,"utf8").split("--> statement-breakpoint"))if(statement.trim())await db.prepare(statement).run();
   }
   const product:CatalogoProducto={slug:"producto-test",name:"Producto de prueba",categoryName:"Prueba",description:null,brand:null,ivaRate:10,saleMode:"enquiry",showPrice:false,dropiUrl:"https://app.dropi.com.py/dashboard/product-details/123/prueba",fotos:["r2:p1/prueba-1234567890@800x600","r2:p1/prueba-abcdef1234@800x600"],variants:[{sku:"TEST-1",label:"Única",pricePyg:69000,compareAtPyg:null,onHand:8,unitCostPyg:18000,costSource:"Proveedor probado"}]};
   const read=async()=>({product:await db.prepare("SELECT * FROM products WHERE slug='producto-test'").first(),variant:await db.prepare("SELECT * FROM variants WHERE sku='TEST-1'").first(),images:(await db.prepare("SELECT * FROM product_images").all()).results,offers:(await db.prepare("SELECT * FROM supplier_offers").all()).results});
@@ -87,8 +87,8 @@ try{
   assert.equal((await read()).images.length,2);
   await db.exec("DROP TRIGGER test_catalog_abort");
   // Simulate a successful D1 commit whose transport acknowledgement is lost.
-  const lostAck={prepare:(query:string)=>({bind:(...values:unknown[])=>({run:async()=>{await db.prepare(query).bind(...values).run();throw new Error("TEST_LOST_D1_ACK");}})})} as unknown as D1Binding;
-  await assert.rejects(storeGalleryFiles(lostAck,bucket,Number(state.product!.id),"test-ref",null,files));
+  const lostAck={prepare:db.prepare.bind(db),batch:async(statements:Parameters<typeof db.batch>[0])=>{await db.batch(statements);throw new Error("TEST_LOST_D1_ACK");}} as unknown as D1Binding;
+  await assert.rejects(storeGalleryFiles(lostAck,bucket,Number(state.product!.id),"test-ref",null,files,1));
   assert.equal((await read()).images.length,3);
   assert.ok(objects.has("test-a")&&objects.has("test-b")&&objects.has("existing-photo"));
   console.log("PASS: local D1 catalog atomicity, stock preservation, idempotency, cost alternatives, concurrency and encoded image validation");

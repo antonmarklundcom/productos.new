@@ -176,6 +176,13 @@
       "when": 1791560999902,
       "tag": "0024_early_hairball",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "5",
+      "when": 1792747337128,
+      "tag": "0025_typical_frightful_four",
+      "breakpoints": true
     }
   ]
 }

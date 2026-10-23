@@ -29,9 +29,11 @@ export type VariantCard = {
 
 export function VariantEditor({
   productId,
+  revision,
   variants,
 }: {
   productId: number;
+  revision?: number;
   variants: VariantCard[];
 }) {
   const [adding, setAdding] = useState(false);
@@ -39,11 +41,11 @@ export function VariantEditor({
   return (
     <div className="grid gap-3">
       {variants.map((variant) => (
-        <VariantRow key={variant.id} productId={productId} variant={variant} />
+        <VariantRow key={variant.id} productId={productId} revision={revision} variant={variant} />
       ))}
 
       {adding ? (
-        <VariantFields productId={productId} onDone={() => setAdding(false)} />
+        <VariantFields productId={productId} revision={revision} onDone={() => setAdding(false)} />
       ) : (
         <Button type="button" variant="outline" onClick={() => setAdding(true)}>
           {t("panel.variante.agregar")}
@@ -57,7 +59,7 @@ export function VariantEditor({
   );
 }
 
-function VariantRow({ productId, variant }: { productId: number; variant: VariantCard }) {
+function VariantRow({ productId, revision, variant }: { productId: number; revision?: number; variant: VariantCard }) {
   const [editing, setEditing] = useState(false);
   const [adjusting, setAdjusting] = useState(false);
 
@@ -95,6 +97,7 @@ function VariantRow({ productId, variant }: { productId: number; variant: Varian
         <div className="mt-3">
           <VariantFields
             productId={productId}
+            revision={revision}
             variant={variant}
             onDone={() => setEditing(false)}
           />
@@ -116,14 +119,17 @@ function VariantRow({ productId, variant }: { productId: number; variant: Varian
 
 function VariantFields({
   productId,
+  revision,
   variant,
   onDone,
 }: {
   productId: number;
+  revision?: number;
   variant?: VariantCard;
   onDone: () => void;
 }) {
   const router = useRouter();
+  const [expectedRevision] = useState(revision);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -142,6 +148,7 @@ function VariantFields({
           const result = await saveProductVariant({
             productId,
             variantId: variant?.id,
+            expectedRevision,
             sku: String(data.get("sku") ?? ""),
             label: String(data.get("label") ?? ""),
             pricePyg: Number(data.get("pricePyg")),

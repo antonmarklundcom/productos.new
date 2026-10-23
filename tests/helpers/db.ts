@@ -25,6 +25,7 @@ export async function closeTestDb(): Promise<void> {
 }
 
 const TABLES = [
+  "catalog_audit",
   "supplier_offers",
   "notification_outbox",
   "operation_keys",

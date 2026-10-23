@@ -1,10 +1,12 @@
+import { randomUUID } from "node:crypto";
+import type { Executor } from "../src/domain/executor";
 import { normalizeDropiUrl } from "../src/domain/catalog-import";
 import "@/lib/load-env";
 
 import { eq, sql } from "drizzle-orm";
 
 import { closePool, getDb } from "@/db";
-import { categories, products, shippingZones, variants } from "@/db/schema";
+import { catalogAudit, categories, products, shippingZones, variants } from "@/db/schema";
 import { assertGs } from "@/lib/money";
 import { safeError } from "@/lib/safe-error";
 import { supplierCostsReady, writeSupplierCost } from "@/domain/supplier-costs";
@@ -134,9 +136,17 @@ export async function upsertCatalogProducts(
   {
     resetStock = false,
     publishedAt = new Date(),
-  }: { resetStock?: boolean; publishedAt?: Date } = {}
+    actorId,
+  }: { resetStock?: boolean; publishedAt?: Date; actorId?:number } = {},
+  executor?:Executor
 ): Promise<number> {
-  const db = getDb();
+  // Panel imports commit each product and its audit together, preserving partial publication.
+  if(actorId!==undefined&&!executor){
+    let count=0;
+    for(const item of items)count+=await getDb().transaction(tx=>upsertCatalogProducts([item],{resetStock,publishedAt,actorId},tx));
+    return count;
+  }
+  const db = executor??getDb();
   let variantCount = 0;
   const hasCosts = items.some((product) =>
     product.variants.some((variant) => variant.unitCostPyg !== undefined)
@@ -172,6 +182,7 @@ export async function upsertCatalogProducts(
       })
       .onDuplicateKeyUpdate({
         set: {
+          revision:sql`${products.revision}+1`,
           saleMode: product.saleMode,
           showPrice: product.showPrice,
           name: product.name,
@@ -244,6 +255,10 @@ export async function upsertCatalogProducts(
         );
       }
       variantCount += 1;
+    }
+    if(actorId!==undefined){
+      const [version]=await db.select({revision:products.revision}).from(products).where(eq(products.id,productRow.id));
+      await db.insert(catalogAudit).values({id:randomUUID(),actorId,operation:"import",recordType:"product",recordId:productRow.id,revision:version!.revision,fields:JSON.stringify(["name","description","categoryId","brand","ivaRate","isActive","variants","supplierOffers"])});
     }
   }
 

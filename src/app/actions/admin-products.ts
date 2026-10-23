@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import {
+  catalogRevisionConflict,
   addProductImage,
   adjustStock,
   createProduct,
@@ -52,8 +53,9 @@ import {
 } from "@/lib/admin-guard";
 import { t } from "@/i18n";
 import { getDb } from "@/db";
-import { variants } from "@/db/schema";
-import { and, eq } from "drizzle-orm";
+import { variants, products, productImages, catalogAudit } from "@/db/schema";
+import { randomUUID } from "node:crypto";
+import { and, eq, sql } from "drizzle-orm";
 import {
   supplierCostsReady,
   writeSupplierOffer,
@@ -99,7 +101,7 @@ export async function saveVariantSupplierCost(
   input: unknown
 ): Promise<AdminActionResult> {
   try {
-    await requireStaffSession();
+    const actor=await requireStaffSession();
     const parsed = SupplierCostSchema.safeParse(input);
     if (!parsed.success)
       return { ok: false, error: t("panel.costos.invalidos") };
@@ -110,6 +112,7 @@ export async function saveVariantSupplierCost(
     const productUrl = supplierLink(offer.productUrl);
     const supplierUrl = supplierLink(offer.supplierUrl);
     await db.transaction(async (tx) => {
+      await tx.update(products).set({revision:sql`${products.revision}+1`}).where(eq(products.id,productId));
       const [variant] = await tx
         .select({ id: variants.id })
         .from(variants)
@@ -129,6 +132,8 @@ export async function saveVariantSupplierCost(
         },
         tx
       );
+      const [version]=await tx.select({revision:products.revision}).from(products).where(eq(products.id,productId));
+      await tx.insert(catalogAudit).values({id:randomUUID(),actorId:actor.userId,operation:"save-supplier",recordType:"product",recordId:productId,revision:version!.revision,fields:JSON.stringify(["supplierOffers"])});
     });
     revalidatePath("/admin/productos");
     revalidatePath(`/admin/productos/${productId}`);
@@ -157,6 +162,7 @@ import {
  */
 
 const ProductSchema = z.object({
+  expectedRevision: z.number().int().positive().max(2147483646).optional(),
   dropiUrl: z
     .string()
     .trim()
@@ -205,9 +211,9 @@ const ProductSchema = z.object({
 
 export async function saveProduct(
   input: unknown
-): Promise<AdminActionResult<{ productId: number }>> {
+): Promise<AdminActionResult<{ productId: number; revision?: number }>> {
   try {
-    await requireStaffSession();
+    const actor=await requireStaffSession();
 
     const parsed = ProductSchema.safeParse(input);
     if (!parsed.success) {
@@ -218,6 +224,7 @@ export async function saveProduct(
     }
 
     const write = {
+      expectedRevision: parsed.data.expectedRevision,
       saleMode: parsed.data.saleMode,
       showPrice: parsed.data.showPrice,
       slug: parsed.data.slug,
@@ -234,23 +241,32 @@ export async function saveProduct(
 
     const productId = parsed.data.productId;
     if (productId === undefined) {
-      const created = await createProduct(write);
+      const created = await getDb().transaction(async tx=>{
+        const id=await createProduct(write,tx);
+        await tx.insert(catalogAudit).values({id:randomUUID(),actorId:actor.userId,operation:"create-product",recordType:"product",recordId:id,revision:1,fields:JSON.stringify(["name","slug","description","categoryId","brand","ivaRate","isActive","published","isFeatured","saleMode","showPrice","dropiUrl"])});
+        return id;
+      });
       revalidatePath("/admin/productos");
       revalidarVidriera();
-      return { ok: true, productId: created };
+      return { ok: true, productId: created, revision:1 };
     }
 
-    await updateProduct(productId, write);
+    if(parsed.data.expectedRevision===undefined)throw catalogRevisionConflict();
+    await getDb().transaction(async tx=>{
+      await updateProduct(productId,write,tx);
+      await tx.insert(catalogAudit).values({id:randomUUID(),actorId:actor.userId,operation:"save-product",recordType:"product",recordId:productId,revision:parsed.data.expectedRevision!+1,fields:JSON.stringify(["name","slug","description","categoryId","brand","ivaRate","isActive","published","isFeatured","saleMode","showPrice","dropiUrl"])});
+    });
     revalidatePath("/admin/productos");
     revalidatePath(`/admin/productos/${productId}`);
     revalidarVidriera();
-    return { ok: true, productId };
+    return { ok: true, productId, revision:parsed.data.expectedRevision+1 };
   } catch (error) {
     return adminActionError("saveProduct", error);
   }
 }
 
 const VariantSchema = z.object({
+  expectedRevision: z.number().int().positive().max(2147483646).optional(),
   productId: z.number().int().positive(),
   variantId: z.number().int().positive().optional(),
   sku: z.string().trim().min(1, t("adminForm.sku")).max(64),
@@ -279,7 +295,7 @@ export async function saveProductVariant(
   input: unknown
 ): Promise<AdminActionResult> {
   try {
-    await requireStaffSession();
+    const actor=await requireStaffSession();
 
     const parsed = VariantSchema.safeParse(input);
     if (!parsed.success) {
@@ -289,7 +305,15 @@ export async function saveProductVariant(
       };
     }
 
-    await saveVariant(parsed.data.productId, {
+    if(parsed.data.expectedRevision===undefined)throw catalogRevisionConflict();
+    await getDb().transaction(async tx=>{
+      const [current]=await tx.select({revision:products.revision}).from(products).where(eq(products.id,parsed.data.productId)).for("update");
+      if(!current||current.revision!==parsed.data.expectedRevision)throw catalogRevisionConflict();
+      if (parsed.data.variantId !== undefined) {
+        const [variant] = await tx.select({id: variants.id}).from(variants).where(and(eq(variants.id, parsed.data.variantId), eq(variants.productId, parsed.data.productId))).for("update");
+        if (!variant) throw catalogRevisionConflict();
+      }
+      await saveVariant(parsed.data.productId, {
       id: parsed.data.variantId,
       sku: parsed.data.sku,
       label: parsed.data.label,
@@ -297,6 +321,9 @@ export async function saveProductVariant(
       compareAtPyg: parsed.data.compareAtPyg ?? null,
       isActive: parsed.data.isActive,
       reorderPoint: parsed.data.reorderPoint ?? null,
+    },tx);
+      await tx.update(products).set({revision:sql`${products.revision}+1`}).where(eq(products.id,parsed.data.productId));
+      await tx.insert(catalogAudit).values({id:randomUUID(),actorId:actor.userId,operation:"save-variant",recordType:"product",recordId:parsed.data.productId,revision:parsed.data.expectedRevision!+1,fields:JSON.stringify(["variants"])});
     });
 
     revalidatePath(`/admin/productos/${parsed.data.productId}`);
@@ -364,7 +391,7 @@ export async function uploadProductImage(
   formData: FormData
 ): Promise<AdminActionResult> {
   try {
-    await requireStaffSession();
+    const actor=await requireStaffSession();
 
     const productId = Number(formData.get("productId"));
     if (!Number.isInteger(productId) || productId <= 0) {
@@ -388,10 +415,14 @@ export async function uploadProductImage(
     );
 
     const alt = String(formData.get("alt") ?? "").trim();
+    await getDb().transaction(async tx=>{
     await addProductImage({
       productId,
       cloudinaryId: uploaded.public_id,
       alt: alt === "" ? null : alt.slice(0, 255),
+    },tx);
+    const [version]=await tx.select({revision:products.revision}).from(products).where(eq(products.id,productId));
+    await tx.insert(catalogAudit).values({id:randomUUID(),actorId:actor.userId,operation:"add-image",recordType:"product",recordId:productId,revision:version!.revision,fields:JSON.stringify(["images"])});
     });
 
     revalidatePath(`/admin/productos/${productId}`);
@@ -411,7 +442,7 @@ export async function removeProductImage(
   input: unknown
 ): Promise<AdminActionResult> {
   try {
-    await requireStaffSession();
+    const actor=await requireStaffSession();
 
     const parsed = RemoveImageSchema.safeParse(input);
     if (!parsed.success) {
@@ -421,7 +452,13 @@ export async function removeProductImage(
     // Se borra sólo la fila. El archivo queda en Cloudinary a propósito: si
     // la imagen está referenciada en otro lado, borrarla del CDN rompe esa
     // página, y el costo de una foto huérfana es despreciable.
-    await deleteProductImage(parsed.data.imageId);
+    await getDb().transaction(async tx=>{
+      const [image]=await tx.select({id:productImages.id}).from(productImages).where(and(eq(productImages.id,parsed.data.imageId),eq(productImages.productId,parsed.data.productId))).for("update");
+      if(!image)return;
+      await deleteProductImage(parsed.data.imageId,tx);
+      const [version]=await tx.select({revision:products.revision}).from(products).where(eq(products.id,parsed.data.productId));
+      await tx.insert(catalogAudit).values({id:randomUUID(),actorId:actor.userId,operation:"remove-image",recordType:"product",recordId:parsed.data.productId,revision:version!.revision,fields:JSON.stringify(["images"])});
+    });
 
     revalidatePath(`/admin/productos/${parsed.data.productId}`);
     revalidarVidriera();
@@ -541,7 +578,7 @@ export async function applyCatalogImport(
   formData: FormData
 ): Promise<CatalogImportApplyResult> {
   try {
-    await requireStaffSession();
+    const actor=await requireStaffSession();
 
     const leido = await readCatalogFile(formData);
     if (!leido.ok) return { ok: false, errores: leido.errores };
@@ -583,6 +620,7 @@ export async function applyCatalogImport(
 
     const variantesEscritas = await upsertCatalogProducts(items, {
       resetStock: pisaStock,
+      actorId:actor.userId,
     });
 
     // "Avisame cuando haya stock" (O6): una importación con `pisarStock` es la
@@ -602,7 +640,7 @@ export async function applyCatalogImport(
     // Las fotos van después del commit del catálogo: una que falla (URL
     // caída, Cloudinary con hipo) no puede tumbar productos y precios que ya
     // se guardaron. Se juntan los fallos en `fotosFallidas` en vez de tirar.
-    const fotos = await applyCatalogFotos(plan.productos);
+    const fotos = await applyCatalogFotos(plan.productos,undefined,actor.userId);
 
     revalidatePath("/admin/productos");
     revalidarVidriera();

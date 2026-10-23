@@ -8,6 +8,7 @@ import { getNativeDb, withD1Database } from "./d1/database";
 import { d1StagingRoute, protectStagingResponse, boundedAdminRequest } from "./d1/policy.mjs";
 import { catalogResponse, productionPublicRequest } from "./d1/public-response.mjs";
 import { catalogOnly } from "./d1/catalog-capabilities";
+import { appendDiagnosticHeaders } from "./d1/catalog-diagnostics.mjs";
 import { publicReadContext } from "./d1/public-data-cache.mjs";
 import { canonicalDomainResponse } from "./catalog-domain.mjs";
 import { handleAdminRecovery } from "./d1/admin-recovery.mjs";
@@ -34,15 +35,15 @@ const previewWorker = {
           const [row] = await getNativeDb().all(sql`SELECT (SELECT COUNT(*) FROM products) products, (SELECT COUNT(*) FROM product_images) images, (SELECT COUNT(*) FROM categories) categories`);
           return protectStagingResponse(Response.json({ok:true,db:true,mode:"d1-staging",counts:row,cron:false}));
         }
+        const renderStarted = performance.now();
         const response = await catalogResponse(request, publicEnv, ctx, (renderRequest) => app.fetch(renderRequest,env,ctx), globalThis.caches, publicCatalog);
         if (env.WORKERS_PUBLIC_DIAGNOSTICS !== "true") return response;
         // Preview-only opt-in: finish RSC to observe late readers. Do not enable
         // this for normal shoppers: it deliberately buffers diagnostic responses.
+        const headersMs = performance.now() - renderStarted;
         const body = await response.arrayBuffer();
         const headers = new Headers(response.headers);
-        headers.set("x-catalog-public-loads", String(publicCatalog.loads.length));
-        const timings = publicCatalog.loads.map((load,index) => `catalog_${load.reader}_${index};dur=${load.durationMs}`).join(", ");
-        if (timings) headers.append("server-timing", timings);
+        appendDiagnosticHeaders(headers, publicCatalog, headersMs, performance.now() - renderStarted);
         return new Response(body, {status: response.status,statusText:response.statusText,headers});
       }, env.SESSION_SECRET, {...env, PUBLIC_CATALOG: publicCatalog});
     }
