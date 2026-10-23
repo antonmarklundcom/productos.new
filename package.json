@@ -52,7 +52,13 @@
     "capture:workers-demo": "node scripts/capture-workers-demo.mjs",
     "test:workers-d1": "tsx scripts/verify-workers-d1.mts",
     "workers:create-owner": "tsx scripts/workers-create-owner.mts",
-    "db:generate:d1": "drizzle-kit generate --config drizzle.d1.config.ts"
+    "db:generate:d1": "drizzle-kit generate --config drizzle.d1.config.ts",
+    "test:workers-browser": "node scripts/workers-browser-acceptance.mjs",
+    "profile:workers-browser": "node scripts/workers-browser-profile.mjs",
+    "profile:workers-search": "node scripts/profile-workers-search.mjs",
+    "test:workers-recovery": "node scripts/verify-workers-recovery.mjs",
+    "report:workers-media": "node scripts/workers-media-integrity.mjs",
+    "test:workers-durability": "node --import tsx --test tests/workers/catalog-durability.test.mts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

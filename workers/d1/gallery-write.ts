@@ -1,3 +1,4 @@
+import { productAuditStatements } from "./catalog-durability";
 import type { D1Binding, ImagesBucket } from "./database";
 
 type GalleryFile = { key: string; bytes: Uint8Array; mime: string };
@@ -6,7 +7,7 @@ type GalleryFile = { key: string; bytes: Uint8Array; mime: string };
  * the database insert: a lost response could conceal a committed gallery row. */
 export async function storeGalleryFiles(
   db: D1Binding, bucket: ImagesBucket, productId: number, ref: string,
-  alt: string | null, files: readonly GalleryFile[]
+  alt: string | null, files: readonly GalleryFile[], actorId?:number
 ) {
   try {
     for (const file of files) await bucket.put(file.key, file.bytes, {
@@ -18,8 +19,9 @@ export async function storeGalleryFiles(
     await bucket.delete(files.map(file => file.key)).catch(() => {});
     throw error;
   }
-  const result = await db.prepare(`INSERT INTO product_images(product_id,cloudinary_id,alt,position)
+  const insert = db.prepare(`INSERT INTO product_images(product_id,cloudinary_id,alt,position)
     VALUES(?,?,?,(SELECT COALESCE(MAX(position),-1)+1 FROM product_images WHERE product_id=?))`)
-    .bind(productId, ref, alt, productId).run();
-  if (!result.success) throw new Error("D1_GALLERY_WRITE_FAILED");
+    .bind(productId, ref, alt, productId);
+  const result=actorId===undefined?[await insert.run()]:await db.batch([insert,...productAuditStatements(db,actorId,productId,"add-image",["images"])]);
+  if (result.some((row:{success:boolean})=>!row.success)) throw new Error("D1_GALLERY_WRITE_FAILED");
 }

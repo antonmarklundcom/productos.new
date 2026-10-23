@@ -1,0 +1,50 @@
+import assert from "node:assert/strict";
+import {test} from "node:test";
+import {readFileSync,readdirSync} from "node:fs";
+import {getPlatformProxy} from "wrangler";
+import type {AnyD1Database} from "drizzle-orm/d1";
+import {writeD1CatalogBatch} from "../../workers/d1/catalog-import-write";
+import {importFingerprint,readImportRun,readBatchReceipt} from "../../workers/d1/catalog-durability";
+import {writeD1Product,writeD1Variant} from "../../workers/d1/catalog-edit-write";
+import type {CatalogoProducto} from "../../src/domain/catalog-import";
+
+test("native receipts survive lost acknowledgements, enforce input/actor identity and make stale saves atomic",{timeout:120000},async()=>{
+ const platform=await getPlatformProxy<{DB:AnyD1Database}>({configPath:"workers/d1/local-settings-test.wrangler.jsonc",persist:false});
+ try{
+  const db=platform.env.DB;
+  for(const name of readdirSync("workers/d1/migrations").filter(name=>name.endsWith(".sql")).sort())for(const statement of readFileSync("workers/d1/migrations/"+name,"utf8").split("--> statement-breakpoint"))if(statement.trim())await db.prepare(statement).run();
+  const product:CatalogoProducto={slug:"durable-test",name:"Durable",categoryName:"Durability",description:null,brand:null,ivaRate:10,saleMode:"enquiry",showPrice:false,fotos:[],variants:[{sku:"DURABLE-1",label:"Única",pricePyg:12000,compareAtPyg:null,onHand:2,unitCostPyg:3400,costSource:"PRIVATE_NOT_IN_AUDIT"}]};
+  const bytes=new TextEncoder().encode("synthetic fixture"),fingerprint=importFingerprint(bytes,false),id="11111111-1111-4111-8111-111111111111";
+  await db.prepare("INSERT INTO catalog_import_runs(id,actor_id,fingerprint,total_products,next_offset) VALUES(?,1,?,1,0)").bind(id,fingerprint).run();
+  const identity={id,actorId:1,fingerprint,offset:0,totalProducts:1,photosWritten:0};
+  const lostAck={prepare:db.prepare.bind(db),batch:async(statements:Parameters<typeof db.batch>[0])=>{await db.batch(statements);throw new Error("TEST_LOST_ACK");}} as AnyD1Database;
+  const first=await writeD1CatalogBatch(lostAck,[product],false,undefined,identity);
+  assert.equal(first.replayed,true);assert.equal(first.variantsWritten,1);
+  const before=JSON.stringify((await db.prepare("SELECT * FROM products").all()).results);
+  const replay=await writeD1CatalogBatch(db,[product],false,undefined,identity);
+  assert.equal(replay.replayed,true);assert.equal(JSON.stringify((await db.prepare("SELECT * FROM products").all()).results),before);
+  assert.equal(await db.prepare("SELECT COUNT(*) n FROM catalog_audit WHERE record_type='product'").first("n"),1);
+  assert.equal(await db.prepare("SELECT COUNT(*) n FROM variants").first("n"),1);
+  assert.equal((await readImportRun(db,id,1,fingerprint))?.next_offset,1);
+  assert.equal((await readBatchReceipt(db,identity))?.next_offset,1);
+  await assert.rejects(readImportRun(db,id,2,fingerprint),/otro archivo, opciones o usuario/);
+  await assert.rejects(readImportRun(db,id,1,importFingerprint(bytes,true)),/otro archivo, opciones o usuario/);
+  await assert.rejects(readImportRun(db,id,1,importFingerprint(new TextEncoder().encode("changed"),false)),/otro archivo, opciones o usuario/);
+  const p=await db.prepare("SELECT * FROM products WHERE slug='durable-test'").first<{id:number;revision:number;category_id:number}>();assert.ok(p);
+  const input={productId:p.id,expectedRevision:p.revision,slug:"durable-test",name:"First editor",description:"",categoryId:p.category_id,brand:"",ivaRate:10,isActive:true,published:true,saleMode:"enquiry",showPrice:false};
+  const outcomes=await Promise.allSettled([writeD1Product(db,1,input),writeD1Product(db,2,{...input,name:"Second editor"})]);
+  assert.equal(outcomes.filter(outcome=>outcome.status==="fulfilled").length,1);
+  const staleState=JSON.stringify((await db.prepare("SELECT * FROM products").all()).results);
+  const variant=await db.prepare("SELECT id FROM variants WHERE sku='DURABLE-1'").first<{id:number}>();assert.ok(variant);
+  await assert.rejects(writeD1Variant(db,2,{productId:p.id,expectedRevision:p.revision,variantId:variant.id,sku:"DURABLE-1",label:"Stale",pricePyg:1,isActive:true}),/borrador sigue aquí/);
+  assert.equal(await db.prepare("SELECT price_pyg FROM variants WHERE id=?").bind(variant.id).first("price_pyg"),12000);
+  assert.equal(JSON.stringify((await db.prepare("SELECT * FROM products").all()).results),staleState);
+  const revision=await db.prepare("SELECT revision FROM products WHERE id=?").bind(p.id).first<number>("revision");assert.ok(revision);
+  await writeD1Variant(db,1,{productId:p.id,expectedRevision:revision,variantId:variant.id,sku:"DURABLE-1",label:"Fresh",pricePyg:13000,isActive:true});
+  assert.equal(await db.prepare("SELECT price_pyg FROM variants WHERE id=?").bind(variant.id).first("price_pyg"),13000);
+  const audit=JSON.stringify((await db.prepare("SELECT * FROM catalog_audit").all()).results);
+  assert.doesNotMatch(audit,/PRIVATE_NOT_IN_AUDIT|3400|synthetic fixture/);
+  assert.equal(await db.prepare("SELECT COUNT(*) n FROM catalog_audit WHERE record_type='product'").first("n"),3);
+  assert.equal(await db.prepare("SELECT COUNT(*) n FROM counters WHERE name LIKE 'revision-%'").first("n"),0);
+ }finally{await platform.dispose();}
+});

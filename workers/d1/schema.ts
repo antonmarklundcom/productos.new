@@ -12,7 +12,7 @@ export const RECEIPT_REVIEWS = ["pending","approved","rejected"] as const;
 export const REVIEW_STATUSES = ["pending","approved","rejected"] as const;
 export const INVOICE_STATUSES = ["none","queued","approved","rejected"] as const;
 export const RESERVATION_STATES = ["held","consumed","released"] as const;
-export const BACKUP_TABLES = ["notification_outbox","operation_keys","counters","setup_state","job_runs","users","customers","categories","coupons","shipping_zones","shipping_methods","payment_events","bank_details","store_settings","integration_settings","login_tokens","products","product_images","variants","supplier_offers","stock_alerts","price_adjustments","stock_adjustments","orders","order_items","order_events","order_notes","product_reviews","order_returns","order_return_items","payments","refunds","receipts","stock_reservations"] as const;
+export const BACKUP_TABLES = ["catalog_import_runs","catalog_import_receipts","catalog_audit","notification_outbox","operation_keys","counters","setup_state","job_runs","users","customers","categories","coupons","shipping_zones","shipping_methods","payment_events","bank_details","store_settings","integration_settings","login_tokens","products","product_images","variants","supplier_offers","stock_alerts","price_adjustments","stock_adjustments","orders","order_items","order_events","order_notes","product_reviews","order_returns","order_return_items","payments","refunds","receipts","stock_reservations"] as const;
 export type ShippingMethodKind = typeof SHIPPING_METHOD_KINDS[number];
 export type ShippingMethodPricing = typeof SHIPPING_METHOD_PRICINGS[number];
 export type PaymentProvider = typeof PAYMENT_PROVIDERS[number];
@@ -404,6 +404,7 @@ export const productReviews = sqliteTable("product_reviews", {
 
 export const products = sqliteTable("products", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  revision: integer("revision").notNull().default(1),
   slug: text("slug").notNull(),
   name: text("name").notNull(),
   saleMode: text("sale_mode", { enum: ["stock","enquiry","showcase"] }).notNull().default("stock"),
@@ -629,3 +630,14 @@ export const adminPasswordResets = sqliteTable("workers_admin_password_resets", 
   sessionVersion: integer("session_version").notNull(),
   expiresAt: integer("expires_at").notNull(),
 }, (t) => [index("workers_admin_password_resets_user_idx").on(t.userId), index("workers_admin_password_resets_expiry_idx").on(t.expiresAt)]);
+
+// Private operational metadata, excluded from public catalogue queries.
+export const catalogImportRuns = sqliteTable("catalog_import_runs", {
+ id: text("id").primaryKey(), actorId: integer("actor_id").notNull(), summary: text("summary_json").notNull().default("{}"), fingerprint: text("fingerprint").notNull(), totalProducts: integer("total_products").notNull(), nextOffset: integer("next_offset").notNull().default(0), createdAt: utcDate("created_at").notNull().default(sql`(CURRENT_TIMESTAMP)`),
+});
+export const catalogImportReceipts = sqliteTable("catalog_import_receipts", {
+ id: text("id").primaryKey(), importId: text("import_id").notNull(), actorId: integer("actor_id").notNull(), offset: integer("offset").notNull(), nextOffset: integer("next_offset").notNull(), variantsWritten: integer("variants_written").notNull(), photosWritten: integer("photos_written").notNull(), createdAt: utcDate("created_at").notNull().default(sql`(CURRENT_TIMESTAMP)`),
+}, t => [uniqueIndex("catalog_import_batch_uq").on(t.importId,t.offset)]);
+export const catalogAudit = sqliteTable("catalog_audit", {
+ id: text("id").primaryKey(), actorId: integer("actor_id").notNull(), operation: text("operation").notNull(), recordType: text("record_type").notNull(), recordId: integer("record_id").notNull(), revision: integer("revision").notNull(), fields: text("fields").notNull(), createdAt: utcDate("created_at").notNull().default(sql`(CURRENT_TIMESTAMP)`),
+}, t => [index("catalog_audit_record_idx").on(t.recordType,t.recordId,t.createdAt)]);

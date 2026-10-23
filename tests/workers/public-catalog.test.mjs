@@ -136,16 +136,16 @@ test("HTML cannot add a second TTL to old cached data, including expiry during s
  assert.equal(uncached.headers.get("x-catalog-cache"),"BYPASS");assert.equal(uncached.headers.get("cache-control"),"private, no-store");
 });
 
-test("Workers public import adapters precede aliases and leave search/admin readers intact", () => {
+test("Workers public import adapters include search and preserve legacy shared readers", () => {
  const root=path.resolve(import.meta.dirname,"../.."), plugin=d1StagingPlugin(root);
  const native=path.resolve(root,"workers/d1/public-catalog.ts").replaceAll("\\","/");
- for(const relative of ["src/app/page.tsx","src/app/producto/[slug]/page.tsx","src/app/categoria/[slug]/page.tsx","src/components/site-header.tsx","src/components/site-footer.tsx"]) {
+ for(const relative of ["src/app/page.tsx","src/app/producto/[slug]/page.tsx","src/app/categoria/[slug]/page.tsx","src/app/buscar/page.tsx","src/components/site-header.tsx","src/components/site-footer.tsx"]) {
    const file=path.join(root,relative),original=readFileSync(file,"utf8"),code=plugin.transform(original,file)?.code ?? original;
    assert.ok(code.includes(native),relative+" must import the native public adapter");
    if(relative.includes("src/app"))assert.doesNotMatch(code,/from ["']@\/db\/queries["']/);
    if(relative.includes("/producto/"))assert.doesNotMatch(code,/from ["']@\/domain\/reviews["']/);
  }
- for(const relative of ["src/app/buscar/page.tsx","src/db/queries.ts"]) {
+ for(const relative of ["src/db/queries.ts"]) {
    const file=path.join(root,relative),original=readFileSync(file,"utf8"),code=plugin.transform(original,file)?.code ?? original;
    assert.ok(!code.includes(native),relative+" retains its original reader implementation");
  }

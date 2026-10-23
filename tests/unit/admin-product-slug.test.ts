@@ -29,6 +29,7 @@ vi.mock('@/domain/admin-products', async (importOriginal) => ({
   createProduct: (...args: unknown[]) => createProduct(...(args as [])),
 }));
 
+vi.mock('@/db',()=>({getDb:()=>({transaction:async(fn:(tx:unknown)=>Promise<unknown>)=>fn({insert:()=>({values:async()=>undefined})})})}));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
 const ENTRADA = {
@@ -54,7 +55,7 @@ describe('el slug de un producto', () => {
 
     const resultado = await saveProduct({ ...ENTRADA, slug: 'a'.repeat(160) });
 
-    expect(resultado).toEqual({ ok: true, productId: 7 });
+    expect(resultado).toEqual({ ok: true, productId: 7, revision:1 });
     expect(createProduct).toHaveBeenCalledOnce();
   });
 
@@ -65,7 +66,7 @@ describe('el slug de un producto', () => {
     await saveProduct({ ...ENTRADA, slug: 'remera-destacada', isFeatured: true });
 
     expect(createProduct).toHaveBeenCalledWith(
-      expect.objectContaining({ slug: 'remera-destacada', isFeatured: true }),
+      expect.objectContaining({ slug: 'remera-destacada', isFeatured: true }), expect.anything(),
     );
   });
 });
@@ -75,15 +76,15 @@ describe('private Dropi URL saving', () => {
   it('keeps omitted update undefined and sends blank as null', async () => {
     const { saveProduct } = await import('@/app/actions/admin-products');
     updateProduct.mockClear();
-    await saveProduct({ ...ENTRADA, slug: 'remera', productId: 7 });
-    expect(updateProduct).toHaveBeenLastCalledWith(7, expect.objectContaining({ dropiUrl: undefined }));
-    await saveProduct({ ...ENTRADA, slug: 'remera', productId: 7, dropiUrl: ' ' });
-    expect(updateProduct).toHaveBeenLastCalledWith(7, expect.objectContaining({ dropiUrl: null }));
+    await saveProduct({ ...ENTRADA, slug: 'remera', productId: 7, expectedRevision:1 });
+    expect(updateProduct).toHaveBeenLastCalledWith(7, expect.objectContaining({ dropiUrl: undefined }), expect.anything());
+    await saveProduct({ ...ENTRADA, slug: 'remera', productId: 7, expectedRevision:1, dropiUrl: ' ' });
+    expect(updateProduct).toHaveBeenLastCalledWith(7, expect.objectContaining({ dropiUrl: null }), expect.anything());
   });
   it('rejects another host before any write', async () => {
     const { saveProduct } = await import('@/app/actions/admin-products');
     updateProduct.mockClear();
-    const result = await saveProduct({ ...ENTRADA, slug: 'remera', productId: 7, dropiUrl: 'https://evil.example/dashboard/search/123' });
+    const result = await saveProduct({ ...ENTRADA, slug: 'remera', productId: 7, expectedRevision:1, dropiUrl: 'https://evil.example/dashboard/search/123' });
     expect(result.ok).toBe(false);
     expect(updateProduct).not.toHaveBeenCalled();
   });

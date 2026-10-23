@@ -1,3 +1,4 @@
+import { readBatchReceipt, readImportRun, type ImportIdentity } from "./catalog-durability";
 import { randomUUID } from "node:crypto";
 import type { D1Binding } from "./database";
 import type { CatalogoProducto } from "../../src/domain/catalog-import";
@@ -7,8 +8,13 @@ import { slugify as slugifyCategory } from "../../src/lib/slug";
 import { parseRef } from "../../src/lib/imagenes-r2";
 
 /** Each five-product D1 batch commits categories, catalog, costs and photos together. */
-export async function writeD1CatalogBatch(binding:D1Binding,items:readonly CatalogoProducto[],overwriteStock=false,expectedCategoryIds?:ReadonlyMap<string,number>){
+export async function writeD1CatalogBatch(binding:D1Binding,items:readonly CatalogoProducto[],overwriteStock=false,expectedCategoryIds?:ReadonlyMap<string,number>, identity?:ImportIdentity){
   if(!items.length||items.length>5)throw new Error("Usá de uno a cinco productos por lote.");
+  if(identity){
+    await readImportRun(binding,identity.id,identity.actorId,identity.fingerprint);
+    const receipt=await readBatchReceipt(binding,identity);
+    if(receipt)return{variantsWritten:receipt.variants_written,photosWritten:receipt.photos_written,nextOffset:receipt.next_offset,replayed:true};
+  }
   const statements:ReturnType<D1Binding["prepare"]>[]=[];
   const guard="catalog-import-"+randomUUID();
   const prepare=(text:string,values:(string|number|null)[]=[])=>binding.prepare(text).bind(...values);
@@ -16,13 +22,19 @@ export async function writeD1CatalogBatch(binding:D1Binding,items:readonly Catal
   // Guard the read-to-batch gap inside the same atomic batch as every write.
   const snapshot=JSON.stringify(categoryRows.map(row=>[row.id,row.slug,row.name,row.is_active]));
   statements.push(prepare(`INSERT INTO counters(name,value) VALUES(?,CASE WHEN (SELECT json_group_array(json_array(id,slug,name,is_active)) FROM (SELECT id,slug,name,is_active FROM categories ORDER BY id))=? THEN 0 ELSE -1 END)`,[guard,snapshot]));
+  if(identity){
+    statements.push(prepare("INSERT INTO counters(name,value) SELECT ?,-1 WHERE NOT EXISTS(SELECT 1 FROM catalog_import_runs WHERE id=? AND actor_id=? AND fingerprint=? AND next_offset=?)",[guard+"-checkpoint",identity.id,identity.actorId,identity.fingerprint,identity.offset]));
+  }
   let variantsWritten=0;
   for(const p of items){
     const resolved=resolveCatalogCategory(p.categoryName,categoryRows),category=resolved.slug,dropi=normalizeDropiUrl(p.dropiUrl);
     if(expectedCategoryIds && expectedCategoryIds.get(slugifyCategory(p.categoryName))!==resolved.id)throw new Error("Las categorías cambiaron; revisá la importación nuevamente.");
     if(p.saleMode==="stock")throw new Error("Este catálogo admite consulta o muestra; la compra con stock no está habilitada.");
     if(!p.slug||!category||!p.variants.length||p.variants.length>50)throw new Error("Producto o variantes inválidos.");
-    if(resolved.id===undefined)statements.push(prepare(`INSERT INTO categories(slug,name,position,is_active) VALUES(?,?,(SELECT COALESCE(MAX(position),-1)+1 FROM categories),1) ON CONFLICT(slug) DO NOTHING`,[category,p.categoryName]));
+    if(resolved.id===undefined){
+      statements.push(prepare(`INSERT INTO categories(slug,name,position,is_active) VALUES(?,?,(SELECT COALESCE(MAX(position),-1)+1 FROM categories),1) ON CONFLICT(slug) DO NOTHING`,[category,p.categoryName]));
+      if(identity)statements.push(prepare("INSERT INTO catalog_audit(id,actor_id,operation,record_type,record_id,revision,fields) SELECT ?,?,'import-category','category',id,1,? FROM categories WHERE slug=? AND changes()=1",[identity.id+":"+identity.offset+":category:"+category,identity.actorId,JSON.stringify(["name","slug","isActive"]),category]));
+    }
     const updates=["name=excluded.name","description=excluded.description","category_id=excluded.category_id","brand=excluded.brand","iva_rate=excluded.iva_rate","is_active=1","published_at=COALESCE(products.published_at,CURRENT_TIMESTAMP)","updated_at=CURRENT_TIMESTAMP"];
     if(p.saleMode!==undefined)updates.push("sale_mode=excluded.sale_mode");
     if(p.showPrice!==undefined)updates.push("show_price=excluded.show_price");
@@ -37,12 +49,23 @@ export async function writeD1CatalogBatch(binding:D1Binding,items:readonly Catal
       if(v.unitCostPyg!==undefined)statements.push(prepare(`INSERT INTO supplier_offers(id,variant_id,unit_cost_pyg,source,source_type,product_url,is_confirmed,is_active,is_preferred) VALUES((SELECT s.id FROM supplier_offers s JOIN variants v ON v.id=s.variant_id WHERE v.sku=? AND s.is_preferred=1),(SELECT id FROM variants WHERE sku=?),?,?,?,?,1,1,1) ON CONFLICT(id) DO UPDATE SET unit_cost_pyg=excluded.unit_cost_pyg,source=excluded.source,updated_at=CURRENT_TIMESTAMP`,[v.sku,v.sku,v.unitCostPyg,v.costSource||null,dropi?"dropi":"other",dropi??null]));
       variantsWritten++;
     }
+    statements.push(prepare("UPDATE products SET revision=revision+1 WHERE slug=?",[p.slug]));
+    if(identity)statements.push(prepare("INSERT INTO catalog_audit(id,actor_id,operation,record_type,record_id,revision,fields) SELECT ?,?,'import','product',id,revision,? FROM products WHERE slug=?",[identity.id+":"+identity.offset+":"+p.slug,identity.actorId,JSON.stringify(["name","description","categoryId","brand","ivaRate","isActive","published","saleMode","showPrice","dropiUrl","variants","images","supplierOffers"]),p.slug]));
     if(p.fotos.length>10||p.fotos.some(ref=>!parseRef(ref)))throw new Error("Prepará las fotos en R2 antes de importarlas.");
     if(p.fotos.length)statements.push(prepare(`INSERT INTO product_images(product_id,cloudinary_id,alt,position) SELECT p.id,json_extract(j.value,'$.ref'),json_extract(j.value,'$.alt'),CAST(j.key AS INTEGER) FROM products p,json_each(?) j WHERE p.slug=? AND NOT EXISTS(SELECT 1 FROM product_images i WHERE i.product_id=p.id)`,[JSON.stringify(p.fotos.map((ref,i)=>({ref,alt:i?p.name+" — foto "+(i+1):p.name}))),p.slug]));
   }
+  if(identity){
+    statements.push(prepare("INSERT INTO catalog_import_receipts(id,import_id,actor_id,offset,next_offset,variants_written,photos_written) VALUES(?,?,?,?,?,?,?)",[identity.id+":"+identity.offset,identity.id,identity.actorId,identity.offset,identity.offset+items.length,variantsWritten,identity.photosWritten]));
+    statements.push(prepare("UPDATE catalog_import_runs SET next_offset=? WHERE id=?",[identity.offset+items.length,identity.id]));
+  }
   statements.push(prepare("DELETE FROM counters WHERE name=?",[guard]));
   if(statements.length>900)throw new Error("Demasiadas variantes para este lote.");
-  const result=await binding.batch(statements);
+  let result;
+  try{ result=await binding.batch(statements); }
+  catch(error){
+    if(identity){const receipt=await readBatchReceipt(binding,identity);if(receipt)return{variantsWritten:receipt.variants_written,photosWritten:receipt.photos_written,nextOffset:receipt.next_offset,replayed:true};}
+    throw error;
+  }
   if(result.some((row:{success:boolean})=>!row.success))throw new Error("D1_CATALOG_BATCH_FAILED");
-  return{variantsWritten};
+  return{variantsWritten,photosWritten:identity?.photosWritten??0,nextOffset:identity?identity.offset+items.length:undefined,replayed:false};
 }

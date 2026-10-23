@@ -5,6 +5,8 @@ import { catalogOnly } from "./catalog-capabilities";
 import { CATEGORIAS_INICIALES } from "../../src/config/tienda";
 import { getD1Bindings, getNativeDb } from "./database";
 import { cachedPublicRead } from "./public-data-cache.mjs";
+import { searchRead } from "./catalog-search-sql.mjs";
+import { diagnosticBinding } from "./catalog-diagnostics.mjs";
 import { catalogRead, categoryRead, featuredRead, latestRead, productRead, readBatch, relatedRead } from "./public-catalog-sql.mjs";
 export { isCatalogSort, CATALOG_SORTS } from "../../src/db/queries";
 
@@ -16,7 +18,7 @@ export function publicRead<T>(key: string, load: () => Promise<T>): Promise<T> {
     finally { context?.loads.push({reader: key.split(":")[0]!, durationMs: Date.now() - started}); }
   });
 }
-const binding = () => getNativeDb().$client;
+const binding = () => diagnosticBinding(getNativeDb().$client, getD1Bindings().PUBLIC_CATALOG);
 type Category = {
   id: number; slug: string; name: string; parentId: number | null; position: number;
   isActive: boolean; description: string | null; imageCloudinaryId: string | null;
@@ -95,4 +97,8 @@ export async function getRelatedProducts(input: {productId: number; categorySlug
 }
 export async function getLatestCategoryProducts(slugs: string[]) {
   return publicRead("latest:" + JSON.stringify(slugs), () => latestRead(binding(), slugs));
+}
+
+export async function searchProductsPage(term: string, options: {page?:number;perPage?:number} = {}): Promise<PagedProducts> {
+ return publicRead("search:"+JSON.stringify([term,options]),()=>searchRead(binding(),term,options));
 }

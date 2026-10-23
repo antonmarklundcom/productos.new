@@ -395,6 +395,7 @@ export async function runBackup(
  * `BACKUP_TABLES`.
  */
 export const PRIMARY_KEY: Record<BackupTable, string | null> = {
+  catalog_audit: "id",
   supplier_offers: "id",
   notification_outbox: "id",
   operation_keys: "id",

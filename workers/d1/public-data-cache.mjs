@@ -12,7 +12,7 @@ export function publicReadContext(request, env, ctx, storage = globalThis.caches
    url.protocol === "https:" && (url.pathname === "/" || /^\/(producto|categoria)\/[a-z0-9-]+\/?$/.test(url.pathname)) &&
    !["cookie", "authorization", "next-action", "range"].some(header => request.headers.has(header)) &&
    !/no-cache|no-store/i.test(request.headers.get("cache-control") || ""));
- return {enabled, ttl, namespace: `catalog-data-v1-${env.CF_VERSION_METADATA?.id}-${url.origin}`,
+ return {diagnostics: env.WORKERS_PUBLIC_DIAGNOSTICS === "true", batches: /** @type {{wallMs:number,statements:number,rowsRead:number,serviceMs:number,failed?:boolean}[]} */ ([]), enabled, ttl, namespace: `catalog-data-v1-${env.CF_VERSION_METADATA?.id}-${url.origin}`,
    origin: url.origin, storage, ctx, failed: false, memo: new Map(), productSlugs: new Map(), loads: /** @type {{reader:string,durationMs:number}[]} */ ([]), expiresAt: Infinity};
 }
 function record(context, entry) {

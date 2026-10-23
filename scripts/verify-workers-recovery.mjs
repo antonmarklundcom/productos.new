@@ -1,7 +1,8 @@
+import { rehearsePrivateRecovery } from './workers-recovery-private.mjs';
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile, rm, readdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -31,7 +32,7 @@ try {
     await mkdir(folder, { recursive: true });
     await writeFile(path.join(folder, 'wrangler.json'), JSON.stringify({ name: database, compatibility_date: '2026-10-09', d1_databases: [{ binding: 'DB', database_name: database, database_id: '00000000-0000-4000-8000-000000000099' }] }));
   }
-  const migrationNames = ["0000_useful_mattie_franklin", "0001_fancy_warhawk", "0002_boring_roulette", "0003_oval_masked_marvel"];
+  const migrationNames = (await readdir(path.join(root,"workers/d1/migrations"))).filter(n=>n.endsWith(".sql")).sort().map(n=>n.slice(0,-4));
   const migrations = await Promise.all(migrationNames.map(name => readFile(path.join(root, "workers/d1/migrations", name + ".sql"), "utf8")));
   const seed = path.join(work, "synthetic-seed.sql");
   await writeFile(seed, migrations.join("\n") + "\nINSERT INTO categories(id,slug,name,is_active) VALUES(1,'synthetic','Synthetic',1);\nINSERT INTO products(id,slug,name,category_id,is_active,published_at,sale_mode) VALUES(1,'synthetic','Synthetic',1,1,CURRENT_TIMESTAMP,'enquiry');\nINSERT INTO variants(id,product_id,sku,label,price_pyg,on_hand,is_active) VALUES(1,1,'SYNTH-1','Synthetic',50000,2,1);\nINSERT INTO product_images(product_id,cloudinary_id,position) VALUES(1,'synthetic-image-reference',0);\n");
@@ -54,7 +55,10 @@ try {
   const parsed = JSON.parse(output);
   assert.deepEqual(parsed[0].results[0], { categories: 1, products: 1, variants: 1, images: 1, price: 50000, limiter_index: 1 });
   assert.deepEqual(parsed[1].results, []);
-  console.log(JSON.stringify({ result: "PASS", scope: "synthetic local D1 Wrangler schema-first export/import", migrations: migrationNames, exportBytes: bytes.length, exportSha256: createHash("sha256").update(bytes).digest("hex"), counts: parsed[0].results[0], foreignKeys: "PASS", productionOrR2Recovery: "not exercised" }));
+  const visibility = JSON.parse(local(["d1","execute",database,"--local","--command","SELECT sale_mode,is_active,published_at FROM products WHERE id=1;","--json"],target))[0].results[0];
+  assert.equal(visibility.sale_mode,"enquiry"); assert.equal(visibility.is_active,1); assert.ok(visibility.published_at);
+  await rehearsePrivateRecovery({root,source,target,local,database,schemaExport,bytes,migrationNames,migrations,counts:parsed[0].results[0]});
+  console.log(JSON.stringify({ result: "PASS", scope: "synthetic local D1 Wrangler schema-first export/import", migrations: migrationNames, exportBytes: bytes.length, exportSha256: createHash("sha256").update(bytes).digest("hex"), counts: parsed[0].results[0], foreignKeys: "PASS", productionRecovery: "not exercised" }));
 } finally {
   const resolved = path.resolve(work);
   if (!resolved.startsWith(temporaryRoot + path.sep) || !path.basename(resolved).startsWith("productos-recovery-")) throw new Error("Refusing unexpected cleanup target");

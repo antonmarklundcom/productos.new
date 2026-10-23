@@ -15,6 +15,10 @@ import {
 import { formatDateTimePY } from "@/lib/py";
 import { requireCapabilityPage } from "@/lib/admin-guard";
 import { t } from "@/i18n";
+import { requireStaffSession } from "@/lib/admin-guard";
+import { getDb } from "@/db";
+import { catalogAudit } from "@/db/schema";
+import { and,eq,desc } from "drizzle-orm";
 
 export const metadata: Metadata = { title: t("panel.producto.meta") };
 
@@ -33,6 +37,8 @@ export default async function AdminProductPage({ params }: { params: Params }) {
   if (!found) notFound();
 
   const { product, variants, images } = found;
+  const actor=await requireStaffSession();
+  const history=await getDb().select().from(catalogAudit).where(and(eq(catalogAudit.recordType,"product"),eq(catalogAudit.recordId,productId),actor.role==="owner"?undefined:eq(catalogAudit.actorId,actor.userId))).orderBy(desc(catalogAudit.createdAt),desc(catalogAudit.id)).limit(20);
   const categories = await listCategories();
 
   // Historial de ajustes de todas las variantes, en una sola lista.
@@ -79,6 +85,7 @@ export default async function AdminProductPage({ params }: { params: Params }) {
             }))}
             defaults={{
               productId: product.id,
+              revision: product.revision,
               saleMode: product.saleMode,
               showPrice: product.showPrice,
               slug: product.slug,
@@ -101,6 +108,7 @@ export default async function AdminProductPage({ params }: { params: Params }) {
         <div className="mt-2">
           <VariantEditor
             productId={product.id}
+            revision={product.revision}
             variants={variants.map((variant) => ({
               id: variant.id,
               sku: variant.sku,
@@ -137,6 +145,11 @@ export default async function AdminProductPage({ params }: { params: Params }) {
         ))}
       </section>
 
+      <section className="mt-8" aria-label="Historial del catálogo">
+        <h2 className="font-medium">Historial del catálogo</h2>
+        <p className="text-muted-foreground text-xs">Últimos 20 eventos {actor.role==="owner"?"del producto":"de tu usuario"}. Sólo se guardan campos afectados y versiones.</p>
+        <ul className="mt-2 text-sm">{history.map(event=><li key={event.id}>{formatDateTimePY(event.createdAt)} · Usuario {event.actorId} · {event.operation} · versión {event.revision} · {event.fields}</li>)}</ul>
+      </section>
       {adjustments.length > 0 ? (
         <section className="mt-8">
           <h2 className="font-medium">{t("panel.producto.ultimosAjustes")}</h2>

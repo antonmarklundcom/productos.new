@@ -29,7 +29,7 @@ The rehearsal found that directly importing the full local dump can encounter a 
 
 ## Release prerequisite for the review fixes
 
-The generated `0003_oval_masked_marvel.sql` adds only the `workers_login_limits_starts_idx` index. Review/apply it through the separately authorized D1 migration procedure before releasing the indexed limiter cleanup. It was generated and tested locally; it has not been applied to production. The cleanup deletes at most 32 expired counters per call and retains all current login/recovery windows. No cron is needed or enabled.
+The generated `0003_oval_masked_marvel.sql` adds only the `workers_login_limits_starts_idx` index. Review/apply it through the separately authorized D1 migration procedure before releasing the indexed limiter cleanup. It was generated/tested and subsequently explicitly owner-approved, applied and verified before PR17 merged on23 October2026. This prerequisite is historical; do not reapply it as new setup. The cleanup deletes at most 32 expired counters per call and retains all current login/recovery windows. No cron is needed or enabled.
 
 Build and verify from the reviewed branch: `pnpm typecheck`, `pnpm lint`, `pnpm test` against a disposable test database, `pnpm test:workers-preview`, `pnpm build:vinext` and the normal Next build when shared source changed. Never point TEST_DATABASE_URL at the real store or retained local catalogue fixture.
 
@@ -37,10 +37,18 @@ Build and verify from the reviewed branch: `pnpm typecheck`, `pnpm lint`, `pnpm 
 
 The existing public 30-second DTO plus 30-second full-prefetch budget remains the accepted catalogue policy. Admin changes can be visible sooner to private/cookie requests than anonymous caches. Immediate emergency unpublish needs a separately accepted invalidation policy; this task did not add a global purge or extend stale data.
 
-Still pending: actual provider recovery/support inspection, consistent private export and R2 copy, isolated private restore/login/decryption test, owner RPO/RTO/retention approval, real-phone/network measurements and matched cold-render attribution. No new paid service, schedule or provider setting is required by the local fixes.
+Still pending: actual provider recovery/support inspection, consistent private export and independent R2 copy, isolated production-derived restore, owner RPO/RTO/retention approval and real-phone/network measurements. The synthetic private decryption/hash fixture and built-Worker login/session suite described below supersede the earlier local-fixture gap; they do not prove production disaster recovery. No new paid service, schedule or provider setting is required by the local fixes.
 
 ## Sources
 
 - [Cloudflare D1 Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/) — provider recovery mechanism and support verification.
 - [Cloudflare D1 import/export](https://developers.cloudflare.com/d1/best-practices/import-export-data/) — SQL import/export, table order, deferred foreign keys and export limitations.
 - [Legacy MySQL recovery](../BACKUP-RECOVERY.md) — applies to the MySQL/Cloudinary runtime; its commands do not back up native D1/R2.
+
+## Synthetic manifest, private fixture and media validation — 23 October 2026
+
+`node scripts/verify-workers-recovery.mjs` now discovers all versioned SQL migrations at runtime. Its allowlisted JSON manifest contains revision, capture timestamp, migration hashes, SQL/schema hashes, catalogue counts and synthetic image keys/hash/size/dimensions. It copies tiny PNG original/card/thumb bytes between two separately persisted local Miniflare R2 buckets and validates restored bytes and MIME. Wrong key, missing image and changed migration manifest are explicit negative checks. Known Cloudflare credential variables are removed from Wrangler children; generated configurations have only local bindings and no outgoing integrations.
+
+A separate isolated synthetic D1 fixture transfers only a randomly generated password hash, encrypted settings, owner role and session version using bound statements. Random plaintext and encryption key remain in memory. Validation executes the actual `src/lib/secret-box.ts` encryption/decryption implementation and bcrypt verification. This is a crypto/hash/session-version recovery proof, **not HTTP login, cookie issuance, session revocation or full application authorization acceptance**. It does not restore real integration_settings/users rows from a production export. The catalogue rehearsal independently checks enquiry publication, integer price and foreign keys. It does not assert public HTML hidden-price presentation; the browser suite owns that proof.
+
+Manifest fields describe this immutable local fixture; they are not a production consistency protocol or a provider backup receipt. Schema/data export hashes identify the source artefacts; SQL restore queries and foreign-key checks validate restored catalogue data. Private audit/import-receipt rows are not exported into reports. No production scan/export, backup schedule, independent destination, retention, RPO or RTO has been activated.

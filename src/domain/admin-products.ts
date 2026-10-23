@@ -405,6 +405,7 @@ export async function listCategories(executor?: Executor) {
 // ---------------------------------------------------------------------------
 
 export type ProductWrite = {
+  expectedRevision?: number;
   dropiUrl?: string | null;
   saleMode?: "stock" | "enquiry" | "showcase";
   showPrice?: boolean;
@@ -465,16 +466,18 @@ export async function updateProduct(
   await assertSlugFree(tx, input.slug, productId);
 
   const existing = await tx
-    .select({ publishedAt: products.publishedAt, saleMode: products.saleMode })
+    .select({ publishedAt: products.publishedAt, saleMode: products.saleMode, revision: products.revision })
     .from(products)
     .where(eq(products.id, productId))
     .limit(1);
   const current = existing[0];
   if (!current) throw new AdminInputError("adminError.producto.noExiste");
+  if(input.expectedRevision!==undefined&&current.revision!==input.expectedRevision)throw catalogRevisionConflict();
 
-  await tx
+  const [saved] = await tx
     .update(products)
     .set({
+      revision: sql`${products.revision}+1`,
       saleMode: input.saleMode,
       showPrice:
         (input.saleMode ?? current.saleMode) === "stock"
@@ -498,7 +501,8 @@ export async function updateProduct(
       // mandar el producto al tope de "nuevos" otra vez.
       publishedAt: input.published ? (current.publishedAt ?? new Date()) : null,
     })
-    .where(eq(products.id, productId));
+    .where(and(eq(products.id, productId), input.expectedRevision===undefined?undefined:eq(products.revision,input.expectedRevision)));
+  if(saved.affectedRows!==1)throw catalogRevisionConflict();
 }
 
 async function assertSlugFree(
@@ -717,7 +721,9 @@ export async function addProductImage(
   input: { productId: number; cloudinaryId: string; alt: string | null },
   executor?: Executor
 ): Promise<void> {
-  const tx = executor ?? getDb();
+  if(!executor)return getDb().transaction(tx=>addProductImage(input,tx));
+  const tx = executor;
+  await tx.update(products).set({revision:sql`${products.revision}+1`}).where(eq(products.id,input.productId));
   const [row] = await tx
     .select({
       position: sql<number>`COALESCE(MAX(${productImages.position}) + 1, 0)`,
@@ -750,6 +756,7 @@ export async function replaceProductImages(
   }
   const db = executor ?? getDb();
   await db.transaction(async (tx) => {
+    await tx.update(products).set({revision:sql`${products.revision}+1`}).where(eq(products.id,productId));
     await tx
       .delete(productImages)
       .where(eq(productImages.productId, productId));
@@ -770,7 +777,11 @@ export async function deleteProductImage(
   imageId: number,
   executor?: Executor
 ): Promise<void> {
-  const tx = executor ?? getDb();
+  if(!executor)return getDb().transaction(tx=>deleteProductImage(imageId,tx));
+  const tx = executor;
+  const [image]=await tx.select({productId:productImages.productId}).from(productImages).where(eq(productImages.id,imageId));
+  if(!image)return;
+  await tx.update(products).set({revision:sql`${products.revision}+1`}).where(eq(products.id,image.productId));
   await tx.delete(productImages).where(eq(productImages.id, imageId));
 }
 
@@ -866,4 +877,9 @@ export async function lowStockVariants(
       (a, b) => a.available - a.reorderPoint - (b.available - b.reorderPoint)
     )
     .slice(0, limit);
+}
+
+/** Conflict messages retain the current client draft; no automatic overwrite retry. */
+export function catalogRevisionConflict(){
+ const error=new Error("El producto cambió desde que abriste el formulario. Tu borrador sigue aquí: copiá tus cambios y recargá la ficha antes de guardar.");error.name="AdminInputError";return error;
 }

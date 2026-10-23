@@ -1,3 +1,6 @@
+import { requireStaffSession } from "../../src/lib/admin-guard";
+import { catalogAudit, products } from "./schema";
+import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { getNativeDb, type NativeDatabase } from "./database";
 import { supplierOffers, variants } from "./schema";
@@ -19,6 +22,7 @@ export async function readSupplierCosts(variantIds: number[]) {
 
 /** Native D1 batch makes switching the preferred offer atomic. */
 export async function saveD1SupplierOffer(productId: number, variantId: number, offerId: number | undefined, input: SupplierOfferWrite) {
+  const actor=await requireStaffSession();
   const db = getNativeDb();
   if (input.isPreferred && (!input.isActive || !input.isConfirmed || input.unitCostPyg == null)) throw new Error("El proveedor preferido debe estar activo, confirmado y tener costo.");
   if (input.unitCostPyg != null && (!Number.isSafeInteger(input.unitCostPyg) || input.unitCostPyg < 0)) throw new Error("Costo inválido.");
@@ -29,8 +33,10 @@ export async function saveD1SupplierOffer(productId: number, variantId: number, 
     if (!offer) throw new Error("La oferta no pertenece a esta variante.");
   }
   const save = offerId === undefined ? db.insert(supplierOffers).values({...input,variantId}) : db.update(supplierOffers).set(input).where(and(eq(supplierOffers.id,offerId),eq(supplierOffers.variantId,variantId)));
-  if (input.isPreferred) await db.batch([db.update(supplierOffers).set({isPreferred:false}).where(eq(supplierOffers.variantId,variantId)), save]);
-  else await db.batch([save]);
+  const revision=db.update(products).set({revision:sql`${products.revision}+1`}).where(eq(products.id,productId));
+  const audit=db.insert(catalogAudit).values({id:randomUUID(),actorId:actor.userId,operation:"save-supplier",recordType:"product",recordId:productId,revision:sql`(SELECT revision FROM products WHERE id=${productId})`,fields:JSON.stringify(["supplierOffers"])});
+  if (input.isPreferred) await db.batch([db.update(supplierOffers).set({isPreferred:false}).where(eq(supplierOffers.variantId,variantId)), save,revision,audit]);
+  else await db.batch([save,revision,audit]);
 }
 export async function writeSupplierOffer(_variantId:number, _offerId:number|undefined, _input:SupplierOfferWrite, _executor?:NativeDatabase): Promise<never> { void [_variantId,_offerId,_input,_executor]; throw new Error("D1_STAGING_USE_ATOMIC_SUPPLIER_SAVE"); }
 export async function writeSupplierCost(_variantId:number, _input:SupplierCostWrite): Promise<never> { void [_variantId,_input]; throw new Error("D1_STAGING_IMPORT_NOT_PORTED"); }

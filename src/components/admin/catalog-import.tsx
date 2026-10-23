@@ -9,6 +9,7 @@ import {
   type CatalogImportSummary,
 } from "@/app/actions/admin-products";
 import { t, tPlural } from "@/i18n";
+import { catalogOnly } from "@/config/catalog-capabilities";
 
 /**
  * Carga masiva de productos por planilla, desde `/admin/productos`.
@@ -81,6 +82,18 @@ export function CatalogImportForm() {
     if (!formData) return;
 
     startTransition(async () => {
+      if (catalogOnly) {
+      // Store only a digest and random identity; file bytes and supplier data stay out of browser storage.
+      const selectedFile=formData.get("file") as File;
+      const digest=await crypto.subtle.digest("SHA-256",await selectedFile.arrayBuffer());
+      const fingerprint=Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,"0")).join("")+":"+String(pisarStock);
+      const storageKey="catalog-import-v1";
+      let pending:{id:string;fingerprint:string}|null=null;
+      try{const saved=sessionStorage.getItem(storageKey);if(saved)pending=JSON.parse(saved);}catch{setErrores(["No se pudo recuperar la identidad de importación. Usá Nueva importación para comenzar otra."]);return;}
+      if(pending&&pending.fingerprint!==fingerprint){setErrores(["Hay otra importación pendiente con un archivo u opciones distintos. Volvé a elegir el original para continuar o usá Nueva importación."]);return;}
+      if(!pending){pending={id:crypto.randomUUID(),fingerprint};try{sessionStorage.setItem(storageKey,JSON.stringify(pending));}catch{setErrores(["El navegador no permite guardar la identidad para reintentar de forma segura."]);return;}}
+      formData.set("importId",pending.id);
+      }
       const result = await applyCatalogImport(formData);
       if (!result.ok) {
         setErrores(result.errores);
@@ -114,6 +127,7 @@ export function CatalogImportForm() {
           )
         );
       }
+      if (catalogOnly) sessionStorage.removeItem("catalog-import-v1");
       setSummary(null);
       setErrores(null);
       setFileName(null);
@@ -131,6 +145,10 @@ export function CatalogImportForm() {
         {t("panel.productos.importar.ayuda")}
       </p>
 
+      {catalogOnly ? (<>
+      <button type="button" className="mt-2 text-xs underline" disabled={isPending} onClick={()=>{sessionStorage.removeItem("catalog-import-v1");setSummary(null);setErrores(null);}}>Nueva importación</button>
+      <p className="text-muted-foreground mt-1 text-xs">Si se corta la conexión o recargás, elegí el mismo archivo y opciones para continuar desde los lotes confirmados. Los lotes ya guardados pueden estar publicados.</p>
+      </>) : null}
       <fieldset
         className="mt-3 flex flex-wrap gap-4 text-sm"
         disabled={isPending}

@@ -1,0 +1,34 @@
+import {cleanup,fireEvent,render,screen,waitFor} from "@testing-library/react";
+import {afterEach,expect,it,vi} from "vitest";
+import {ProductForm} from "./product-form";
+import {VariantEditor} from "./variant-editor";
+const actions=vi.hoisted(()=>({save:vi.fn(),variant:vi.fn(),refresh:vi.fn()}));
+vi.mock("@/app/actions/admin-products",()=>({saveProduct:actions.save,saveProductVariant:actions.variant,adjustVariantStock:vi.fn()}));
+vi.mock("next/navigation",()=>({useRouter:()=>({refresh:actions.refresh,push:vi.fn()})}));
+vi.mock("sonner",()=>({toast:{success:vi.fn()}}));
+vi.mock("@/components/admin/markdown-editor",()=>({MarkdownEditor:()=>null}));
+afterEach(()=>{cleanup();vi.clearAllMocks();});
+it("keeps the product draft and original revision when a save conflicts",async()=>{
+ actions.save.mockResolvedValue({ok:false,error:"El producto cambió. Tu borrador sigue aquí."});
+ const {container}=render(<ProductForm defaults={{productId:1,revision:3,slug:"draft",name:"Original",description:"",categoryId:1,brand:"",ivaRate:10,isActive:true,published:true,isFeatured:false,saleMode:"enquiry"}} categories={[{id:1,name:"Categoría"}]}/>);
+ const name=container.querySelector('input[name="name"]')!;
+ fireEvent.change(name,{target:{value:"My unsaved draft"}});
+ fireEvent.submit(container.querySelector("form")!);
+ await screen.findByRole("alert");
+ expect(name).toHaveValue("My unsaved draft");
+ expect(actions.save).toHaveBeenCalledWith(expect.objectContaining({expectedRevision:3,name:"My unsaved draft"}));
+ expect(actions.refresh).not.toHaveBeenCalled();
+});
+it("keeps variant fields open on conflict without an automatic overwrite retry",async()=>{
+ actions.variant.mockResolvedValue({ok:false,error:"El producto cambió. Tu borrador sigue aquí."});
+ const {container}=render(<VariantEditor productId={1} revision={4} variants={[{id:11,sku:"V1",label:"Original",pricePyg:12000,compareAtPyg:null,isActive:true,onHand:0,heldQty:0,available:0}]}/>);
+ fireEvent.click(screen.getByRole("button",{name:"Editar"}));
+ const label=container.querySelector('input[name="label"]')!;
+ fireEvent.change(label,{target:{value:"My variant draft"}});
+ fireEvent.submit(container.querySelector("form")!);
+ await waitFor(()=>expect(actions.variant).toHaveBeenCalledOnce());
+ await screen.findByRole("alert");
+ expect(label).toHaveValue("My variant draft");
+ expect(actions.variant).toHaveBeenCalledWith(expect.objectContaining({expectedRevision:4,label:"My variant draft"}));
+ expect(actions.refresh).not.toHaveBeenCalled();
+});

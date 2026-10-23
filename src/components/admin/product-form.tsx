@@ -18,6 +18,7 @@ export type ProductFormValues = {
   saleMode?: "stock" | "enquiry" | "showcase";
   showPrice?: boolean;
   productId?: number;
+  revision?: number;
   slug: string;
   name: string;
   description: string;
@@ -39,6 +40,7 @@ export function ProductForm({
   categories: Array<{ id: number; name: string }>;
 }) {
   const router = useRouter();
+  const [revision, setRevision] = useState(defaults.revision);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [slug, setSlug] = useState(defaults.slug);
@@ -59,6 +61,7 @@ export function ProductForm({
         startTransition(async () => {
           const result = await saveProduct({
             productId: defaults.productId,
+            expectedRevision: revision,
             saleMode: String(data.get("saleMode") ?? (catalogCapabilities.checkout ? "stock" : "enquiry")),
             showPrice: data.get("showPrice") === "on",
             slug: String(data.get("slug") ?? ""),
@@ -78,6 +81,7 @@ export function ProductForm({
             return;
           }
 
+          setRevision(result.revision);
           toast.success(t("panel.producto.guardado"));
           if (defaults.productId === undefined) {
             router.push(`/admin/productos/${result.productId}`);

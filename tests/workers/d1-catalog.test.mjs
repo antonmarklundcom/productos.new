@@ -11,13 +11,13 @@ test('Workers catalog adapters preserve directives, guards, batching and the exi
    const f=path.join(root,'src/components/admin',name+'.tsx');
    const transformed=plugin.transform(readFileSync(f,'utf8'),f).code;
    assert.match(transformed,/^"use client";/);
-   if(name==='product-images')assert.match(transformed,/await prepareR2ImageForm\(data\)/);
-   else{assert.match(transformed,/batchOffset/);assert.match(transformed,/800\*1024/);assert.match(transformed,/El último lote puede haberse guardado/);}
+   if(name==='product-images'){assert.match(transformed,/await prepareR2ImageForm\(data, prepareOptions\)/);assert.ok(transformed.indexOf("if (prepareOptions.signal.aborted) return;")<transformed.indexOf("const result = await uploadProductImage(data);"));}
+   else{assert.match(transformed,/batchOffset/);assert.match(transformed,/800\*1024/);assert.match(transformed,/recibos guardados evitan repetir/);}
  }
  assert.match(readFileSync(path.join(root,'workers/d1/policy.mjs'),'utf8'),/size > 1048576/);
  const code=readFileSync(path.join(root,'workers/d1/catalog-actions.ts'),'utf8');
- assert.equal((code.match(/await requireStaffSession\(\)/g)||[]).length,3);
- assert.match(code,/eq\(productImages.productId,value.productId!/);
+ for(const name of ["applyD1CatalogImport","uploadD1ProductImage","removeD1ProductImage","saveD1Product","saveD1ProductVariant"]){const body=code.slice(code.indexOf("export async function "+name));assert.match(body.slice(0,250),/await requireStaffSession\(\)/);}
+ assert.match(code,/DELETE FROM product_images WHERE id=\? AND product_id=\?/);
  assert.throws(()=>verifyNativeCatalogBundle('legacy Cloudinary upload'),/omitted native catalog/);
  assert.doesNotThrow(()=>verifyNativeCatalogBundle('D1_CATALOG_BATCH_FAILED Falta una foto en R2 La foto preparada tiene un formato o tamaño inválido'));
 });

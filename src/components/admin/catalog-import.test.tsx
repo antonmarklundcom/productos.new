@@ -1,3 +1,4 @@
+import { webcrypto } from "node:crypto";
 import {
   fireEvent,
   render,
@@ -8,6 +9,8 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CatalogImportForm } from "./catalog-import";
 
+const capabilities = vi.hoisted(() => ({ catalogOnly: false }));
+vi.mock("@/config/catalog-capabilities", () => capabilities);
 const actions = vi.hoisted(() => ({ preview: vi.fn(), apply: vi.fn() }));
 vi.mock("@/app/actions/admin-products", () => ({
   previewCatalogImport: actions.preview,
@@ -61,8 +64,52 @@ describe("catalog import paste fallback", () => {
       (actions.apply.mock.calls[0]![0] as FormData).get("duplicateReview")
     ).toBe(JSON.stringify(advertencias));
   });
+  it("normal Next imports neither persist an identity nor promise receipt-based resume", async () => {
+    sessionStorage.setItem("catalog-import-v1", "malformed pending Worker identity");
+    const stored = sessionStorage.getItem("catalog-import-v1");
+    const digest = vi.spyOn(webcrypto.subtle, "digest");
+    render(<CatalogImportForm />);
+    expect(screen.queryByRole("button", {name: /Nueva importaci/})).not.toBeInTheDocument();
+    expect(screen.queryByText(/lotes confirmados/)).not.toBeInTheDocument();
+    await pasteAndPreview();
+    fireEvent.click(screen.getByRole("button", {name: "Confirmar e importar"}));
+    await waitFor(() => expect(actions.apply).toHaveBeenCalledOnce());
+    expect((actions.apply.mock.calls[0]![0] as FormData).get("importId")).toBeNull();
+    expect(digest).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem("catalog-import-v1")).toBe(stored);
+    digest.mockRestore();
+  });
+  it("reuses the pending import identity after reload and rejects changed options", async()=>{
+    capabilities.catalogOnly = true;
+    actions.apply.mockResolvedValueOnce({ok:false,errores:["Lost acknowledgement"]});
+    render(<CatalogImportForm/>);
+    await pasteAndPreview();
+    fireEvent.click(screen.getByRole("button",{name:"Confirmar e importar"}));
+    await waitFor(()=>expect(actions.apply).toHaveBeenCalledOnce());
+    const firstId=(actions.apply.mock.calls[0]![0] as FormData).get("importId");
+    await screen.findByText("Lost acknowledgement");
+    cleanup();
+    render(<CatalogImportForm/>);
+    await pasteAndPreview();
+    actions.apply.mockResolvedValueOnce({ok:false,errores:["Retry fixture"]});
+    fireEvent.click(screen.getByRole("button",{name:"Confirmar e importar"}));
+    await waitFor(()=>expect(actions.apply).toHaveBeenCalledTimes(2));
+    expect((actions.apply.mock.calls[1]![0] as FormData).get("importId")).toBe(firstId);
+    await screen.findByText("Retry fixture");
+    cleanup();
+    render(<CatalogImportForm/>);
+    fireEvent.click(screen.getByRole("checkbox"));
+    await pasteAndPreview();
+    fireEvent.click(screen.getByRole("button",{name:"Confirmar e importar"}));
+    await screen.findByText(/Hay otra importación pendiente/);
+    expect(actions.apply).toHaveBeenCalledTimes(2);
+  });
   beforeEach(() => {
     vi.clearAllMocks();
+    capabilities.catalogOnly = false;
+    sessionStorage.clear();
+    vi.stubGlobal("crypto",webcrypto);
+    Object.defineProperty(File.prototype,"arrayBuffer",{configurable:true,value:function(){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsArrayBuffer(this);});}});
     actions.preview.mockResolvedValue({ ok: true, ...summary });
     actions.apply.mockResolvedValue({
       ok: true,

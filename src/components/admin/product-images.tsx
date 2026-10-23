@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { removeProductImage, uploadProductImage } from "@/app/actions/admin-products";
@@ -22,6 +22,9 @@ export function ProductImages({
   images: ImageCard[];
 }) {
   const router = useRouter();
+  const preparation = useRef<AbortController | null>(null);
+  const [preparationProgress, setPreparationProgress] = useState<number | null>(null);
+  useEffect(() => () => preparation.current?.abort(), []);
   const formRef = useRef<HTMLFormElement>(null);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -94,6 +97,14 @@ export function ProductImages({
           data.set("productId", String(productId));
 
           startTransition(async () => {
+            const controller = new AbortController();
+            preparation.current = controller;
+            const prepareOptions = { signal: controller.signal, onProgress(percent: number) {
+              setPreparationProgress(percent);
+              if (percent === 100) preparation.current = null;
+            } };
+            void prepareOptions; // Consumed by the Workers upload transform.
+            try {
             const result = await uploadProductImage(data);
             if (!result.ok) {
               setError(result.error);
@@ -102,6 +113,11 @@ export function ProductImages({
             formRef.current?.reset();
             toast.success(t("panel.fotos.subida"));
             router.refresh();
+            } catch (cause) {
+              if (!(cause instanceof DOMException && cause.name === "AbortError")) setError(cause instanceof Error ? cause.message : "No se pudo subir la foto. Volvé a intentar.");
+            } finally {
+              preparation.current = null; setPreparationProgress(null);
+            }
           });
         }}
       >
@@ -113,6 +129,12 @@ export function ProductImages({
           <Label htmlFor="alt">{t("panel.fotos.descripcion")}</Label>
           <Input id="alt" name="alt" maxLength={255} placeholder={t("panel.fotos.descripcion.placeholder")} />
         </div>
+        {preparationProgress !== null && preparationProgress < 100 ? (
+          <div className="grid gap-2">
+            <p role="status" aria-live="polite">Preparando foto: {preparationProgress}%</p>
+            <Button type="button" variant="outline" onClick={() => preparation.current?.abort()}>Cancelar preparación</Button>
+          </div>
+        ) : null}
         <Button type="submit" disabled={isPending}>
           {isPending ? t("panel.fotos.subiendo") : t("panel.fotos.subir")}
         </Button>
