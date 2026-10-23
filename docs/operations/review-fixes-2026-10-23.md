@@ -44,7 +44,7 @@ All ten reported bugs B01–B10 are fixed and checked locally on `codex/producto
 
 ### B02 — P2: Login throttling stops unnecessary growth
 
-**Status:** Fixed locally · unreleased. **Evidence:** `workers/d1/login-limit.ts:49`.
+**Status:** Fixed locally · unreleased. **Evidence:** `workers/d1/login-limit.ts:26`.
 
 **Condition / impact:** Continue attempts from a blocked IP while changing email strings; accumulate expired limiter keys. Rejected requests could keep allocating persistent counter rows.
 
@@ -84,7 +84,7 @@ All ten reported bugs B01–B10 are fixed and checked locally on `codex/producto
 
 ### B08 — P3: Search text follows navigation and screen changes
 
-**Status:** Fixed locally · unreleased. **Evidence:** `src/components/search-box.tsx:6`.
+**Status:** Fixed locally · unreleased. **Evidence:** `src/components/search-box.tsx:41`.
 
 **Condition / impact:** Search A, search B, Back/Forward, or switch between desktop and mobile header instances. The input could disagree with the displayed search results.
 
@@ -116,7 +116,7 @@ All ten reported bugs B01–B10 are fixed and checked locally on `codex/producto
 
 ### I04 — Actual request-body bound
 
-**Implemented locally; full-flow check pending.** The wrapper reads actual POST bytes before action parsing and returns 413 above 1 MiB, even with absent or fake Content-Length. Tests cover the exact boundary, interrupted bodies, URL-encoded forms and an 800 KiB multipart body. The Workerd → Vinext authenticated action flow still needs isolated acceptance.
+**Implemented locally; full-flow check pending.** The wrapper reads actual POST bytes before action parsing and returns 413 above 1 MiB, even with absent or fake Content-Length. Tests cover the exact boundary, interrupted bodies, URL-encoded forms and an 800 KiB multipart body. The built local Workerd → Vinext invalid-login multipart action and exact 1 MiB boundary passed; oversized declared and chunked bodies returned 413. Authenticated upload/session acceptance remains pending.
 
 ### I06 — Search heading outline
 
@@ -193,3 +193,9 @@ The three Vitest skips are the live-credential Pagopar sandbox case, a default-t
 - Owner decides maximum acceptable loss/outage, retention, independent-copy location and whether emergency removal must beat the current freshness budget.
 - No speculative placement, cache, FTS or image-priority tuning. Current performance follow-ups need matched evidence.
 - Work used C: only; registered checkouts/other worktrees and existing program data were preserved. No portable E: mirror update.
+
+## Supplementary built-Worker action acceptance
+
+A separate synthetic local D1 (all four actual migrations), independent local-only Wrangler configuration and the existing built bundle served /admin/login. The check followed the rendered client chunks to the actual server reference and used React encodeReply([FormData]) with x-rsc-action. Invalid-login multipart returned the expected generic error in a 200 text/x-component response; an exactly 1,048,576-byte valid multipart action also passed. An actual 1,048,577-byte chunked request without Content-Length and declared oversize both returned 413. The task-owned Wrangler tree was stopped and loopback refusal confirmed.
+
+No valid account/session, authenticated upload or production request was used. URLencoded is not this login form's actual client action format; contradictory HTTP Content-Length framing cannot represent the Request-level fake-small-header fixture, so those unit-test limits remain explicit. An initial missing ESModule rule in the independent configuration was corrected and retained in the result record. This closes the invalid-login parser gap, not full authenticated admin/browser acceptance. Non-secret result: C:/Claude 1/reports/productos.new/2026-10-23/fixes/local-action-acceptance.json.
