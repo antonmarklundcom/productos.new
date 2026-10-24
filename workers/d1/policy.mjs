@@ -1,4 +1,4 @@
-const publicPaths = new Set(["/", "/contacto", "/envios", "/preguntas-frecuentes", "/devoluciones", "/privacidad", "/terminos", "/buscar", "/sitemap.xml", "/api/health", "/health"]);
+const publicPaths = new Set(["/", "/contacto", "/envios", "/preguntas-frecuentes", "/devoluciones", "/privacidad", "/terminos", "/buscar", "/sitemap.xml", "/api/health", "/health", "/api/catalog/recently-viewed", "/api/catalog/suggest"]);
 export function d1StagingRoute(request) {
   const path = new URL(request.url).pathname;
   const admin = /^\/admin(?:\/(?:login|recuperar|restablecer|estado|ajustes|productos(?:\/(?:nuevo|\d+|exportar))?|categorias))?\/?$/.test(path);

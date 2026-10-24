@@ -1,3 +1,4 @@
+import { CatalogPublicationChecklist } from "@/components/admin/catalog-publication-checklist";
 import type { Metadata } from "next";
 import Link from "next/link";
 import type React from "react";
@@ -63,6 +64,7 @@ export default async function AdminAjustesPage() {
 
   return (
     <div className="grid gap-6">
+      <CatalogPublicationChecklist />
       <div>
         <h1 className="text-xl font-semibold tracking-tight">{t("panel.ajustes.titulo")}</h1>
         <p className="text-muted-foreground mt-1 text-sm">{t("panel.ajustes.bajada")}</p>
@@ -139,7 +141,7 @@ function MarcaSection({ settings }: { settings: StoreSettings }) {
 
   return (
     <Tarjeta id="marca" titulo={t("panel.ajustes.marca.titulo")} bajada={t("panel.ajustes.marca.bajada")}>
-      <SettingsSectionForm seccion="marca" campos={campos}>
+      <SettingsSectionForm expectedSettings={settings} seccion="marca" campos={campos}>
         <div className="grid gap-3 sm:grid-cols-2">
           <CampoTexto
             nombre="tagline"
@@ -237,7 +239,7 @@ function IdentidadSection({ settings }: { settings: StoreSettings }) {
       titulo={t("panel.ajustes.identidad.titulo")}
       bajada={t("panel.ajustes.identidad.bajada")}
     >
-      <SettingsSectionForm seccion="identidad" campos={campos}>
+      <SettingsSectionForm expectedSettings={settings} seccion="identidad" campos={campos}>
         <div className="grid gap-3 sm:grid-cols-2">
           <CampoTexto
             nombre="nombre"
@@ -304,7 +306,7 @@ function CuentasSection({ settings }: { settings: StoreSettings }) {
       titulo={t("panel.ajustes.cuentas.titulo")}
       bajada={t("panel.ajustes.cuentas.bajada")}
     >
-      <SettingsSectionForm seccion="cuentas" campos={{ activas: "triestado" }}>
+      <SettingsSectionForm expectedSettings={settings} seccion="cuentas" campos={{ activas: "triestado" }}>
         <CampoSelect
           nombre="activas"
           etiqueta={t("panel.ajustes.cuentas.activas")}
@@ -329,7 +331,7 @@ function AnuncioSection({ settings }: { settings: StoreSettings }) {
   const a = settings.anuncio;
   return (
     <Tarjeta id="anuncio" titulo={t("panel.ajustes.anuncio.titulo")} bajada={t("panel.ajustes.anuncio.bajada")}>
-      <SettingsSectionForm seccion="anuncio" campos={{ activo: "booleano", texto: "texto", href: "texto" }}>
+      <SettingsSectionForm expectedSettings={settings} seccion="anuncio" campos={{ activo: "booleano", texto: "texto", href: "texto" }}>
         <CampoCheck nombre="activo" etiqueta={t("panel.ajustes.anuncio.activo")} valor={a.activo} />
         <div className="grid gap-3 sm:grid-cols-2">
           <CampoTexto
@@ -373,7 +375,7 @@ function ContactoSection({
   };
   return (
     <Tarjeta id="contacto" titulo={t("panel.ajustes.contacto.titulo")} bajada={t("panel.ajustes.contacto.bajada")}>
-      <SettingsSectionForm seccion="contacto" campos={campos}>
+      <SettingsSectionForm expectedSettings={settings} seccion="contacto" campos={campos}>
         <div className="grid gap-3 sm:grid-cols-2">
           <CampoTexto
             nombre="whatsapp"
@@ -431,7 +433,7 @@ function EnvioDevolucionSection({ settings }: { settings: StoreSettings }) {
   };
   return (
     <Tarjeta id="envio" titulo={t("panel.ajustes.envio.titulo")} bajada={t("panel.ajustes.envio.bajada")}>
-      <SettingsSectionForm seccion="envioDevolucion" campos={campos}>
+      <SettingsSectionForm expectedSettings={settings} seccion="envioDevolucion" campos={campos}>
         <div className="grid gap-3 sm:grid-cols-2">
           <CampoNumero nombre="handlingDaysMin" etiqueta={t("panel.ajustes.envio.preparacionMin")} valor={e.handlingDaysMin} />
           <CampoNumero nombre="handlingDaysMax" etiqueta={t("panel.ajustes.envio.preparacionMax")} valor={e.handlingDaysMax} />
@@ -509,7 +511,7 @@ function PaginasSection({ settings }: { settings: StoreSettings }) {
                 {t("panel.ajustes.paginas.porDefecto")}
               </p>
             ) : null}
-            <SettingsSectionForm
+            <SettingsSectionForm expectedSettings={settings}
               seccion="paginas"
               anidarEn={slug}
               campos={{ activo: "booleano", titulo: "texto", cuerpo: "texto" }}
@@ -549,7 +551,7 @@ function VidrieraSection({ settings }: { settings: StoreSettings }) {
   const v = settings.vidriera;
   return (
     <Tarjeta id="vidriera" titulo={t("panel.ajustes.vidriera.titulo")} bajada={t("panel.ajustes.vidriera.bajada")}>
-      <SettingsSectionForm
+      <SettingsSectionForm expectedSettings={settings}
         seccion="vidriera"
         campos={{ estrellasEnTarjetas: "booleano", barraCompraMovil: "booleano" }}
       >
@@ -580,7 +582,7 @@ function CheckoutSection({ settings }: { settings: StoreSettings }) {
       titulo={t("panel.ajustes.checkout.tituloSeccion")}
       bajada={t("panel.ajustes.checkout.bajada")}
     >
-      <SettingsSectionForm
+      <SettingsSectionForm expectedSettings={settings}
         seccion="checkout"
         campos={{ confianzaActiva: "booleano", confianzaTitulo: "texto", confianzaLineas: "lista" }}
       >
@@ -614,7 +616,7 @@ function CheckoutSection({ settings }: { settings: StoreSettings }) {
 function StockSection({ settings }: { settings: StoreSettings }) {
   return (
     <Tarjeta id="stock" titulo={t("panel.ajustes.stock.titulo")} bajada={t("panel.ajustes.stock.bajada")}>
-      <SettingsSectionForm seccion="stock" campos={{ umbralStockBajo: "texto" }}>
+      <SettingsSectionForm expectedSettings={settings} seccion="stock" campos={{ umbralStockBajo: "texto" }}>
         <CampoNumero
           nombre="umbralStockBajo"
           etiqueta={t("panel.ajustes.stock.umbral")}

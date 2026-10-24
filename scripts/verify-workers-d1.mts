@@ -1,3 +1,4 @@
+import {categorySnapshot} from "../src/domain/admin-edit-snapshot";
 import {getPlatformProxy} from 'wrangler';
 import {withD1Database,getNativeDb,getDb} from '../workers/d1/database';
 import {createCategory,updateCategory,moveCategory} from '../workers/d1/admin-categories';
@@ -21,16 +22,16 @@ try{
   const cat=await createCategory({name:'Prueba D1',slug});
   let productId:number|undefined;
   try{
-   await updateCategory({categoryId:cat.id,name:'Prueba D1 editada',slug});
+   await updateCategory({categoryId:cat.id,name:'Prueba D1 editada',slug,expectedSnapshot:categorySnapshot(cat)});
    const [reread]=await db.select().from(categories).where(eq(categories.id,cat.id));assert.equal(reread?.name,'Prueba D1 editada');checks++;
-   await moveCategory({categoryId:cat.id,direction:'up'});checks++;
+   await moveCategory({categoryId:cat.id,direction:'up',expectedSnapshot:categorySnapshot(reread!)});checks++;
    const [p]=await db.insert(products).values({name:'Prueba aislada',slug,categoryId:cat.id,saleMode:'enquiry',showPrice:false,dropiUrl:'https://app.dropi.com.py/dashboard/product-details/10067/cepillo-limpiador-con-dispenser-de-jabon'}).returning();assert.ok(p);productId=p.id;
    const [v]=await db.insert(variants).values({productId:p.id,sku:slug,label:'Prueba',pricePyg:69000}).returning();assert.ok(v);
    await assert.rejects(()=>db.update(variants).set({pricePyg:-1}).where(eq(variants.id,v.id)),(error:unknown)=>/constraint/i.test(String((error as {cause?:Error}).cause?.message)));checks++;
-   await saveD1SupplierOffer(p.id,v.id,undefined,{source:'Prueba proveedor A',unitCostPyg:23000,sourceType:'other',isConfirmed:true,isActive:true,isPreferred:true});
-   await saveD1SupplierOffer(p.id,v.id,undefined,{source:'Prueba proveedor B',unitCostPyg:18000,sourceType:'other',isConfirmed:true,isActive:true,isPreferred:true});
+   await saveD1SupplierOffer(p.id,v.id,undefined,{source:'Prueba proveedor A',unitCostPyg:23000,sourceType:'other',isConfirmed:true,isActive:true,isPreferred:true},p.revision);
+   await saveD1SupplierOffer(p.id,v.id,undefined,{source:'Prueba proveedor B',unitCostPyg:18000,sourceType:'other',isConfirmed:true,isActive:true,isPreferred:true},p.revision+1);
    const offers=await readSupplierOffers([v.id]);assert.equal(offers.length,2);assert.equal(offers.filter(o=>o.isPreferred).length,1);assert.equal(offers.find(o=>o.isPreferred)?.unitCostPyg,18000);checks+=3;
-   await assert.rejects(()=>saveD1SupplierOffer(p.id,v.id,undefined,{source:'Prueba inválida',unitCostPyg:1,isConfirmed:false,isActive:true,isPreferred:true}),/confirmado/);checks++;
+   await assert.rejects(()=>saveD1SupplierOffer(p.id,v.id,undefined,{source:'Prueba inválida',unitCostPyg:1,isConfirmed:false,isActive:true,isPreferred:true},p.revision+2),/confirmado/);checks++;
    // Force failure in the second statement: D1 must roll back the first write.
    await assert.rejects(()=>db.batch([db.update(supplierOffers).set({isPreferred:false}).where(eq(supplierOffers.variantId,v.id)),db.insert(supplierOffers).values({variantId:v.id,unitCostPyg:-1,source:'Falla deliberada'})]),(error:unknown)=>/constraint/i.test(String((error as {cause?:Error}).cause?.message)));
    assert.equal((await readSupplierOffers([v.id])).filter(o=>o.isPreferred).length,1);checks++;

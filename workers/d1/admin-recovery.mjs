@@ -66,10 +66,10 @@ export async function consumeReset(db, token, password, now = Date.now()) {
   return result[0].meta.changes === 1;
 }
 
-function page(reset, enabled, message = '', status = 200) {
+function page(reset, enabled, message = '', status = 200, retryToken = '') {
   const nonce = randomToken();
   const title = reset ? 'Elegí una nueva contraseña' : 'Recuperar acceso al panel';
-  const form = reset ? `<form method="post" action="/admin/restablecer"><input type="hidden" name="token" id="reset-token">
+  const form = reset ? `<form method="post" action="/admin/restablecer"><input type="hidden" name="token" id="reset-token" value="${escape(retryToken)}">
     <label for="new-password">Nueva contraseña</label><input id="new-password" name="password" type="password" required minlength="12" maxlength="72" autocomplete="new-password">
     <p class="hint">Usá al menos 12 caracteres, con una letra y un número. Evitá reutilizar contraseñas.</p>
     <label for="confirm-password">Confirmar contraseña</label><input id="confirm-password" name="confirm" type="password" required minlength="12" maxlength="72" autocomplete="new-password">
@@ -77,7 +77,7 @@ function page(reset, enabled, message = '', status = 200) {
     <button type="submit" id="reset-submit" disabled>Guardar contraseña</button><noscript><p>Activá JavaScript para abrir el enlace privado del email.</p></noscript></form>` :
     `<form method="post" action="/admin/recuperar"><label for="email">Email del administrador</label><input id="email" name="email" type="email" required maxlength="254" autocomplete="username" autocapitalize="none" inputmode="email"><button type="submit">Enviar enlace de recuperación</button></form>`;
   const script = reset && enabled ? `<script nonce="${nonce}">
-    const params = new URLSearchParams(location.hash.slice(1)); const token = params.get('token') || '';
+    const params = new URLSearchParams(location.hash.slice(1)); const token = params.get('token') || document.getElementById('reset-token').value || '';
     document.getElementById('reset-token').value = token;
     history.replaceState(null, '', location.pathname);
     document.getElementById('reset-submit').disabled = !/^[a-f0-9]{64}$/.test(token);
@@ -126,11 +126,12 @@ export async function handleAdminRecovery(request, env, ctx, now = Date.now()) {
       if(ipAllowed && emailAllowed)ctx.waitUntil(queueReset(env.DB,email,env,now).catch(()=>console.error('ADMIN_PASSWORD_RESET_QUEUE_FAILED')));
       return page(false,true,GENERIC);
     }
-    if (!await allow(env.DB,'admin-reset-consume-ip:'+ip,10,now)) return page(true,true,'Demasiados intentos. Esperá una hora antes de volver a probar.',429);
+    const retryToken = /^[a-f0-9]{64}$/.test(data.get('token') || '') ? data.get('token') : '';
+    if (!await allow(env.DB,'admin-reset-consume-ip:'+ip,10,now)) return page(true,true,'Demasiados intentos. Esperá una hora antes de volver a probar.',429,retryToken);
     const password = data.get('password') || '';
     if(password.length < 12 || new TextEncoder().encode(password).length > 72 || !/[a-zA-Z]/.test(password) || !/\d/.test(password))
-      return page(true,true,'Usá al menos 12 caracteres, con una letra y un número, y hasta 72 bytes.',400);
-    if(password !== data.get('confirm'))return page(true,true,'Las contraseñas no coinciden. Abrí nuevamente el enlace del email.',400);
+      return page(true,true,'Usá al menos 12 caracteres, con una letra y un número, y hasta 72 bytes.',400,retryToken);
+    if(password !== data.get('confirm'))return page(true,true,'Las contraseñas no coinciden. Corregilas para volver a intentar.',400,retryToken);
     const saved = await consumeReset(env.DB,data.get('token') || '',password,now);
     if(!saved)return page(true,true,'El enlace venció o ya se usó. Solicitá uno nuevo.',400);
     return page(false,false,'Contraseña actualizada. Iniciá sesión con tu nueva contraseña. Tus sesiones anteriores se cerraron.');

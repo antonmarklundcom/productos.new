@@ -1,0 +1,33 @@
+{
+  "sourceRoot": "<ABSOLUTE_PRIVATE_IMMUTABLE_CAPTURE_DIRECTORY>",
+  "privateRoot": "<ABSOLUTE_APPROVED_PRIVATE_DESTINATION_PARENT>",
+  "bundlePath": "<ABSOLUTE_NEW_ENCRYPTED_BUNDLE_DIRECTORY>",
+  "restorePath": "<ABSOLUTE_NEW_PRIVATE_ISOLATED_PREPARATION_DIRECTORY>",
+  "keyFile": "<ABSOLUTE_PRIVATE_KEY_FILE_OR_REMOVE_TO_USE_ENVIRONMENT>",
+  "policy": {
+    "ownerApproved": false,
+    "approvalReference": "<OWNER_APPROVAL_REFERENCE>",
+    "destinationIdentity": "<OWNER_SELECTED_INDEPENDENT_DESTINATION>",
+    "independentCopy": false,
+    "independenceEvidence": "<VERIFIED_FAILURE_BOUNDARY_EVIDENCE>",
+    "rpoSeconds": "<OWNER_APPROVED_POSITIVE_INTEGER>",
+    "rtoSeconds": "<OWNER_APPROVED_POSITIVE_INTEGER>",
+    "retentionPolicy": "<OWNER_APPROVED_RETENTION_NO_AUTOMATIC_DELETION>",
+    "automaticDeletion": false
+  },
+  "capture": {
+    "immutable": false,
+    "consistencyAccepted": false,
+    "capturedAt": "<EXPORTER_TIMESTAMP>",
+    "procedureReference": "<REVIEWED_IMMUTABLE_CAPTURE_PROCEDURE_AND_EVIDENCE>",
+    "certificateSha256": "<EXPORTER_CERTIFICATE_SHA256>"
+  },
+  "artifacts": [
+    { "path": "<RELATIVE_SCHEMA_PATH>", "kind": "d1-schema", "size": "<EXPORTED_BYTE_COUNT>", "sha256": "<EXPORTER_SHA256>" },
+    { "path": "<RELATIVE_DATA_PATH>", "kind": "d1-data", "size": "<EXPORTED_BYTE_COUNT>", "sha256": "<EXPORTER_SHA256>" },
+    { "path": "<RELATIVE_OBJECT_PATH_REPEAT_FOR_EVERY_R2_OBJECT>", "kind": "r2-object", "size": "<EXPORTED_BYTE_COUNT>", "sha256": "<EXPORTER_SHA256>" },
+    { "path": "<RELATIVE_PRIVATE_CONFIGURATION_PATH>", "kind": "private-config", "size": "<EXPORTED_BYTE_COUNT>", "sha256": "<EXPORTER_SHA256>" },
+    { "path": "<RELATIVE_CAPTURE_CERTIFICATE_PATH>", "kind": "capture-certificate", "size": "<EXPORTED_BYTE_COUNT>", "sha256": "<EXPORTER_SHA256>" }
+  ],
+  "restore": { "newPrivateIsolatedTarget": false, "outgoingIntegrationsDisabled": false, "productionTraffic": false }
+}

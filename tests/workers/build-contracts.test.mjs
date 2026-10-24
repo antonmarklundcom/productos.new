@@ -35,3 +35,12 @@ test("native action routing cannot silently fall back after an exported action r
   assert.match(fn.body.getText(ast),/return \w*D1\w*\(/);
  }
 });
+
+test("session and retained SQL adapters reject missing critical source anchors",()=>{
+ for(const [file,from] of [
+  ["src/lib/session.ts","process.env.SESSION_SECRET"],
+  ["src/lib/session.ts","getIronSession<AdminSession>(cookieStore, sessionOptions())"],
+  ["src/domain/stock.ts","sql`NOW()`"],
+  ["src/db/queries.ts","MATCH(${products.name}, ${products.description})"]
+ ]){const original=source(file);assert.ok(original.includes(from));assert.ok(plugin.transform(original,path.join(root,file))?.code);assert.throws(()=>plugin.transform(original.replace(from,"changedSourceAnchor"),path.join(root,file)),/source drift/);}
+});

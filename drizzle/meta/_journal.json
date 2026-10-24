@@ -183,6 +183,13 @@
       "when": 1792747337128,
       "tag": "0025_typical_frightful_four",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "5",
+      "when": 1792865597434,
+      "tag": "0026_concerned_stature",
+      "breakpoints": true
     }
   ]
 }

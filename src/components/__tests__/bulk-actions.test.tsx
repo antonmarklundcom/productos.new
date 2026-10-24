@@ -32,7 +32,7 @@ describe("BulkActionsBar", () => {
 
   it("sin `canBulkPrice` no dibuja el botón de ajustar precios", () => {
     render(
-      <BulkActionsBar
+      <BulkActionsBar expectedRevisions={{}}
         productIds={[1, 2]}
         categories={CATEGORIES}
         canBulkPrice={false}
@@ -48,7 +48,7 @@ describe("BulkActionsBar", () => {
 
   it("con `canBulkPrice` el botón de ajustar precios se dibuja", () => {
     render(
-      <BulkActionsBar
+      <BulkActionsBar expectedRevisions={{}}
         productIds={[1, 2]}
         categories={CATEGORIES}
         canBulkPrice={true}

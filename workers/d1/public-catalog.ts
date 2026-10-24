@@ -5,7 +5,7 @@ import { catalogOnly } from "./catalog-capabilities";
 import { CATEGORIAS_INICIALES } from "../../src/config/tienda";
 import { getD1Bindings, getNativeDb } from "./database";
 import { cachedPublicRead } from "./public-data-cache.mjs";
-import { searchRead } from "./catalog-search-sql.mjs";
+import { searchRead, searchFacetsRead, suggestionsRead, normalizeSearchTerm } from "./catalog-search-sql.mjs";
 import { diagnosticBinding } from "./catalog-diagnostics.mjs";
 import { catalogRead, categoryRead, featuredRead, latestRead, productRead, readBatch, relatedRead } from "./public-catalog-sql.mjs";
 export { isCatalogSort, CATALOG_SORTS } from "../../src/db/queries";
@@ -99,6 +99,13 @@ export async function getLatestCategoryProducts(slugs: string[]) {
   return publicRead("latest:" + JSON.stringify(slugs), () => latestRead(binding(), slugs));
 }
 
-export async function searchProductsPage(term: string, options: {page?:number;perPage?:number} = {}): Promise<PagedProducts> {
- return publicRead("search:"+JSON.stringify([term,options]),()=>searchRead(binding(),term,options));
+export async function searchProductsPage(term: string, options: Partial<CategoryQuery> = {}): Promise<PagedProducts> {
+ return publicRead("search:"+JSON.stringify([normalizeSearchTerm(term),options]),()=>searchRead(binding(),term,options));
+}
+
+export async function getSearchFacets(term: string) {
+ return publicRead("facets:" + normalizeSearchTerm(term), () => searchFacetsRead(binding(),term));
+}
+export async function suggestProducts(term: string, limit = 6) {
+ return publicRead("suggest:" + JSON.stringify([normalizeSearchTerm(term),Math.min(6,limit)]), () => suggestionsRead(binding(),term,limit));
 }

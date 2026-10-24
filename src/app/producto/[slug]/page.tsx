@@ -31,7 +31,7 @@ import { jpegSizeFor, parseRef } from "@/lib/imagenes-r2";
 import { markdownToText } from "@/lib/markdown";
 import { formatGs } from "@/lib/money";
 import { formatDatePY } from "@/lib/py";
-import { jsonLdScript, productJsonLd } from "@/lib/seo";
+import { breadcrumbJsonLd, jsonLdScript, productJsonLd } from "@/lib/seo";
 import { siteOrigin } from "@/lib/site-url";
 import { TESTIDS } from "@/lib/testids";
 
@@ -67,7 +67,10 @@ export async function generateMetadata({
 
   const cheapest = product.variants.reduce<number | undefined>(
     (min, variant) =>
-      min === undefined || variant.pricePyg < min ? variant.pricePyg : min,
+      Number.isSafeInteger(variant.pricePyg) && variant.pricePyg > 0 &&
+      (min === undefined || variant.pricePyg < min)
+        ? variant.pricePyg
+        : min,
     undefined
   );
 
@@ -77,10 +80,12 @@ export async function generateMetadata({
   // O7 toca — el render de la descripción en la página es de S11.
   const description =
     markdownToText(product.description).slice(0, 160) ||
-    t("producto.metaDescripcion", {
-      nombre: product.name,
-      precio: cheapest ? formatGs(cheapest) : "",
-    });
+    (product.showPrice !== false && cheapest !== undefined
+      ? t("producto.metaDescripcion", {
+          nombre: product.name,
+          precio: formatGs(cheapest),
+        })
+      : `Información del producto: ${product.name}. Consultá los detalles disponibles en la ficha.`);
 
   // La foto principal, recortada a la caja que espera WhatsApp. Si el
   // producto todavía no tiene fotos (o falta el cloud de Cloudinary), se
@@ -189,6 +194,13 @@ export default async function ProductPage({ params }: { params: Params }) {
   // JSON-LD: PYG y priceValidUntil no se inventan — se dejan afuera si no
   // hay dato, que es mejor que un dato falso en el rich result. Lo arma
   // `productJsonLd` (src/lib/seo.ts), que es maquinaria.
+  const breadcrumb = origin
+    ? breadcrumbJsonLd(origin, [
+        { name: t("nav.inicio"), path: "/" },
+        { name: product.categoryName, path: `/categoria/${product.categorySlug}` },
+        { name: product.name, path: `/producto/${product.slug}` },
+      ])
+    : null;
   const jsonLd = productJsonLd({
     origin,
     slug: product.slug,
@@ -226,6 +238,12 @@ export default async function ProductPage({ params }: { params: Params }) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLdScript(jsonLd) }}
       />
+      {breadcrumb ? (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: jsonLdScript(breadcrumb) }}
+        />
+      ) : null}
 
       <nav
         aria-label="Ruta de navegación"
@@ -241,6 +259,8 @@ export default async function ProductPage({ params }: { params: Params }) {
         >
           {product.categoryName}
         </Link>
+        <span aria-hidden> / </span>
+        <span aria-current="page" className="text-foreground">{product.name}</span>
       </nav>
 
       <div className="product-overview">
@@ -425,17 +445,7 @@ export default async function ProductPage({ params }: { params: Params }) {
         />
       ) : null}
 
-      {product.showPrice !== false ? (
-        <RecentlyViewed
-          current={{
-            slug: product.slug,
-            name: product.name,
-            pricePyg: cheapest ?? product.variants[0]?.pricePyg ?? 0,
-            imageCloudinaryId: product.images[0]?.cloudinaryId ?? null,
-            imageAlt: product.images[0]?.alt ?? null,
-          }}
-        />
-      ) : null}
+      <RecentlyViewed current={{ slug: product.slug }} />
 
       {/* "Vio el producto" para GA4/Meta (src/lib/funnel.ts), con el SKU de
           la variante más barata — el mismo id que el feed. */}

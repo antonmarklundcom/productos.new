@@ -25,30 +25,35 @@ import { t, tPlural } from "@/i18n";
  */
 export function BulkActionsBar({
   productIds,
+  expectedRevisions,
   categories,
   canBulkPrice,
   onDone,
 }: {
   productIds: number[];
+  expectedRevisions: Record<number,number>;
   categories: Array<{ id: number; name: string }>;
   canBulkPrice: boolean;
   onDone: () => void;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [operations] = useState(() => new Map<string,string>());
+  const operationFor=(intent:string)=>{const key=JSON.stringify([intent,productIds,expectedRevisions]);if(!operations.has(key))operations.set(key,crypto.randomUUID());return operations.get(key)!;};
   const [categoryId, setCategoryId] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const setActive = (isActive: boolean): void => {
     setError(null);
     startTransition(async () => {
-      const result = await bulkSetProductsActive({ productIds, isActive });
+      const result = await bulkSetProductsActive({ productIds, isActive, expectedRevisions, operationId: operationFor("active:"+isActive) }).catch(()=>({ok:false as const,error:"Se interrumpió la conexión. Reintentá la misma acción para consultar el recibo."}));
       if (!result.ok) {
         setError(result.error);
         return;
       }
+      if ("conflictos" in result && (result.conflictos as number[]).length) setError("No se cambiaron los productos con conflicto: "+(result.conflictos as number[]).join(", "));
       toast.success(tPlural("panel.masivo.cambiaronActivos", result.afectados));
-      onDone();
+      if (!("conflictos" in result) || !(result.conflictos as number[]).length) onDone();
       router.refresh();
     });
   };
@@ -58,16 +63,17 @@ export function BulkActionsBar({
     setError(null);
     startTransition(async () => {
       const result = await bulkMoveProductsCategory({
-        productIds,
+        productIds, expectedRevisions, operationId: operationFor("category:"+categoryId),
         categoryId: Number(categoryId),
-      });
+      }).catch(()=>({ok:false as const,error:"Se interrumpió la conexión. Reintentá la misma acción para consultar el recibo."}));
       if (!result.ok) {
         setError(result.error);
         return;
       }
+      if ("conflictos" in result && (result.conflictos as number[]).length) setError("No se cambiaron los productos con conflicto: "+(result.conflictos as number[]).join(", "));
       toast.success(tPlural("panel.masivo.movieron", result.afectados));
       setCategoryId("");
-      onDone();
+      if (!("conflictos" in result) || !(result.conflictos as number[]).length) onDone();
       router.refresh();
     });
   };
@@ -141,7 +147,7 @@ export function BulkActionsBar({
           {t("panel.masivo.moverConfirmar")}
         </Button>
 
-        {canBulkPrice && catalogCapabilities.bulkProducts ? (
+        {canBulkPrice && catalogCapabilities.bulkPrices ? (
           <BulkPriceDialog
             productIds={productIds}
             onApplied={() => {
@@ -160,8 +166,9 @@ export function BulkActionsBar({
  * capacidad que ya gobierna el resto de la página — el guard real vive en
  * `duplicateProductAction`.
  */
-export function DuplicateProductButton({ productId }: { productId: number }) {
+export function DuplicateProductButton({ productId, expectedRevision }: { productId: number; expectedRevision:number }) {
   const router = useRouter();
+  const [operationId] = useState(() => crypto.randomUUID());
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -181,7 +188,7 @@ export function DuplicateProductButton({ productId }: { productId: number }) {
         onClick={() => {
           setError(null);
           startTransition(async () => {
-            const result = await duplicateProductAction({ productId });
+            const result = await duplicateProductAction({ productId, expectedRevision, operationId }).catch(()=>({ok:false as const,error:"Se interrumpió la conexión. Reintentá Duplicar: el recibo evita otra copia."}));
             if (!result.ok) {
               setError(result.error);
               return;

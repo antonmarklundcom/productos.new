@@ -1,171 +1,67 @@
 "use client";
 
-import { X } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
+import {useState} from "react";
+import {useRouter, useSearchParams} from "next/navigation";
+import type {BrandFacet} from "@/db/queries";
+import {PRICE_RANGES, parseBudget} from "@/lib/price-ranges";
+import {Button} from "@/components/ui/button";
+import {t} from "@/i18n/client";
 
-import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import type { BrandFacet } from "@/db/queries";
-import { t } from "@/i18n/client";
-import { PRICE_RANGES } from "@/lib/price-ranges";
-
-const SORT_LABELS: Record<string, () => string> = {
-  relevancia: () => t("filtros.orden.relevancia"),
-  "precio-asc": () => t("filtros.orden.precioAsc"),
-  "precio-desc": () => t("filtros.orden.precioDesc"),
-  nuevos: () => t("filtros.orden.nuevos"),
+const FILTER_KEYS = ["marca", "precio", "categoria", "min", "max"];
+const SORTS = {
+  relevancia: t("filtros.orden.relevancia"),
+  "precio-asc": t("filtros.orden.precioAsc"),
+  "precio-desc": t("filtros.orden.precioDesc"),
+  nuevos: t("filtros.orden.nuevos"),
 };
-
-const ALL = "__todas__";
-
-/**
- * Los filtros viven en la URL: así el listado sigue siendo un Server
- * Component cacheable y el comprador puede compartir el link filtrado por
- * WhatsApp, que es como se comparte todo acá.
- */
-export function CatalogFilters({ brands }: { brands: BrandFacet[] }) {
-  const router = useRouter();
-  const params = useSearchParams();
-
-  const update = (key: string, value: string | null) => {
-    const next = new URLSearchParams(params.toString());
-    if (value === null || value === ALL) next.delete(key);
-    else next.set(key, value);
-    next.delete("page"); // cambiar un filtro vuelve a la página 1
-    router.push(`?${next.toString()}`, { scroll: false });
-  };
-
-  const marca = params.get("marca");
-  const precio = params.get("precio");
-
-  /*
-    Los chips no son un adorno: los `<Select>` de arriba muestran su valor,
-    pero en el celular quedan fuera de pantalla apenas se hace scroll, y la
-    pregunta "¿por qué veo tan pocos productos?" se contesta mirando arriba de
-    la grilla, no volviendo a subir. Cada chip se saca de a uno — "Limpiar
-    todo" obliga a rehacer los que sí servían.
-  */
-  // `orden` no entra: ordenar no achica el resultado, así que un chip con ✕
-  // ahí prometería devolver productos que nunca se fueron.
-  const activos: Array<{ key: "marca" | "precio"; label: string }> = [];
-  if (marca) activos.push({ key: "marca", label: marca });
-  if (precio) {
-    const range = PRICE_RANGES.find((item) => item.id === precio);
-    if (range) activos.push({ key: "precio", label: range.label });
-  }
-
-  return (
-    <div className="grid gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        {brands.length > 0 ? (
-          <Select
-            value={marca ?? ALL}
-            onValueChange={(value) => update("marca", value)}
-          >
-            <SelectTrigger
-              className="w-[200px]"
-              aria-label={t("filtros.marca.label")}
-            >
-              <SelectValue placeholder="Marca" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL}>{t("filtros.marca.todas")}</SelectItem>
-              {brands.map((facet) => (
-                <SelectItem key={facet.brand} value={facet.brand}>
-                  {/*
-                    El conteo va acá y no sólo en el chip: es antes de elegir
-                    cuando sirve saber que esa marca tiene un solo producto.
-                  */}
-                  {t("filtros.marca.conCuenta", {
-                    marca: facet.brand,
-                    n: facet.total,
-                  })}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : null}
-
-        <Select
-          value={precio ?? ALL}
-          onValueChange={(value) => update("precio", value)}
-        >
-          <SelectTrigger
-            className="w-[200px]"
-            aria-label={t("filtros.precio.label")}
-          >
-            <SelectValue placeholder="Precio" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>
-              {t("filtros.precio.cualquiera")}
-            </SelectItem>
-            {PRICE_RANGES.map((range) => (
-              <SelectItem key={range.id} value={range.id}>
-                {range.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select
-          value={params.get("orden") ?? "relevancia"}
-          onValueChange={(value) =>
-            update("orden", value === "relevancia" ? null : value)
-          }
-        >
-          <SelectTrigger
-            className="w-[200px]"
-            aria-label={t("filtros.orden.label")}
-          >
-            <SelectValue placeholder="Ordenar" />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(SORT_LABELS).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label()}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {activos.length > 0 ? (
-        <ul className="flex flex-wrap items-center gap-2">
-          {activos.map((filtro) => (
-            <li key={filtro.key}>
-              <button
-                type="button"
-                onClick={() => update(filtro.key, null)}
-                className="border-border hover:bg-muted flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm"
-              >
-                {filtro.label}
-                <X className="size-3.5" aria-hidden />
-                <span className="sr-only">
-                  {t("filtros.quitar", { filtro: filtro.label })}
-                </span>
-              </button>
-            </li>
-          ))}
-          {activos.length > 1 ? (
-            <li>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => router.push("?", { scroll: false })}
-              >
-                {t("filtros.limpiarTodo")}
-              </Button>
-            </li>
-          ) : null}
-        </ul>
-      ) : null}
-    </div>
-  );
+const FILTER_LABELS: Record<string, string> = {
+  marca: t("filtros.marca.label"),
+  precio: t("filtros.precio.label"),
+  categoria: t("filtros.categoria"),
+  min: "Mínimo",
+  max: "Máximo",
+};
+export function CatalogFilters({brands, categories = []}: {brands: BrandFacet[]; categories?: {slug:string;name:string;total:number}[]}) {
+ const router = useRouter(), params = useSearchParams();
+ const [error, setError] = useState("");
+ const update = (changes: Record<string,string|null>) => {
+  const next = new URLSearchParams(params.toString());
+  for (const [key,value] of Object.entries(changes)) {if (value) next.set(key,value); else next.delete(key);}
+  next.delete("page");
+  router.push(`?${next}`, {scroll:false});
+ };
+ const active = FILTER_KEYS.filter(key => params.has(key));
+ const control = "border-input bg-background rounded-md border px-3 py-2 text-sm";
+ return <div className="grid gap-3">
+  <div className="flex flex-wrap items-end gap-3">
+   {categories.length ? <label className="grid gap-1 text-sm">{t("filtros.categoria")}<select className={control} value={params.get("categoria") ?? ""} onChange={event => update({categoria:event.target.value})}>
+    <option value="">{t("filtros.todasCategorias")}</option>{categories.map(c => <option key={c.slug} value={c.slug}>{c.name} ({c.total})</option>)}
+   </select></label> : null}
+   {brands.length ? <label className="grid gap-1 text-sm">{t("filtros.marca.label")}<select className={control} value={params.get("marca") ?? ""} onChange={event => update({marca:event.target.value})}>
+    <option value="">{t("filtros.marca.todas")}</option>{brands.map(b => <option key={b.brand} value={b.brand}>{t("filtros.marca.conCuenta", {marca:b.brand,n:b.total})}</option>)}
+   </select></label> : null}
+   <label className="grid gap-1 text-sm">{t("filtros.precio.label")}<select className={control} value={params.get("precio") ?? ""} onChange={event => update({precio:event.target.value,min:null,max:null})}>
+    <option value="">{t("filtros.precio.cualquiera")}</option>{PRICE_RANGES.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+   </select></label>
+   <label className="grid gap-1 text-sm">{t("filtros.orden.label")}<select className={control} value={params.get("orden") ?? "relevancia"} onChange={event => update({orden:event.target.value === "relevancia" ? null : event.target.value})}>
+    {Object.entries(SORTS).map(([value,label]) => <option key={value} value={value}>{label}</option>)}
+   </select></label>
+  </div>
+  <form method="get" key={params.toString()} className="flex flex-wrap items-end gap-2" onSubmit={event => {
+   event.preventDefault(); const form = new FormData(event.currentTarget);
+   const min = String(form.get("min") ?? ""), max = String(form.get("max") ?? "");
+   const budget = parseBudget(min,max);
+   if (budget.invalid) {setError("Usá montos enteros entre 0 y 2.147.483.647 guaraníes."); return;}
+   setError(""); update({min:budget.min === undefined ? null : String(budget.min),max:budget.max === undefined ? null : String(budget.max),precio:null});
+  }}>
+   {[...params.entries()].filter(([key]) => !["min","max","precio","page"].includes(key)).map(([key,value]) => <input key={key} type="hidden" name={key} value={value} />)}
+   <label className="grid gap-1 text-sm">Mínimo (Gs.)<input name="min" inputMode="numeric" pattern="[0-9]*" maxLength={10} defaultValue={params.get("min") ?? ""} className={`${control} w-40`} /></label>
+   <label className="grid gap-1 text-sm">Máximo (Gs.)<input name="max" inputMode="numeric" pattern="[0-9]*" maxLength={10} defaultValue={params.get("max") ?? ""} className={`${control} w-40`} /></label>
+   <Button type="submit" variant="outline">Aplicar presupuesto</Button>
+  </form>
+  {error ? <p role="alert" className="text-sm">{error}</p> : null}
+  {active.length ? <div className="flex flex-wrap gap-2">{active.map(key => <Button key={key} variant="outline" size="sm" onClick={() => update({[key]:null})} aria-label={t("filtros.quitar", {filtro:`${FILTER_LABELS[key] ?? key}: ${params.get(key)}`})}>{FILTER_LABELS[key] ?? key}: {params.get(key)} ×</Button>)}
+   <Button variant="ghost" size="sm" onClick={() => update(Object.fromEntries(FILTER_KEYS.map(key => [key,null])))}>{t("filtros.limpiarTodo")}</Button>
+  </div> : null}
+ </div>;
 }

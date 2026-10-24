@@ -1,3 +1,4 @@
+import {cacheMetricsSnapshot} from "./cache-metrics.mjs";
 // Opt-in local/preview diagnostics. Never retain SQL, parameters, URLs or actors.
 export function diagnosticBinding(db, context, now = () => performance.now()) {
  if (!context?.diagnostics) return db;
@@ -26,6 +27,7 @@ export function appendDiagnosticHeaders(headers, context, headersMs, bodyMs) {
  const totals = context.batches.reduce((sum,batch) => ({
   wallMs:sum.wallMs+batch.wallMs,serviceMs:sum.serviceMs+batch.serviceMs,rowsRead:sum.rowsRead+batch.rowsRead
  }),{wallMs:0,serviceMs:0,rowsRead:0});
+ headers.set("x-catalog-cache-counters",JSON.stringify(cacheMetricsSnapshot()));
  headers.set("x-catalog-public-loads",String(context.loads.length));
  headers.set("x-catalog-d1-batches",String(context.batches.length));
  headers.set("x-catalog-d1-rows-read",String(totals.rowsRead));

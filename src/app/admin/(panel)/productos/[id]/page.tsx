@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { DuplicateProductButton } from "@/components/admin/bulk-actions";
+import { ProductRevisionProvider } from "@/components/admin/product-revision";
 import { ProductForm } from "@/components/admin/product-form";
 import { ProductImages } from "@/components/admin/product-images";
 import { VariantEditor } from "@/components/admin/variant-editor";
@@ -59,6 +60,7 @@ export default async function AdminProductPage({ params }: { params: Params }) {
     .slice(0, 15);
 
   return (
+    <ProductRevisionProvider revision={product.revision}>
     <div>
       <Link href="/admin/productos" className="text-muted-foreground text-sm">
         {t("panel.producto.volver")}
@@ -67,7 +69,7 @@ export default async function AdminProductPage({ params }: { params: Params }) {
         <h1 className="text-xl font-semibold tracking-tight">{product.name}</h1>
         {/* Duplicar (O7 §5.3 C): staff, la misma capacidad de ABM que ya
             gobierna el resto de esta ficha. */}
-        <DuplicateProductButton productId={product.id} />
+        <DuplicateProductButton productId={product.id} expectedRevision={product.revision} />
       </div>
       <p className="text-muted-foreground mt-1 text-sm">
         <Link href={`/producto/${product.slug}`} className="underline">
@@ -98,6 +100,7 @@ export default async function AdminProductPage({ params }: { params: Params }) {
               isActive: product.isActive,
               published: product.publishedAt !== null,
               isFeatured: product.isFeatured,
+              featuredPosition:product.featuredPosition,
             }}
           />
         </div>
@@ -198,5 +201,6 @@ export default async function AdminProductPage({ params }: { params: Params }) {
         </div>
       </section>
     </div>
+    </ProductRevisionProvider>
   );
 }

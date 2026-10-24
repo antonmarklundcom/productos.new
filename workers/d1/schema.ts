@@ -12,7 +12,7 @@ export const RECEIPT_REVIEWS = ["pending","approved","rejected"] as const;
 export const REVIEW_STATUSES = ["pending","approved","rejected"] as const;
 export const INVOICE_STATUSES = ["none","queued","approved","rejected"] as const;
 export const RESERVATION_STATES = ["held","consumed","released"] as const;
-export const BACKUP_TABLES = ["catalog_import_runs","catalog_import_receipts","catalog_audit","notification_outbox","operation_keys","counters","setup_state","job_runs","users","customers","categories","coupons","shipping_zones","shipping_methods","payment_events","bank_details","store_settings","integration_settings","login_tokens","products","product_images","variants","supplier_offers","stock_alerts","price_adjustments","stock_adjustments","orders","order_items","order_events","order_notes","product_reviews","order_returns","order_return_items","payments","refunds","receipts","stock_reservations"] as const;
+export const BACKUP_TABLES = ["admin_mutation_receipts","gallery_tombstones","catalog_import_plans","catalog_import_stages","catalog_import_runs","catalog_import_receipts","catalog_audit","notification_outbox","operation_keys","counters","setup_state","job_runs","users","customers","categories","coupons","shipping_zones","shipping_methods","payment_events","bank_details","store_settings","integration_settings","login_tokens","products","product_images","variants","supplier_offers","stock_alerts","price_adjustments","stock_adjustments","orders","order_items","order_events","order_notes","product_reviews","order_returns","order_return_items","payments","refunds","receipts","stock_reservations"] as const;
 export type ShippingMethodKind = typeof SHIPPING_METHOD_KINDS[number];
 export type ShippingMethodPricing = typeof SHIPPING_METHOD_PRICINGS[number];
 export type PaymentProvider = typeof PAYMENT_PROVIDERS[number];
@@ -416,6 +416,10 @@ export const products = sqliteTable("products", {
   ivaRate: integer("iva_rate").notNull().default(10),
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
   isFeatured: integer("is_featured", { mode: "boolean" }).notNull().default(false),
+  featuredPosition: integer("featured_position").notNull().default(0),
+  searchName: text("search_name").notNull().default(""),
+  searchBrand: text("search_brand").notNull().default(""),
+  searchDescription: text("search_description").notNull().default(""),
   publishedAt: utcDate("published_at"),
   createdAt: utcDate("created_at").notNull().default(sql`(CURRENT_TIMESTAMP)`),
   updatedAt: utcDate("updated_at").notNull().default(sql`(CURRENT_TIMESTAMP)`).$onUpdate(() => new Date()),
@@ -641,3 +645,17 @@ export const catalogImportReceipts = sqliteTable("catalog_import_receipts", {
 export const catalogAudit = sqliteTable("catalog_audit", {
  id: text("id").primaryKey(), actorId: integer("actor_id").notNull(), operation: text("operation").notNull(), recordType: text("record_type").notNull(), recordId: integer("record_id").notNull(), revision: integer("revision").notNull(), fields: text("fields").notNull(), createdAt: utcDate("created_at").notNull().default(sql`(CURRENT_TIMESTAMP)`),
 }, t => [index("catalog_audit_record_idx").on(t.recordType,t.recordId,t.createdAt)]);
+
+// Private receipts and staged import payloads; never selected by public readers.
+export const adminMutationReceipts = sqliteTable("admin_mutation_receipts", {
+ id:text("id").primaryKey(),actorId:integer("actor_id").notNull(),productId:integer("product_id"),kind:text("kind").notNull(),fingerprint:text("fingerprint").notNull(),result:text("result_json").notNull(),createdAt:utcDate("created_at").notNull().default(sql`(CURRENT_TIMESTAMP)`),
+},t=>[index("admin_mutation_actor_idx").on(t.actorId,t.createdAt)]);
+export const galleryTombstones = sqliteTable("gallery_tombstones", {
+ id:text("id").primaryKey(),actorId:integer("actor_id").notNull(),productId:integer("product_id").notNull(),imageId:integer("image_id").notNull(),cloudinaryId:text("cloudinary_id").notNull(),alt:text("alt"),position:integer("position").notNull(),expiresAt:text("expires_at").notNull(),restoredAt:text("restored_at"),
+},t=>[index("gallery_tombstone_product_idx").on(t.productId,t.restoredAt)]);
+export const catalogImportPlans = sqliteTable("catalog_import_plans", {
+ importId:text("import_id").primaryKey(),actorId:integer("actor_id").notNull(),fingerprint:text("fingerprint").notNull(),plan:text("plan_json").notNull(),mode:text("mode",{enum:["direct","staged"]}).notNull().default("direct"),status:text("status",{enum:["applying","ready","published"]}).notNull().default("applying"),createdAt:utcDate("created_at").notNull().default(sql`(CURRENT_TIMESTAMP)`),
+},t=>[check("catalog_plan_mode",sql`${t.mode} IN ('direct','staged')`),check("catalog_plan_status",sql`${t.status} IN ('applying','ready','published')`)]);
+export const catalogImportStages = sqliteTable("catalog_import_stages", {
+ id:text("id").primaryKey(),importId:text("import_id").notNull(),offset:integer("offset").notNull(),payload:text("payload_json").notNull(),
+},t=>[uniqueIndex("catalog_stage_offset_uq").on(t.importId,t.offset)]);

@@ -72,3 +72,24 @@ test("a cache HIT does not replay the first visitor's x-request-id",async()=>{
  const second=await catalogResponse(request(),env,ctx,render,cache);
  assert.equal(second.headers.get("x-catalog-cache"),"HIT");assert.equal(second.headers.has("x-request-id"),false);
 });
+
+test("late streamed data failures cannot enter the public HTML cache",async()=>{
+ const data={failed:false,expiresAt:Infinity},pending=[];let puts=0;
+ const storage={open:async()=>({match:async()=>null,put:async()=>{puts++;}})};
+ const render=async()=>new Response(new ReadableStream({start(controller){controller.enqueue(new TextEncoder().encode("<html>"));queueMicrotask(()=>{data.failed=true;controller.enqueue(new TextEncoder().encode("unavailable</html>"));controller.close();});}}),{headers:{"content-type":"text/html","cache-control":"public"}});
+ const result=await catalogResponse(request(),env,{waitUntil:p=>pending.push(p)},render,storage,data);
+ await result.text();await Promise.all(pending);
+ assert.equal(puts,0);assert.equal(result.status,503);assert.equal(result.headers.get("x-catalog-cache"),"BYPASS");assert.equal(result.headers.get("cache-control"),"private, no-store");
+});
+test("public GET and HEAD indexing agree while private and error responses stay noindex",async()=>{
+ const prod={...env,WORKERS_PRODUCTION_READY:"true",NEXT_PUBLIC_SITE_URL:"https://productos.com.py"};
+ for(const method of ["GET","HEAD"])for(const path of ["/","/producto/test","/categoria/test","/sitemap.xml"]){const result=await catalogResponse(new Request(prod.NEXT_PUBLIC_SITE_URL+path,{method}),prod,{waitUntil(){}},async()=>new Response(method==="HEAD"?null:"ok"),undefined);assert.equal(result.headers.has("x-robots-tag"),false);}
+ for(const path of ["/admin","/api/catalog/recently-viewed","/pedido/private"]){const result=await catalogResponse(new Request(prod.NEXT_PUBLIC_SITE_URL+path,{method:"HEAD"}),prod,{waitUntil(){}},async()=>new Response(null),undefined);assert.match(result.headers.get("x-robots-tag"),/noindex/);}
+});
+
+test("failed catalogue readers retain the deliberate static-only sitemap fallback without caching",async()=>{
+ const data={failed:true,expiresAt:Infinity};let puts=0;
+ const storage={open:async()=>({match:async()=>null,put:async()=>{puts++;}})};
+ const result=await catalogResponse(request("https://fixture.example/sitemap.xml"),env,{waitUntil(){}},async()=>new Response("<urlset></urlset>",{headers:{"content-type":"application/xml","cache-control":"no-store"}}),storage,data);
+ assert.equal(result.status,200);assert.equal(puts,0);assert.equal(result.headers.get("cache-control"),"private, no-store");assert.equal(result.headers.get("x-catalog-cache"),"BYPASS");assert.equal(await result.text(),"<urlset></urlset>");
+});

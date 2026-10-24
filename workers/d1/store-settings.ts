@@ -58,7 +58,7 @@ export const getStoreSettings = cache(async (): Promise<StoreSettings> => {
 export async function saveStoreSettingsSection(
   section: StoreSettingsSection,
   values: unknown,
-  actor: { userId: number | null }
+  actor: { userId: number | null; expectedSnapshot?:string }
 ) {
   const result = await writeD1SettingsSection(
     getNativeDb(),
@@ -71,7 +71,7 @@ export async function saveStoreSettingsSection(
 }
 export async function resetStoreSettingsSection(
   section: StoreSettingsSection,
-  actor: { userId: number | null }
+  actor: { userId: number | null; expectedSnapshot?:string }
 ) {
   if (!Object.hasOwn(DEFAULT_STORE_SETTINGS, section))
     return saveStoreSettingsSection(section, {}, actor);

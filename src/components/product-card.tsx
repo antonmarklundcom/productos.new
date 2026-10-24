@@ -1,3 +1,4 @@
+import { displayedVariant } from "@/lib/display-price";
 import { effectiveSaleMode } from "@/lib/catalog-policy";
 import Link from "next/link";
 
@@ -27,16 +28,7 @@ export function ProductCard({
    */
   showRating?: boolean;
 }) {
-  // El precio "desde" es el de la variante más barata disponible; si no hay
-  // ninguna con stock, igual mostramos el más barato para no dejar el card mudo.
-  const inStock = product.variants.filter((variant) => variant.available > 0);
-  const shown = (inStock.length > 0 ? inStock : product.variants).reduce<
-    CatalogProduct["variants"][number] | undefined
-  >(
-    (cheapest, variant) =>
-      !cheapest || variant.pricePyg < cheapest.pricePyg ? variant : cheapest,
-    undefined
-  );
+  const shown = displayedVariant(product);
 
   const totalAvailable = product.variants.reduce(
     (total, variant) => total + variant.available,

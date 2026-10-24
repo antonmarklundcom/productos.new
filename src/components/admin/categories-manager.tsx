@@ -1,5 +1,9 @@
 "use client";
 
+import { useAdminDraft } from "./admin-draft";
+import { catalogOnly } from "@/config/catalog-capabilities";
+import { prepareR2ImageForm } from "@/lib/prepare-r2-images";
+import { categorySnapshot } from "@/domain/admin-edit-snapshot";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
@@ -21,6 +25,7 @@ import { TESTIDS } from "@/lib/testids";
 import { t, tPlural } from "@/i18n";
 
 export type AdminCategoryCard = {
+  position?:number;
   id: number;
   slug: string;
   name: string;
@@ -161,7 +166,7 @@ function CategoryRow({
               disabled={isPending}
               onClick={() =>
                 run(
-                  () => cambiarEstadoCategoria({ categoryId: category.id, isActive: false }),
+                  () => cambiarEstadoCategoria({ categoryId: category.id, expectedSnapshot:categorySnapshot(category), isActive: false }),
                   t("panel.categoria.desactivadaOk"),
                 )
               }
@@ -196,7 +201,7 @@ function CategoryRow({
                 return;
               }
               run(
-                () => cambiarEstadoCategoria({ categoryId: category.id, isActive: true }),
+                () => cambiarEstadoCategoria({ categoryId: category.id, expectedSnapshot:categorySnapshot(category), isActive: true }),
                 t("panel.categoria.reactivadaOk"),
               );
             }}
@@ -212,7 +217,7 @@ function CategoryRow({
             disabled={isPending || category.esPrimera}
             onClick={() =>
               run(
-                () => moverCategoria({ categoryId: category.id, direction: "up" }),
+                () => moverCategoria({ categoryId: category.id, expectedSnapshot:categorySnapshot(category), direction: "up" }),
                 t("panel.abm.ordenActualizado"),
               )
             }
@@ -227,7 +232,7 @@ function CategoryRow({
             disabled={isPending || category.esUltima}
             onClick={() =>
               run(
-                () => moverCategoria({ categoryId: category.id, direction: "down" }),
+                () => moverCategoria({ categoryId: category.id, expectedSnapshot:categorySnapshot(category), direction: "down" }),
                 t("panel.abm.ordenActualizado"),
               )
             }
@@ -266,11 +271,14 @@ function CategoryForm({
   // como quedó en pantalla.
   const [description, setDescription] = useState(category?.description ?? "");
 
+  const [baseline,setBaseline]=useState(()=>category?categorySnapshot(category):"");
+  const {bindForm:draftRef,onInput:saveDraft,clear:clearDraft,recovery:draftRecovery}=useAdminDraft("category:"+(category?.id??"new"),category?categorySnapshot(category):null);
   const slugFinal = slugify(slug || name);
   const cambiaLaUrl = category !== undefined && slugFinal !== category.slug;
 
   return (
-    <form
+    <>
+    <form ref={draftRef} onInput={saveDraft}
       className="border-border grid gap-4 rounded-xl border p-4"
       onSubmit={(event) => {
         event.preventDefault();
@@ -283,20 +291,22 @@ function CategoryForm({
         };
 
         startTransition(async () => {
-          const result = category
-            ? await editarCategoria({ ...payload, categoryId: category.id })
+          try{const result = category
+            ? await editarCategoria({ ...payload, categoryId: category.id, expectedSnapshot:baseline })
             : await crearCategoria(payload);
 
           if (!result.ok) {
             setError(result.error);
             return;
           }
-          toast.success(category ? t("panel.categoria.actualizada") : t("panel.categoria.creada"));
+          clearDraft();toast.success(category ? t("panel.categoria.actualizada") : t("panel.categoria.creada"));
           onDone();
           router.refresh();
+          }catch{setError("Se interrumpió la conexión. Conservá el borrador y comprobá el guardado antes de reintentar.");}
         });
       }}
     >
+      {draftRecovery}
       <h2 className="font-medium">
         {category
           ? t("panel.categoria.editarTitulo", { nombre: category.name })
@@ -316,7 +326,7 @@ function CategoryForm({
         <div className="grid gap-1.5">
           <Label htmlFor="categoria-name">{t("panel.categoria.nombre")}</Label>
           <Input
-            id="categoria-name"
+            id="categoria-name" name="name"
             value={name}
             required
             minLength={2}
@@ -335,7 +345,7 @@ function CategoryForm({
         <div className="grid gap-1.5">
           <Label htmlFor="categoria-slug">{t("panel.categoria.url")}</Label>
           <Input
-            id="categoria-slug"
+            id="categoria-slug" name="slug"
             value={slug}
             maxLength={120}
             autoComplete="off"
@@ -353,7 +363,7 @@ function CategoryForm({
       <div className="grid gap-1.5">
         <Label htmlFor="categoria-description">{t("panel.categoria.descripcion")}</Label>
         <textarea
-          id="categoria-description"
+          id="categoria-description" name="description"
           value={description}
           maxLength={5000}
           rows={3}
@@ -362,18 +372,6 @@ function CategoryForm({
           className="border-input bg-background rounded-md border px-3 py-2 text-sm"
         />
       </div>
-
-      {/* == S17 == La foto sólo se sube después de que la categoría existe
-          (`uploadCategoryImage` necesita el `categoryId`, igual que
-          `uploadProductImage`): al crear, este bloque no se dibuja, y la
-          primera foto se carga entrando a editar la categoría recién creada. */}
-      {category ? (
-        <CategoryImageUpload
-          categoryId={category.id}
-          imageCloudinaryId={category.imageCloudinaryId}
-          imageAlt={category.imageAlt}
-        />
-      ) : null}
 
       {cambiaLaUrl ? (
         /*
@@ -399,6 +397,20 @@ function CategoryForm({
         </Button>
       </div>
     </form>
+      {/* == S17 == La foto sólo se sube después de que la categoría existe
+          (`uploadCategoryImage` necesita el `categoryId`, igual que
+          `uploadProductImage`): al crear, este bloque no se dibuja, y la
+          primera foto se carga entrando a editar la categoría recién creada. */}
+      {category ? (
+        <CategoryImageUpload
+          expectedSnapshot={baseline} onSaved={setBaseline}
+          categoryId={category.id}
+          imageCloudinaryId={category.imageCloudinaryId}
+          imageAlt={category.imageAlt}
+        />
+      ) : null}
+
+    </>
   );
 }
 
@@ -411,10 +423,14 @@ function CategoryForm({
  * reemplaza (y borra) la anterior (ver `admin-categories.ts`).
  */
 function CategoryImageUpload({
+  onSaved,
+  expectedSnapshot,
   categoryId,
   imageCloudinaryId,
   imageAlt,
 }: {
+  onSaved:(snapshot:string)=>void;
+  expectedSnapshot:string;
   categoryId: number;
   imageCloudinaryId: string | null;
   imageAlt: string | null;
@@ -454,14 +470,19 @@ function CategoryImageUpload({
           data.set("categoryId", String(categoryId));
 
           startTransition(async () => {
+            data.set("expectedSnapshot",expectedSnapshot);data.set("operationId",crypto.randomUUID());
+            try{
+            if(catalogOnly)await prepareR2ImageForm(data,{signal:new AbortController().signal,onProgress(){}});
             const result = await uploadCategoryImage(data);
             if (!result.ok) {
               setError(result.error);
               return;
             }
+            if(result.snapshot)onSaved(result.snapshot);
             formRef.current?.reset();
             toast.success(t("panel.categoria.foto.subida"));
             router.refresh();
+            }catch{setError("Se interrumpió la conexión. Recargá la categoría para comprobar el guardado antes de volver a subir la foto.");}
           });
         }}
       >

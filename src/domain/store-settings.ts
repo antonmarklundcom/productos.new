@@ -117,7 +117,7 @@ export const getStoreSettings = cache(async (): Promise<StoreSettings> => {
 export async function saveStoreSettingsSection(
   section: StoreSettingsSection,
   values: unknown,
-  actor: { userId: number | null }
+  actor: { userId: number | null; expectedSnapshot?:string }
 ): Promise<StoreSettings> {
   const schema = SECTION_INPUT[section];
   if (!schema) throw new StoreSettingsError("adminError.ajustes.seccion");
@@ -140,6 +140,7 @@ export async function saveStoreSettingsSection(
     const actual = fila
       ? parseStoreSettings(fila.data)
       : DEFAULT_STORE_SETTINGS;
+    if(actor.expectedSnapshot!==undefined&&JSON.stringify(actual[section])!==actor.expectedSnapshot){const error=new Error("Los ajustes cambiaron. Tu borrador sigue aquí; recargá para comparar antes de guardar.");error.name="AdminInputError";throw error;}
     const nuevaSeccion =
       section === "paginas"
         ? {
@@ -179,7 +180,7 @@ export async function saveStoreSettingsSection(
 /** Vuelve una sección entera a sus valores por defecto. */
 export async function resetStoreSettingsSection(
   section: StoreSettingsSection,
-  actor: { userId: number | null }
+  actor: { userId: number | null; expectedSnapshot?:string }
 ): Promise<StoreSettings> {
   const porDefecto =
     section === "paginas"

@@ -48,7 +48,7 @@
     "start:vinext": "wrangler dev --config dist/server/wrangler.json",
     "deploy:vinext": "wrangler deploy --config dist/server/wrangler.json",
     "prebuild:vinext": "pnpm i18n:client",
-    "test:workers-preview": "node --test tests/workers/*.test.mjs",
+    "test:workers-preview": "node --test --test-concurrency=2 tests/workers/*.test.mjs",
     "capture:workers-demo": "node scripts/capture-workers-demo.mjs",
     "test:workers-d1": "tsx scripts/verify-workers-d1.mts",
     "workers:create-owner": "tsx scripts/workers-create-owner.mts",
@@ -58,7 +58,10 @@
     "profile:workers-search": "node scripts/profile-workers-search.mjs",
     "test:workers-recovery": "node scripts/verify-workers-recovery.mjs",
     "report:workers-media": "node scripts/workers-media-integrity.mjs",
-    "test:workers-durability": "node --import tsx --test tests/workers/catalog-durability.test.mts"
+    "test:workers-durability": "node --import tsx --test --test-concurrency=1 tests/workers/catalog-durability.test.mts tests/workers/admin-gallery.test.mts tests/workers/catalog-bulk-staging.test.mts",
+    "check:workers-schema": "node scripts/check-d1-schema.mjs",
+    "recovery:bundle": "node scripts/workers-recovery-bundle.mjs",
+    "test:recovery-bundle": "node --test tests/workers/recovery-bundle.test.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

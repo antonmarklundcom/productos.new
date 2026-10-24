@@ -105,7 +105,13 @@ export function isCatalogSort(value: string | undefined): value is CatalogSort {
 }
 
 /** Precio mínimo por producto — es el número por el que la gente ordena y filtra. */
-const minPriceSql = sql<number>`MIN(CASE WHEN ${products.showPrice} THEN ${variants.pricePyg} ELSE NULL END)`;
+const minPriceSql = sql<number>`CASE WHEN ${products.showPrice} THEN
+ CASE WHEN ${products.saleMode} = 'stock' THEN COALESCE(
+  (SELECT MIN(pv.price_pyg) FROM variants pv WHERE pv.product_id = ${products.id} AND pv.is_active = 1
+   AND CAST(pv.on_hand AS SIGNED) - COALESCE((SELECT SUM(sr.qty) FROM stock_reservations sr WHERE sr.variant_id = pv.id AND sr.state = 'held' AND sr.expires_at > CURRENT_TIMESTAMP),0) > 0),
+  (SELECT MIN(pv.price_pyg) FROM variants pv WHERE pv.product_id = ${products.id} AND pv.is_active = 1))
+ ELSE (SELECT MIN(pv.price_pyg) FROM variants pv WHERE pv.product_id = ${products.id} AND pv.is_active = 1) END
+ ELSE NULL END`;
 
 type ProductRow = {
   saleMode: "stock" | "enquiry" | "showcase";
@@ -318,21 +324,16 @@ export async function getCategoryProducts(
   const page = Math.max(1, query.page ?? 1);
   const perPage = Math.min(60, Math.max(1, query.perPage ?? 12));
 
+  // Displayed price is a correlated per-product expression, not an outer
+  // aggregate. Keep it in WHERE for both reads: MySQL HAVING cannot resolve
+  // unselected product columns in the count-only projection.
   const filters = and(
     PUBLISHED(),
     eq(categories.slug, query.categorySlug),
-    query.brand ? eq(products.brand, query.brand) : undefined
+    query.brand ? eq(products.brand, query.brand) : undefined,
+    query.minPricePyg !== undefined ? gte(minPriceSql, query.minPricePyg) : undefined,
+    query.maxPricePyg !== undefined ? lte(minPriceSql, query.maxPricePyg) : undefined
   );
-
-  const havingParts = [
-    query.minPricePyg !== undefined
-      ? gte(minPriceSql, query.minPricePyg)
-      : undefined,
-    query.maxPricePyg !== undefined
-      ? lte(minPriceSql, query.maxPricePyg)
-      : undefined,
-  ].filter(Boolean);
-  const having = havingParts.length > 0 ? and(...havingParts) : undefined;
 
   const orderBy = (() => {
     switch (query.sort) {
@@ -358,7 +359,7 @@ export async function getCategoryProducts(
     .where(filters)
     .groupBy(products.id, categories.name, categories.slug);
 
-  const rows = await (having ? grouped.having(having) : grouped)
+  const rows = await grouped
     .orderBy(
       ...(query.sort?.startsWith("precio-")
         ? [sql`${minPriceSql} IS NULL`]
@@ -378,7 +379,7 @@ export async function getCategoryProducts(
     )
     .where(filters)
     .groupBy(products.id);
-  const total = (await (having ? counted.having(having) : counted)).length;
+  const total = (await counted).length;
 
   return {
     products: await hydrate(tx, rows),
@@ -439,7 +440,7 @@ export async function searchProducts(
 /** Count and page use the same selected match strategy, even beyond page one. */
 export async function searchProductsPage(
   term: string,
-  options: { page?: number; perPage?: number } = {},
+  options: Partial<CategoryQuery> = {},
   executor?: Executor
 ): Promise<PagedProducts> {
   const tx = executor ?? getDb();
@@ -452,10 +453,15 @@ export async function searchProductsPage(
   const fulltext = sql`MATCH(${products.name}, ${products.description}) AGAINST (${booleanTerm} IN BOOLEAN MODE)`;
   const like = `%${cleaned}%`;
   const fallback = sql`(${products.name} LIKE ${like} OR ${products.brand} LIKE ${like})`;
+  const withFilters = (match: typeof fulltext) => and(PUBLISHED(), match,
+    options.categorySlug ? eq(categories.slug, options.categorySlug) : undefined,
+    options.brand ? eq(products.brand, options.brand) : undefined,
+    options.minPricePyg !== undefined ? gte(minPriceSql, options.minPricePyg) : undefined,
+    options.maxPricePyg !== undefined ? lte(minPriceSql, options.maxPricePyg) : undefined);
   const countMatches = async (match: typeof fulltext) => {
     const [row] = await tx.select({ total: count() }).from(products)
       .innerJoin(categories, eq(products.categoryId, categories.id))
-      .where(and(PUBLISHED(), match));
+      .where(withFilters(match));
     return Number(row?.total ?? 0);
   };
   let predicate = fulltext;
@@ -466,11 +472,32 @@ export async function searchProductsPage(
   }
   const rows = total === 0 ? [] : await tx.select(PRODUCT_COLUMNS).from(products)
     .innerJoin(categories, eq(products.categoryId, categories.id))
-    .where(and(PUBLISHED(), predicate))
-    .orderBy(asc(products.name), asc(products.id))
+    .where(withFilters(predicate))
+    .orderBy(...(options.sort?.startsWith("precio-") ? [sql`${minPriceSql} IS NULL`, options.sort === "precio-desc" ? desc(minPriceSql) : asc(minPriceSql)] : options.sort === "nuevos" ? [desc(products.publishedAt)] : []), asc(products.name), asc(products.id))
     .limit(perPage).offset((page - 1) * perPage);
   return { products: await hydrate(tx, rows), total, page, perPage,
     totalPages: Math.max(1, Math.ceil(total / perPage)) };
+}
+
+export async function getSearchFacets(term: string, executor?: Executor): Promise<{brands: BrandFacet[]; categories: {slug:string;name:string;total:number}[]}> {
+  const tx = executor ?? getDb();
+  const cleaned = term.trim().replace(/[+\-><()~*"@]/g, " ").replace(/\s+/g, " ").trim();
+  if (cleaned.length < 2 || cleaned.length > 160) return {brands:[],categories:[]};
+  const booleanTerm = cleaned.split(" ").map(word => `${word}*`).join(" ");
+  const fulltext = sql`MATCH(${products.name}, ${products.description}) AGAINST (${booleanTerm} IN BOOLEAN MODE)`;
+  const like = `%${cleaned}%`;
+  const fallback = sql`(${products.name} LIKE ${like} OR ${products.brand} LIKE ${like})`;
+  const [matched] = await tx.select({total:count()}).from(products).innerJoin(categories,eq(products.categoryId,categories.id)).where(and(PUBLISHED(),fulltext));
+  const predicate = matched?.total ? fulltext : fallback;
+  const rows = await tx.select({brand:products.brand,slug:categories.slug,name:categories.name,total:count()}).from(products)
+    .innerJoin(categories,eq(products.categoryId,categories.id)).where(and(PUBLISHED(),predicate))
+    .groupBy(products.brand,categories.id,categories.slug,categories.name).orderBy(asc(categories.name),asc(products.brand));
+  const brands = new Map<string,number>(), groups = new Map<string,{slug:string;name:string;total:number}>();
+  for (const row of rows) {
+    if (row.brand) brands.set(row.brand,(brands.get(row.brand) ?? 0)+Number(row.total));
+    const prior = groups.get(row.slug); groups.set(row.slug,{slug:row.slug,name:row.name,total:(prior?.total ?? 0)+Number(row.total)});
+  }
+  return {brands:[...brands].map(([brand,total]) => ({brand,total})),categories:[...groups.values()]};
 }
 
 export type SearchSuggestion = {

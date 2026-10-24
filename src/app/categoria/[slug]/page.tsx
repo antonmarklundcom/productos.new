@@ -15,7 +15,7 @@ import { getStoreSettings } from "@/domain/store-settings";
 import { t, tPlural } from "@/i18n";
 import { productImageUrl } from "@/lib/images";
 import { markdownToText } from "@/lib/markdown";
-import { parsePriceRange } from "@/lib/price-ranges";
+import { parseBudget } from "@/lib/price-ranges";
 import { breadcrumbJsonLd, itemListJsonLd, jsonLdScript } from "@/lib/seo";
 import { siteOrigin } from "@/lib/site-url";
 import {
@@ -115,7 +115,8 @@ const loadProducts = cache(async (slug: string, serializedQuery: string) => {
   const requestedPage = Number(first(query.page));
   const page = Number.isSafeInteger(requestedPage) && requestedPage > 1 ? requestedPage : 1;
   const sort = first(query.orden);
-  const { min, max } = parsePriceRange(first(query.precio));
+  const { min, max, invalid } = parseBudget(first(query.min), first(query.max), first(query.precio));
+  if (invalid) return {result: {products: [], total: 0, page, perPage: 12, totalPages: 1}, unavailable: false};
   try {
     const result = await getCategoryProducts({ categorySlug: slug, brand: first(query.marca),
       minPricePyg: min, maxPricePyg: max, sort: isCatalogSort(sort) ? sort : "relevancia", page });
@@ -209,7 +210,7 @@ export default async function CategoryPage({
           {category.name}
         </h1>
       </div>
-      {!unavailable ? <p className="text-muted-foreground mt-1 text-sm">
+      {!unavailable ? <p data-catalog-result-count role="status" aria-live="polite" aria-atomic="true" className="text-muted-foreground mt-1 text-sm">
         {tPlural("catalogo.productos", result.total)} ·{" "}
         {t("catalogo.ivaIncluidoNota")}
       </p> : null}

@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { getNativeDb } from "./database";
 import { categories, productImages, products, variants } from "./schema";
 import { parseCatalogo } from "../../src/domain/catalog-import";
@@ -13,7 +13,7 @@ export async function buildCatalogImportPlan(csvText:string):Promise<CatalogImpo
   const [categoryRows,productRows,variantRows,photos]=await Promise.all([
     db.select().from(categories),
     db.select({id:products.id,slug:products.slug,name:products.name,dropiUrl:products.dropiUrl,categoryName:categories.name}).from(products).innerJoin(categories,eq(products.categoryId,categories.id)),
-    db.select({sku:variants.sku,productSlug:products.slug}).from(variants).innerJoin(products,eq(variants.productId,products.id)),
+    db.select({sku:variants.sku,productSlug:products.slug}).from(variants).innerJoin(products,eq(variants.productId,products.id)).where(sql`${variants.sku} IN (SELECT value FROM json_each(${JSON.stringify(parsed.productos.flatMap(p=>p.variants.map(v=>v.sku)))}))`),
     db.select().from(productImages),
   ]);
   const categoryIdPorSlug=catalogCategoryAliases(categoryRows).ids;

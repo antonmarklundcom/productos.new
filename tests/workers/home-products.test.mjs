@@ -7,7 +7,7 @@ import ts from "typescript";
 import {latestCategoryProductIds} from "../../workers/d1/latest-category-products.mjs";
 import {d1StagingPlugin} from "../../workers/d1/build-plugin.mjs";
 
-test("homepage latest selection keeps category order and excludes unpublished/inactive/unavailable products", {timeout:60000}, async()=>{
+test("homepage latest selection uses global chronology and excludes unpublished/inactive/unavailable products", {timeout:60000}, async()=>{
  const proxy=await getPlatformProxy({configPath:"workers/d1/local-settings-test.wrangler.jsonc",persist:false});
  try{
   const db=proxy.env.DB;
@@ -19,10 +19,10 @@ test("homepage latest selection keeps category order and excludes unpublished/in
    "INSERT INTO products VALUES (1,1,'2026-01-01',1),(2,1,'2026-02-01',1),(3,1,'2026-03-01',0),(4,1,NULL,1),(5,2,'2026-01-01',1),(6,3,'2026-04-01',1),(7,1,'2026-05-01',1)",
    "INSERT INTO variants VALUES (1,1,1),(2,2,1),(3,2,1),(4,3,1),(5,4,1),(6,5,1),(7,6,1),(8,7,0)"
   ]) await db.prepare(sql).run();
-  assert.deepEqual(await latestCategoryProductIds(db,['second','empty','inactive','first']),[5,2]);
+  assert.deepEqual(await latestCategoryProductIds(db,['second','empty','inactive','first']),[2,5,1]);
   assert.deepEqual(await latestCategoryProductIds(db,['first','second'],1),[2]);
-  assert.deepEqual(await latestCategoryProductIds(db,[]),[]);
-  assert.deepEqual(await latestCategoryProductIds(db,["first' OR 1=1 --"]),[]);
+  assert.deepEqual(await latestCategoryProductIds(db,[]),[2,5,1]);
+  assert.deepEqual(await latestCategoryProductIds(db,["first' OR 1=1 --"]),[2,5,1]);
  }finally{await proxy.dispose();}
 });
 test("Workers middleware and homepage transformations fail on source drift and parse correctly",()=>{

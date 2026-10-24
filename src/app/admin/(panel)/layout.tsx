@@ -1,3 +1,4 @@
+import { AdminDraftScope } from "@/components/admin/admin-draft";
 import { redirect } from "next/navigation";
 import type React from "react";
 
@@ -76,11 +77,11 @@ export default async function PanelLayout({
     }));
 
   return (
-    <div className="min-h-dvh md:grid md:grid-cols-[17rem_minmax(0,1fr)] print:block print:min-h-0">
+    <AdminDraftScope actorId={actor.userId}><div className="min-h-dvh md:grid md:grid-cols-[17rem_minmax(0,1fr)] print:block print:min-h-0">
       <AdminSidebar items={items} userId={actor.userId} />
       <main className="mx-auto w-full max-w-7xl min-w-0 px-4 py-6 md:px-8 print:max-w-none print:p-0">
         {children}
       </main>
-    </div>
+    </div></AdminDraftScope>
   );
 }

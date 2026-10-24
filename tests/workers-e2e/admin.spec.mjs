@@ -121,11 +121,46 @@ test("authenticated owner/staff save readback, real multipart image and direct r
     const other = await ctx.newPage();
     await login(other, role);
     if (role === "staff") {
-      await other.goto(h.baseURL + "/admin/productos/1");
+      await other.goto(h.baseURL + "/admin/productos/1", {
+        waitUntil: "networkidle",
+      });
       await other
         .getByTestId("admin-product-name-input")
         .fill("Synthetic staff edit");
+      const validity = await other
+        .getByTestId("admin-product-save-submit")
+        .locator("xpath=ancestor::form")
+        .evaluate((form) => ({
+          valid: form.checkValidity(),
+          invalidFields: [...form.elements]
+            .filter(
+              (element) =>
+                typeof element.checkValidity === "function" &&
+                !element.checkValidity()
+            )
+            .map((element) => element.name),
+        }));
+      expect(validity).toEqual({ valid: true, invalidFields: [] });
+      const staffBaseline = (
+        await h.db.prepare("SELECT revision FROM products WHERE id=1").first()
+      ).revision;
+      const staffRequest = other.waitForRequest(
+        (request) =>
+          request.method() === "POST" &&
+          Boolean(request.headers()["next-action"]),
+        { timeout: 15000 }
+      );
       await other.getByTestId("admin-product-save-submit").click();
+      const staffWrite = await staffRequest,
+        staffResponse = await staffWrite.response(),
+        staffText = await staffResponse.text();
+      const sent = staffWrite.postData() ?? "";
+      expect(staffResponse.status()).toBe(200);
+      expect(
+        Number(sent.match(/expectedRevision[^0-9]*([0-9]+)/)?.[1] ?? 0)
+      ).toBe(staffBaseline);
+      expect(sent).toContain("Synthetic staff edit");
+      expect(staffText).toContain('"ok":true');
       await expect
         .poll(() =>
           h.db
@@ -237,14 +272,16 @@ test("password recovery fragment validation replay expiry and old-context revoca
     /^[a-f0-9]{64}$/
   );
   const token = await reset.locator("#reset-token").inputValue();
-  const invalid = await recovery.request.post(
-    h.baseURL + "/admin/restablecer",
-    {
-      headers: { origin: h.baseURL },
-      form: { token, password: "short", confirm: "short" },
-    }
+  await reset.locator("#new-password").fill("Synthetic-replaced-password-2026");
+  await reset
+    .locator("#confirm-password")
+    .fill("Synthetic-mismatch-password-2026");
+  await reset.locator("#reset-submit").click();
+  await expect(reset.locator("#message")).toContainText("no coinciden");
+  expect((await reset.locator("#reset-token").inputValue()) === token).toBe(
+    true
   );
-  expect(invalid.status()).toBe(400);
+  await expect(reset.locator("#reset-submit")).toBeEnabled();
   await reset.locator("#new-password").fill("Synthetic-replaced-password-2026");
   await reset
     .locator("#confirm-password")

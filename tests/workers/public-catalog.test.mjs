@@ -14,7 +14,7 @@ function fixture() {
  sqlite.exec("PRAGMA foreign_keys=ON");
  for (const name of ["0000_useful_mattie_franklin", "0001_fancy_warhawk", "0002_boring_roulette","0003_oval_masked_marvel"])
    sqlite.exec(readFileSync(`workers/d1/migrations/${name}.sql`, "utf8"));
- sqlite.exec("PRAGMA foreign_keys=ON");
+ sqlite.exec("PRAGMA foreign_keys=ON; ALTER TABLE products ADD COLUMN featured_position INTEGER NOT NULL DEFAULT 0");
  sqlite.exec(`INSERT INTO orders(id,order_number,access_token,customer_name,customer_phone,ship_city,ship_address,payment_method)
  VALUES (1,'TEST-1','test-1','Synthetic','0','Test','Test','transferencia'),
  (2,'TEST-2','test-2','Synthetic','0','Test','Test','transferencia'),
@@ -79,11 +79,11 @@ test("category filters/count/pagination and sort retain hidden-price/null-last b
    assert.deepEqual((await categoryRead(db,{categorySlug:"tools",page:9})).products,[]);
    assert.equal((await categoryRead(db,{categorySlug:"hidden"})).total,0);
    assert.equal((await categoryRead(db,{categorySlug:"tools",brand:"A' OR 1=1 --"})).total,0);
-   assert.deepEqual((await featuredRead(db)).map(product=>product.slug),["empty","first","held","masked"]);
+   assert.deepEqual((await featuredRead(db)).map(product=>product.slug),["held","empty","masked","first"]);
    sqlite.exec("UPDATE products SET is_featured=1 WHERE id=2");
    assert.deepEqual((await featuredRead(db)).map(product=>product.slug),["masked"]);
-   assert.deepEqual((await relatedRead(db,{productId:1,categorySlug:"tools",brand:"A"})).map(product=>product.slug),["masked"]);
-   assert.deepEqual((await latestRead(db,["hidden","tools"])).map(row=>row.products[0].slug),["held"]);
+   assert.deepEqual((await relatedRead(db,{productId:1,categorySlug:"tools",brand:"A"})).map(product=>product.slug),["held","masked"]);
+   assert.deepEqual((await latestRead(db,["hidden","tools"])).map(row=>row.products[0].slug),["held","masked","first"]);
  } finally {sqlite.close();}
 });
 function memoryCache() {
@@ -225,6 +225,7 @@ test("explicit ordering survives shuffled 60-product input, price ties and two p
  try {
    for(const name of ["0000_useful_mattie_franklin","0001_fancy_warhawk","0002_boring_roulette","0003_oval_masked_marvel"])
      sqlite.exec(readFileSync(`workers/d1/migrations/${name}.sql`,"utf8"));
+   sqlite.exec("ALTER TABLE products ADD COLUMN featured_position INTEGER NOT NULL DEFAULT 0");
    const {rows,statements}=shuffledOrderingFixture();for(const statement of statements)sqlite.exec(statement);
    // Discourage relying on today's incidental table scan/subquery ordering.
    sqlite.exec("PRAGMA reverse_unordered_selects=ON");
@@ -239,6 +240,7 @@ test("aggregate ORDER BY and ranked projection work on actual local D1 with 60 s
    const db=platform.env.DB;
    for(const name of ["0000_useful_mattie_franklin","0001_fancy_warhawk","0002_boring_roulette","0003_oval_masked_marvel"])
      for(const statement of readFileSync(`workers/d1/migrations/${name}.sql`,"utf8").split("--> statement-breakpoint"))if(statement.trim())await db.prepare(statement).run();
+   await db.prepare("ALTER TABLE products ADD COLUMN featured_position INTEGER NOT NULL DEFAULT 0").run();
    const {rows,statements}=shuffledOrderingFixture();
    // Keep each batch within the local D1 statement limit; never use remote bindings.
    for(let offset=0;offset<statements.length;offset+=80)await db.batch(statements.slice(offset,offset+80).map(sql=>db.prepare(sql)));

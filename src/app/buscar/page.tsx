@@ -4,7 +4,10 @@ import { notFound } from "next/navigation";
 
 import { ProductCard } from "@/components/product-card";
 import { Button } from "@/components/ui/button";
-import { getCategories, searchProductsPage } from "@/db/queries";
+import { CatalogFilters } from "@/components/catalog-filters";
+import { Suspense } from "react";
+import { parseBudget } from "@/lib/price-ranges";
+import { getCategories, getSearchFacets, isCatalogSort, searchProductsPage } from "@/db/queries";
 import { getStoreSettings } from "@/domain/store-settings";
 import { t, tPlural } from "@/i18n";
 
@@ -26,12 +29,23 @@ export default async function SearchPage({
   const raw = Array.isArray(query.q) ? query.q[0] : query.q;
   const term = (raw ?? "").trim();
 
+  const first = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value;
+  const budget = parseBudget(first(query.min), first(query.max), first(query.precio));
+  const sort = first(query.orden);
+  const facets = term.length >= 2 ? await getSearchFacets(term).catch(() => ({brands:[],categories:[]})) : {brands:[],categories:[]};
+  const pageHref = (target: number) => {
+    const next = new URLSearchParams();
+    for (const [key,value] of Object.entries(query)) {const single=first(value); if (single && key !== "page") next.set(key,single);}
+    next.set("q",term);
+    if (target > 1) next.set("page",String(target));
+    return `/buscar?${next}`;
+  };
   const requestedPage = Number(Array.isArray(query.page) ? query.page[0] : query.page);
   const page = Number.isSafeInteger(requestedPage) && requestedPage > 1 ? requestedPage : 1;
   let unavailable = false;
   const result =
-    term.length >= 2
-      ? await searchProductsPage(term, { page }).catch(() => {
+    term.length >= 2 && !budget.invalid
+      ? await searchProductsPage(term, { page, categorySlug:first(query.categoria), brand:first(query.marca), minPricePyg:budget.min, maxPricePyg:budget.max, sort:isCatalogSort(sort) ? sort : "relevancia" }).catch(() => {
           unavailable = true;
           return { products: [], total: 0, page, totalPages: 1 };
         })
@@ -54,11 +68,14 @@ export default async function SearchPage({
         <p className="text-muted-foreground mt-2 text-sm">
           {t("buscar.minimo")}
         </p>
-      ) : (
-        <p className="text-muted-foreground mt-1 text-sm">
+      ) : !unavailable ? (
+        <p data-catalog-result-count role="status" aria-live="polite" aria-atomic="true" className="text-muted-foreground mt-1 text-sm">
           {tPlural("catalogo.productos", result.total)}
         </p>
-      )}
+      ) : null}
+
+      {term.length >= 2 ? <div className="mt-5"><Suspense fallback={null}><CatalogFilters brands={facets.brands} categories={facets.categories} /></Suspense></div> : null}
+      {budget.invalid ? <p role="alert">El presupuesto debe usar montos enteros entre 0 y 2.147.483.647 guaraníes.</p> : null}
 
       {results.length > 0 ? (
         <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -73,7 +90,7 @@ export default async function SearchPage({
           ))}
         </div>
       ) : term.length >= 2 ? (
-        <div className="border-border mt-8 rounded-xl border border-dashed p-10 text-center">
+        <div role={unavailable ? "status" : undefined} className="border-border mt-8 rounded-xl border border-dashed p-10 text-center">
           <p className="font-medium">
             {unavailable
               ? "El catálogo todavía no está disponible."
@@ -95,9 +112,9 @@ export default async function SearchPage({
       ) : null}
       {result.totalPages > 1 ? (
         <nav aria-label={t("nav.paginacion")} className="mt-8 flex items-center justify-center gap-3">
-          {page > 1 ? <Button asChild variant="outline"><Link href={`/buscar?q=${encodeURIComponent(term)}&page=${Math.min(page - 1, result.totalPages)}`}>{t("nav.anterior")}</Link></Button> : null}
+          {page > 1 ? <Button asChild variant="outline"><Link href={pageHref(Math.min(page - 1, result.totalPages))}>{t("nav.anterior")}</Link></Button> : null}
           <span>{t("nav.pagina", { actual: page, total: result.totalPages })}</span>
-          {page < result.totalPages ? <Button asChild variant="outline"><Link href={`/buscar?q=${encodeURIComponent(term)}&page=${page + 1}`}>{t("nav.siguiente")}</Link></Button> : null}
+          {page < result.totalPages ? <Button asChild variant="outline"><Link href={pageHref(page + 1)}>{t("nav.siguiente")}</Link></Button> : null}
         </nav>
       ) : null}
     </main>

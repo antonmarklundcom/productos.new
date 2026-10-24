@@ -25,7 +25,7 @@ export async function writeD1SettingsSection(
   db: NativeDatabase,
   section: StoreSettingsSection,
   values: unknown,
-  actor: { userId: number | null }
+  actor: { userId: number | null; expectedSnapshot?:string }
 ) {
   const validator = SECTION_INPUT[section];
   if (!validator) throw new StoreSettingsError("adminError.ajustes.seccion");
@@ -64,12 +64,22 @@ export async function writeD1SettingsSection(
   } else {
     replacement = sql`json_set(${base}, ${`$."${section}"`}, json(${JSON.stringify(parsed.data)}))`;
   }
+  const expected=actor.expectedSnapshot;
+  // UI writes must supply the baseline rendered with the form; internal media
+  // helpers use the freshly read section supplied by their own caller.
+  const stored=expected===undefined?undefined:await db.get<{data:string}>(sql`SELECT data FROM store_settings WHERE id=1`);
+  if(expected!==undefined&&JSON.stringify(parseStoreSettings(stored?.data??{} )[section])!==expected){const error=new Error("Los ajustes cambiaron. Tu borrador sigue aquí; recargá para comparar antes de guardar.");error.name="AdminInputError";throw error;}
+  // Compare the canonical baseline in application code, then guard its raw
+  // source inside the single UPSERT. Partial/malformed recoverable settings
+  // remain editable without creating a read/write race.
+  const predicate=expected===undefined?sql`1`:stored?sql`store_settings.data=${stored.data}`:sql`0`;
   const row = await db.get<{ data: string }>(sql`
     INSERT INTO store_settings (id, data, updated_at, updated_by_user_id)
-    VALUES (1, ${JSON.stringify(initial)}, CURRENT_TIMESTAMP, ${actor.userId})
+    SELECT 1, ${JSON.stringify(initial)}, CURRENT_TIMESTAMP, ${actor.userId} WHERE ${expected===undefined||expected===JSON.stringify(DEFAULT_STORE_SETTINGS[section])?1:0} OR EXISTS(SELECT 1 FROM store_settings WHERE id=1)
     ON CONFLICT(id) DO UPDATE SET data = ${replacement},
       updated_at = CURRENT_TIMESTAMP, updated_by_user_id = excluded.updated_by_user_id
+    WHERE ${predicate}
     RETURNING data`);
-  if (!row) throw new Error("D1_SETTINGS_SAVE_MISSING_RESULT");
+  if (!row) {const error=new Error("Los ajustes cambiaron. Tu borrador sigue aquí; recargá para comparar antes de guardar.");error.name="AdminInputError";throw error;}
   return parseStoreSettings(row.data);
 }

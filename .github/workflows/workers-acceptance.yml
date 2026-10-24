@@ -7,7 +7,7 @@ permissions:
 jobs:
   isolated-worker:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       CI: "true"
       WRANGLER_SEND_METRICS: "false"
@@ -19,7 +19,13 @@ jobs:
           node-version: "24"
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm exec playwright install --with-deps chromium webkit firefox
+      - run: node scripts/check-d1-schema.mjs
+      - name: Synthetic recovery rehearsal
+        run: |
+          mkdir -p test-results
+          pnpm test:workers-recovery > test-results/workers-recovery-synthetic.log
+          cat test-results/workers-recovery-synthetic.log
       - run: pnpm build:vinext
       - run: pnpm test:workers-durability
       - run: pnpm test:workers-browser
@@ -29,5 +35,7 @@ jobs:
         if: always()
         with:
           name: synthetic-workers-browser-result
-          path: test-results/workers-browser.json
+          path: |
+            test-results/workers-browser.json
+            test-results/workers-recovery-synthetic.log
           retention-days: 7
