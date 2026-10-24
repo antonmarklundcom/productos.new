@@ -1,13 +1,15 @@
-import {test,expect} from '@playwright/test';
+import {test as base,expect} from '@playwright/test';
+import {sanitizedBrowserMessage} from '../../scripts/fixtures/browser-diagnostics.mjs';
+const test=base.extend({secureFixture:[false,{option:true}]});
 import sharp from 'sharp';
 import {createHarness,restrictBrowser,fixturePassword} from '../../scripts/workers-browser-harness.mjs';
 import {PUBLIC_DATA_CACHE_SECONDS,PUBLIC_PREFETCH_CACHE_SECONDS} from '../../workers/d1/public-cache-budget.mjs';
 let h;
 let diagnostics=[];
-const safeDiagnostic=value=>String(value).replace(/https?:\/\/[^\s"'<>]+/gi,"[url]").replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi,"[email]").replace(/\b(?:token|password|secret|authorization)\s*[:=]\s*\S+/gi,"[private]").slice(0,240);
+const safeDiagnostic=sanitizedBrowserMessage;
 const note=value=>{if(diagnostics.length<20)diagnostics.push(value);};
 function observePage(page){
- page.on('pageerror',error=>note({kind:'pageerror',name:error.name,message:safeDiagnostic(error.message)}));
+ page.on('pageerror',error=>note({kind:'pageerror',name:safeDiagnostic(error.name),message:safeDiagnostic(error.message)}));
  page.on('console',message=>{if(message.type()==='error')note({kind:'console-error',message:safeDiagnostic(message.text())});});
  page.on('requestfailed',request=>{
   const url=new URL(request.url());
@@ -15,11 +17,13 @@ function observePage(page){
  });
 }
 
-test.beforeEach(async({context})=>{diagnostics=[];h=await createHarness({cacheSeconds:30});context.on('page',observePage);context.pages().forEach(observePage);await restrictBrowser(context,h.baseURL);});
+test.beforeEach(async({context,secureFixture})=>{diagnostics=[];h=await createHarness({cacheSeconds:30,secureTransport:secureFixture});context.on('page',observePage);context.pages().forEach(observePage);await restrictBrowser(context,h.baseURL);});
 test.afterEach(async({context},info)=>{
  if(info.status!==info.expectedStatus){
   const hydration=await Promise.all(context.pages().map(page=>page.evaluate(()=>Boolean(window.__NEXT_HYDRATED)).catch(()=>false)));
-  const evidence={fixtureBrowserDiagnostics:diagnostics,hydration};
+  const authCookies=(await context.cookies(h.baseURL).catch(()=>[])).filter(cookie=>cookie.name==='ecom_admin');
+  const finalPaths=context.pages().map(page=>{const path=new URL(page.url()).pathname;return path==='/admin/login'?'login':path.startsWith('/admin/productos/')?'admin-product':path.startsWith('/admin')?'admin':path==='/buscar'?'search':'public';});
+  const evidence={fixtureBrowserDiagnostics:diagnostics,hydration,finalPaths,transport:new URL(h.baseURL).protocol,authCookieCount:authCookies.length,authCookieFlags:authCookies.map(cookie=>({secure:cookie.secure,httpOnly:cookie.httpOnly,sameSite:cookie.sameSite,rootPath:cookie.path==='/'}))};
   console.log(JSON.stringify(evidence));
   await info.attach('sanitized-browser-fixture-diagnostics',{body:Buffer.from(JSON.stringify(evidence)),contentType:'application/json'});
  }
@@ -112,11 +116,20 @@ test('semantic forms, variant selection and gallery dialog support keyboard stat
  const semantic=await page.evaluate(()=>({imagesWithoutAlt:document.querySelectorAll('img:not([alt])').length,unnamedFields:[...document.querySelectorAll('input:not([type="hidden"]),select,textarea')].filter(el=>!el.labels?.length&&!el.getAttribute('aria-label')&&!el.getAttribute('aria-labelledby')&&!['submit','button'].includes(el.type)).length}));
  expect(semantic).toEqual({imagesWithoutAlt:0,unnamedFields:0});expect(warnings).toEqual([]);
 });
-test('owner forms and real canvas image preparation persist across supported browser engines',async({page})=>{
+// Production auth uses Secure cookies. Exercise real TLS for this browser
+// context instead of relying on engine-specific HTTP-loopback exemptions.
+test.describe('authenticated HTTPS fixture',()=>{
+ test.use({secureFixture:true,ignoreHTTPSErrors:true}); // Miniflare's local test certificate only; outbound guard remains exact-origin.
+test('owner forms and real canvas image preparation persist across supported browser engines',async({page,context})=>{
+ expect(new URL(h.baseURL).protocol).toBe('https:');
  const warnings=[];page.on('console',message=>{if(message.type()==='error'&&/hydration|cannot be a descendant|nested.*form/i.test(message.text()))warnings.push('invalid-markup');});
  await page.goto(h.baseURL+'/admin/login',{waitUntil:'networkidle'});await page.getByTestId('admin-login-email').fill('owner@fixture.invalid');await page.getByTestId('admin-login-password').fill(fixturePassword);await page.getByTestId('admin-login-submit').click();
  await page.waitForURL(url=>url.pathname!=='/admin/login');
+ await expect.poll(async()=> (await context.cookies(h.baseURL)).filter(cookie=>cookie.name==='ecom_admin').length,{timeout:10000}).toBe(1);
+ const cookie=(await context.cookies(h.baseURL)).find(cookie=>cookie.name==='ecom_admin');
+ expect(cookie?.secure).toBe(true);expect(cookie?.httpOnly).toBe(true);expect(cookie?.sameSite).toBe('Lax');
  await page.goto(h.baseURL+'/admin/productos/1',{waitUntil:'networkidle'});
+ expect(new URL(page.url()).pathname).toBe('/admin/productos/1');
  const png=await sharp({create:{width:640,height:480,channels:3,background:'#237d48'}}).png().toBuffer();
  await page.locator('input#file').setInputFiles({name:'synthetic-engine.png',mimeType:'image/png',buffer:png});
  const upload=page.locator('input#file').locator('xpath=ancestor::form').getByRole('button',{name:/subir/i});await upload.click();
@@ -128,6 +141,8 @@ test('owner forms and real canvas image preparation persist across supported bro
  await expect(upload).toBeEnabled();await page.waitForLoadState('networkidle');
  await page.reload({waitUntil:'networkidle'});await expect(page.getByLabel('Descripción de foto 1',{exact:true})).toBeVisible();await expect(page.locator('form form')).toHaveCount(0);
  await page.goto(h.baseURL+'/admin/categorias',{waitUntil:'networkidle'});await expect(page.locator('form form')).toHaveCount(0);expect(warnings).toEqual([]);
+});
+
 });
 
 test('actual client prefetch reuse expires within the combined DTO and router freshness window',async({page,context,browserName})=>{

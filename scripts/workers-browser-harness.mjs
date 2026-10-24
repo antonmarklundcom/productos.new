@@ -19,6 +19,7 @@ export const fixturePassword = "Synthetic-fixture-password-2026";
 export async function createHarness({
   diagnostics = false,
   cacheSeconds = 0,
+  secureTransport = false,
   sessionSecret = "synthetic-browser-session-key-" + randomUUID(),
 } = {}) {
   await access(path.join(root, "dist/server/index.js"));
@@ -42,6 +43,7 @@ export async function createHarness({
   const mf = new Miniflare(
     convertV4MiniflareOptions({
       host: "127.0.0.1",
+      https: secureTransport,
       port: 0,
       workers: [
         {
