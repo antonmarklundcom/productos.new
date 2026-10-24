@@ -146,10 +146,15 @@ const GUARD_ESPERADO: Readonly<Record<string, "Admin" | "Staff" | "Owner">> = {
   saveProduct: "Staff",
   saveProductVariant: "Staff",
   saveVariantSupplierCost: "Staff",
+  editProductImage: "Staff",
+  reorderProductImages: "Staff",
+  restoreProductImage: "Staff",
+  listRemovedProductImages: "Staff",
   adjustVariantStock: "Staff",
   uploadProductImage: "Staff",
   removeProductImage: "Staff",
   previewCatalogImport: "Staff",
+  publishCatalogImport: "Staff",
   applyCatalogImport: "Staff",
 
   // Un CSV es la base del comercio en un archivo que sale del edificio.

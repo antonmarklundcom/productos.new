@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
+import { useAdminDraft } from "./admin-draft";
+import { useProductRevision } from "./product-revision";
 import { saveProduct } from "@/app/actions/admin-products";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +32,7 @@ export type ProductFormValues = {
   published: boolean;
   // == S17 == Destacado en la home (O14 dejó `isFeatured` en `saveProduct`).
   isFeatured: boolean;
+  featuredPosition?:number;
 };
 
 export function ProductForm({
@@ -40,7 +43,8 @@ export function ProductForm({
   categories: Array<{ id: number; name: string }>;
 }) {
   const router = useRouter();
-  const [revision, setRevision] = useState(defaults.revision);
+  const {revision,acknowledge} = useProductRevision(defaults.revision);
+  const {bindForm:draftRef,onInput:saveDraft,clear:clearDraft,recovery:draftRecovery}=useAdminDraft("product:"+(defaults.productId??"new"),defaults.revision);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [slug, setSlug] = useState(defaults.slug);
@@ -51,7 +55,7 @@ export function ProductForm({
   );
 
   return (
-    <form
+    <form ref={draftRef} onInput={saveDraft}
       className="grid gap-4"
       onSubmit={(event) => {
         event.preventDefault();
@@ -59,6 +63,7 @@ export function ProductForm({
         const data = new FormData(event.currentTarget);
 
         startTransition(async () => {
+          try{
           const result = await saveProduct({
             productId: defaults.productId,
             expectedRevision: revision,
@@ -74,6 +79,7 @@ export function ProductForm({
             isActive: data.get("isActive") === "on",
             published: data.get("published") === "on",
             isFeatured: data.get("isFeatured") === "on",
+            featuredPosition:Number(data.get("featuredPosition")??0),
           });
 
           if (!result.ok) {
@@ -81,16 +87,18 @@ export function ProductForm({
             return;
           }
 
-          setRevision(result.revision);
+          clearDraft();acknowledge(revision,result.revision);
           toast.success(t("panel.producto.guardado"));
           if (defaults.productId === undefined) {
             router.push(`/admin/productos/${result.productId}`);
             return;
           }
           router.refresh();
+          }catch{setError("Se interrumpió la conexión. Tu borrador sigue aquí y en esta pestaña. Recargá para comprobar si se guardó antes de reintentar.");}
         });
       }}
     >
+      {draftRecovery}
       {error ? (
         <p
           role="alert"
@@ -100,6 +108,7 @@ export function ProductForm({
         </p>
       ) : null}
 
+      <div className="grid gap-1.5"><Label htmlFor="featuredPosition">Orden de destacados (menor primero)</Label><Input id="featuredPosition" name="featuredPosition" type="number" min={0} max={1000000} step={1} defaultValue={defaults.featuredPosition??0}/></div>
       <div className="grid gap-1.5">
         <Label htmlFor="name">{t("panel.producto.nombre")}</Label>
         <Input

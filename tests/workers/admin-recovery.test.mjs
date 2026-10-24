@@ -78,3 +78,9 @@ test('issuing a new link during a consume cannot have that new link deleted by t
  f.db.batch=async statements=>{if(!replaced&&statements[0].sql.startsWith('UPDATE users')){replaced=true;await queueReset(f.db,'qa@example.invalid',f.env,1002);}return batch(statements);};
  assert.equal(await consumeReset(f.db,first,'LongPassword123',1001),false);assert.equal(f.rows().length,1);assert.equal(f.user().session_version,1);assert.equal(await consumeReset(f.db,f.token(),'LongPassword123',1003),true);f.sqlite.close();
 });
+test('password correction keeps private retry state after the fragment has gone',async()=>{
+ const f=fixture();await queueReset(f.db,'qa@example.invalid',f.env,1000);const token=f.token();
+ const response=await handleAdminRecovery(post('/admin/restablecer',{token,password:'LongPassword123',confirm:'WrongPassword123'}),f.env,f.ctx,1001);
+ const html=await response.text();assert.equal(response.status,400);assert.ok(html.includes('value="'+token+'"'));assert.match(html,/params.get\('token'\) \|\| document.getElementById\('reset-token'\).value/);assert.match(html,/Corregilas/);assert.equal(f.rows().length,1);assert.equal(response.headers.get('cache-control'),'private, no-store');
+ f.sqlite.close();
+});

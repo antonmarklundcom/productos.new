@@ -51,3 +51,12 @@ export function parsePriceRange(value: string | undefined): {
   if (!range) return {};
   return { min: range.min, max: range.max };
 }
+
+/** Empty bounds are absent; malformed/fractional/unsafe amounts are rejected. */
+export function parseBudget(minimum?: string, maximum?: string, preset?: string): {min?: number; max?: number; invalid?: boolean} {
+  if (!minimum && !maximum) return parsePriceRange(preset);
+  const amount = (value?: string) => !value ? undefined : /^\d{1,10}$/.test(value) && Number(value) <= 2147483647 ? Number(value) : NaN;
+  const min = amount(minimum), max = amount(maximum);
+  if (Number.isNaN(min) || Number.isNaN(max)) return {invalid: true};
+  return min !== undefined && max !== undefined && min > max ? {min: max, max: min} : {min, max};
+}

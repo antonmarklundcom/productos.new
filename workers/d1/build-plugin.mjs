@@ -6,10 +6,11 @@ export function replaceRequired(source, find, replacement, label, expected = 1) 
   const matches = typeof find === "string" ? source.split(find).length - 1 :
     [...source.matchAll(new RegExp(find.source, find.flags.includes("g") ? find.flags : find.flags + "g"))].length;
   if (matches !== expected) throw new Error("D1 source drift [" + label + "]: expected " + expected + " match(es), found " + matches);
-  return source.replace(find, replacement);
+  return typeof find === "string" && expected > 1 ? source.split(find).join(replacement) : source.replace(find, replacement);
 }
 const allowedActions={
   "admin-auth":new Set(["loginAdmin","logoutAdmin"]),
+  "admin-export":new Set(["exportProductsCsv"]),
   "admin-products":new Set(["saveProduct","saveProductVariant","saveVariantSupplierCost","previewCatalogImport","applyCatalogImport","uploadProductImage","removeProductImage"]),
   "admin-ajustes":new Set(["guardarAjustes","restaurarAjustes","quitarImagenPortada","quitarImagenMarca"]),
   "admin-categories":new Set(["crearCategoria","editarCategoria","cambiarEstadoCategoria","moverCategoria"]),
@@ -40,23 +41,23 @@ export function d1StagingPlugin(root) {
       const publicModule=JSON.stringify(path.resolve(root,"workers/d1/public-catalog.ts").replaceAll("\\","/"));
       const publicPage=["/app/page.tsx","/app/producto/[slug]/page.tsx","/app/categoria/[slug]/page.tsx","/app/buscar/page.tsx"].some(suffix=>file.endsWith(suffix));
       if(publicPage)code=replaceRequired(code,/(["'])@\/db\/queries\1/g,publicModule,"public reader import");
-      if(file.endsWith("/app/producto/[slug]/page.tsx"))code=code.replace(/(["'])@\/domain\/reviews\1/g,publicModule);
+      if(file.endsWith("/app/producto/[slug]/page.tsx"))code=replaceRequired(code,/(["'])@\/domain\/reviews\1/g,publicModule,"public review import");
       code=code.replace(/(["'])@\/components\/store-categories\1/g,publicModule);
       code=code.replace(/(["'])\.\/supplier-costs\1/g, JSON.stringify(path.resolve(root,"workers/d1/supplier-costs.ts").replaceAll("\\","/")));
       code=code.replace(/(["'])\.\/store-settings\1/g, JSON.stringify(path.resolve(root,"workers/d1/store-settings.ts").replaceAll("\\","/")));
       // Exact, reviewed clock translation in modules used by this pilot. No
       // runtime SQL rewriting or MySQL session-state emulation.
-      if(file.endsWith("/domain/stock.ts")||file.endsWith("/lib/auth.ts"))code=code.replaceAll("sql`NOW()`","sql`CURRENT_TIMESTAMP`");
-      if(file.endsWith("/db/queries.ts"))code=code.replaceAll("<=>", "IS").replaceAll('sql`MATCH(${products.name}, ${products.description}) AGAINST (${booleanTerm} IN BOOLEAN MODE)`','sql`(${products.name} LIKE ${"%"+cleaned+"%"} OR ${products.description} LIKE ${"%"+cleaned+"%"})`');
+      if(file.endsWith("/domain/stock.ts")||file.endsWith("/lib/auth.ts"))code=replaceRequired(code,"sql`NOW()`","sql`CURRENT_TIMESTAMP`","SQL UTC clock",file.endsWith("/domain/stock.ts")?3:1);
+      if(file.endsWith("/db/queries.ts"))code=replaceRequired(replaceRequired(code,"<=>","IS","null-safe SQL comparisons",3),'sql`MATCH(${products.name}, ${products.description}) AGAINST (${booleanTerm} IN BOOLEAN MODE)`','sql`(${products.name} LIKE ${"%"+cleaned+"%"} OR ${products.description} LIKE ${"%"+cleaned+"%"})`',"retained SQL search adaptation",3);
       if(file.endsWith("/instrumentation.ts")){
         code=code.replace("error: safeError(error).message,", 'error: safeError(error).message, stack: safeError(error).stack, stagingErrorClass: ["SESSION_SECRET", "cookie", "searchParams", "useTransition", "server reference", "action", "request scope"].filter((token)=>String((error as Error)?.message).includes(token)),');
       }
       if(file.endsWith("/lib/session.ts")){
-        code='import { getD1SessionSecret } from "../../workers/d1/database";\n'+code.replace("process.env.SESSION_SECRET","getD1SessionSecret()");
+        code='import { getD1SessionSecret } from "../../workers/d1/database";\n'+replaceRequired(code,"process.env.SESSION_SECRET","getD1SessionSecret()","session secret binding");
         // iron-session probes typeof cookieStore.set; vinext read-only stores
         // throw on property access. Defer that access until an actual write,
         // retaining the framework's server-action-only mutation protection.
-        code=code.replace("getIronSession<AdminSession>(cookieStore, sessionOptions())", "getIronSession<AdminSession>({ get: (name: string) => cookieStore.get(name), getAll: () => cookieStore.getAll(), set: (...args: Parameters<typeof cookieStore.set>) => cookieStore.set(...args) }, sessionOptions())");
+        code=replaceRequired(code,"getIronSession<AdminSession>(cookieStore, sessionOptions())", "getIronSession<AdminSession>({ get: (name: string) => cookieStore.get(name), getAll: () => cookieStore.getAll(), set: (...args: Parameters<typeof cookieStore.set>) => cookieStore.set(...args) }, sessionOptions())","session cookie adapter");
       }
       if(file.endsWith("/domain/admin-dashboard.ts")){
         // Raw SQL Date parameters have no column encoder by default. Keep the
@@ -66,7 +67,7 @@ export function d1StagingPlugin(root) {
         if(!code.includes(raw))throw new Error('D1 dashboard date binding source drift');
         code=code.replace(raw,encoded);
       }
-      if(file.endsWith("/admin/(panel)/ajustes/page.tsx"))code=code.replaceAll("cloudinaryConfigured()", "false");
+      if(file.endsWith("/admin/(panel)/ajustes/page.tsx"))code=replaceRequired(code,"cloudinaryConfigured()", "false","native settings media capability",2);
       if(file.endsWith("/proxy.ts")) {
         // The owner uses existing automatic Cloudflare RUM injection. Cloudflare
         // supplies the CSP nonce on dynamic pages; public nonce-free pages need
@@ -91,7 +92,8 @@ export function d1StagingPlugin(root) {
 ${end}`);
       }
       if(file.endsWith("/app/page.tsx")) {
-        code=code.replace("Consultá la información de tu pedido.","Consultá tus dudas por WhatsApp.");
+        code=replaceRequired(code,"Consultá la información de tu pedido.","Consultá tus dudas por WhatsApp.","enquiry homepage copy");
+        code=replaceRequired(code,"getCatalog({ featured: true, limit: 4 }).catch(() => [])","getFeaturedProducts(4).catch(() => [])","native featured ordering");
         const repeated = `    Promise.all(
       CATEGORIAS_INICIALES.map((category) =>
         getCategoryProducts({
@@ -102,11 +104,11 @@ ${end}`);
       )
     ),`;
         if (!code.includes(repeated)) throw new Error("D1 homepage category query source drift");
-        code = 'import { getLatestCategoryProducts } from ' + JSON.stringify(path.resolve(root,"workers/d1/public-catalog.ts").replaceAll("\\","/")) + ';\n' + code;
+        code = 'import { getLatestCategoryProducts, getFeaturedProducts } from ' + JSON.stringify(path.resolve(root,"workers/d1/public-catalog.ts").replaceAll("\\","/")) + ';\n' + code;
         code = code.replace(repeated, '    getLatestCategoryProducts(CATEGORIAS_INICIALES.map(category => category.slug)).catch(() => []),');
-        code = code.replace('  getCategoryProducts,\n', '');
+        code = replaceRequired(code,'  getCategoryProducts,\n', '', 'homepage native category import');
       }
-      if(file.endsWith("/admin/login/page.tsx"))code=code.replace("<LoginForm next={next} />", "<LoginForm next={next} passwordRecoveryAvailable />");
+      if(file.endsWith("/admin/login/page.tsx"))code=replaceRequired(code,"<LoginForm next={next} />", "<LoginForm next={next} passwordRecoveryAvailable />","native recovery entry");
       if(file.endsWith("/lib/admin-guard.ts")){
         const fallback='redirect("/admin/pedidos")';
         if(!code.includes(fallback))throw new Error("D1 admin capability fallback source drift");
@@ -122,8 +124,8 @@ ${end}`);
         const start=code.indexOf("    await db.transaction(async (tx) => {");
         const end=code.indexOf("    revalidatePath(\"/admin/productos\");",start);
         if(start<0||end<0)throw new Error("D1 supplier action patch requires review");
-        code=code.slice(0,start)+`    await saveD1SupplierOffer(productId, variantId, offerId, { ...offer, productUrl, supplierUrl, checkedAt: checkedAt ? new Date(checkedAt) : null });\n`+code.slice(end);
-        code=code.replace('  writeSupplierOffer,','  saveD1SupplierOffer,');
+        code=code.slice(0,start)+`    await saveD1SupplierOffer(productId, variantId, offerId, { ...offer, productUrl, supplierUrl, checkedAt: checkedAt ? new Date(checkedAt) : null }, expectedRevision);\n`+code.slice(end);
+        code=replaceRequired(code,'  writeSupplierOffer,','  saveD1SupplierOffer,','native supplier writer');
       }
       if(file.endsWith("/admin/(panel)/layout.tsx")){
         // Preserve the full role-authorised navigation. Unported sections lead to
@@ -152,8 +154,9 @@ ${end}`);
       if(result.ok){result.variantesEscritas+=variants;result.fotosSubidas+=photos;}
       if(!result.ok && saved)result.errores.unshift(\`Se confirmó el guardado de \${saved} productos. Volvé a intentar con el mismo archivo y opciones para continuar desde los recibos confirmados.\`);`,"catalog batch handoff");
       }
-      if(file.endsWith("/actions/admin-products.ts"))code=code.replace('if (file.size > MAX_CATALOG_FILE_BYTES)', 'if (file.size > 800 * 1024)');
-      if(file.endsWith("/actions/admin-products.ts"))code=code.replace(/^(\s*["']use server["'];)/,'$1\nimport { applyD1CatalogImport, uploadD1ProductImage, removeD1ProductImage, saveD1Product, saveD1ProductVariant } from '+JSON.stringify(path.resolve(root,"workers/d1/catalog-actions.ts").replaceAll("\\","/"))+';');
+      if(file.endsWith("/actions/admin-products.ts"))code=replaceRequired(code,'if (file.size > MAX_CATALOG_FILE_BYTES)', 'if (file.size > 800 * 1024)','native catalog file bound');
+      if(file.endsWith("/actions/admin-products.ts"))code=replaceRequired(code,/^(\s*["']use server["'];)/,'$1\nimport { applyD1CatalogImport, publishD1CatalogImport, bulkSetD1ProductsActive, bulkMoveD1ProductsCategory, duplicateD1Product, uploadD1ProductImage, removeD1ProductImage, saveD1Product, saveD1ProductVariant, editD1ProductImage, reorderD1ProductImages, restoreD1ProductImage, listD1RemovedProductImages } from '+JSON.stringify(path.resolve(root,"workers/d1/catalog-actions.ts").replaceAll("\\","/"))+';','native product action imports');
+      if(file.endsWith("/actions/admin-categories.ts"))code=replaceRequired(code,/^(\s*["']use server["'];)/,'$1\nimport { uploadD1CategoryImage } from '+JSON.stringify(path.resolve(root,"workers/d1/category-image.ts").replaceAll("\\","/"))+';','native category image import');
       // An action ID can be posted to a different page. Route filtering alone
       // is insufficient: deny unported actions at their implementation boundary.
       if(file.endsWith("/app/layout.tsx")) {
@@ -169,7 +172,7 @@ ${end}`);
       const moduleIsServer=/^[\s]*["']use server["']/.test(code);
       const ast=ts.createSourceFile(file,code,ts.ScriptTarget.Latest,true,file.endsWith(".tsx")?ts.ScriptKind.TSX:ts.ScriptKind.TS);
       const edits=[];
-      const nativeActions={saveProduct:"saveD1Product(input)",saveProductVariant:"saveD1ProductVariant(input)",applyCatalogImport:"applyD1CatalogImport(formData)",uploadProductImage:"uploadD1ProductImage(formData)",removeProductImage:"removeD1ProductImage(input)"};
+      const nativeActions=file.endsWith("/actions/admin-products.ts")?{saveProduct:"saveD1Product(input)",saveProductVariant:"saveD1ProductVariant(input)",applyCatalogImport:"applyD1CatalogImport(formData)",publishCatalogImport:"publishD1CatalogImport(input)",bulkSetProductsActive:"bulkSetD1ProductsActive(input)",bulkMoveProductsCategory:"bulkMoveD1ProductsCategory(input)",duplicateProductAction:"duplicateD1Product(input)",uploadProductImage:"uploadD1ProductImage(formData)",removeProductImage:"removeD1ProductImage(input)",editProductImage:"editD1ProductImage(_input)",reorderProductImages:"reorderD1ProductImages(_input)",restoreProductImage:"restoreD1ProductImage(_input)",listRemovedProductImages:"listD1RemovedProductImages(_input)"}:file.endsWith("/actions/admin-categories.ts")?{uploadCategoryImage:"uploadD1CategoryImage(formData)"}:{};
       const nativeReplaced=new Set();
       // Public catalogue links must not issue uncached D1-backed flight renders
       // for destinations a visitor never opens. Normal Next builds retain defaults.
@@ -184,14 +187,14 @@ ${end}`);
           if((moduleIsServer&&exported)||inline){
             const name=node.name?.getText(ast);
             const actionModule=path.basename(file,".ts");
-            if(actionModule==="admin-products"&&nativeActions[name]){nativeReplaced.add(name);edits.push({at:node.body.getStart(ast)+1,end:node.body.end-1,text:"\nreturn "+nativeActions[name]+";\n"});return;}
+            if(nativeActions[name]){nativeReplaced.add(name);edits.push({at:node.body.getStart(ast)+1,end:node.body.end-1,text:"\nreturn "+nativeActions[name]+";\n"});return;}
             if(!allowedActions[actionModule]?.has(name))edits.push({at:node.body.getStart(ast)+1,text:'\nthrow new Error("Esta función todavía no está habilitada en la prueba D1.");\n'});
           }
         }
         ts.forEachChild(node,walk);
       }
       walk(ast);
-      if(file.endsWith("/actions/admin-products.ts"))
+      if(file.endsWith("/actions/admin-products.ts")||file.endsWith("/actions/admin-categories.ts"))
         for(const name of Object.keys(nativeActions))
           if(!nativeReplaced.has(name))throw new Error("D1 source drift [native action routing]: missing " + name);
       if(publicLinks) {

@@ -56,6 +56,7 @@ export type AdminProductRow = {
   /** Si aparece en la fila de destacados de la home (`getFeaturedProducts`). */
   isFeatured: boolean;
   publishedAt: Date | null;
+  revision:number;
   variantCount: number;
   minPricePyg: number | null;
   maxPricePyg: number | null;
@@ -151,6 +152,7 @@ export async function listAdminProducts(
       isActive: products.isActive,
       isFeatured: products.isFeatured,
       publishedAt: products.publishedAt,
+      revision: products.revision,
       variantCount: sql<number>`COUNT(${variants.id})`,
       minPricePyg: sql<number | null>`MIN(${variants.pricePyg})`,
       maxPricePyg: sql<number | null>`MAX(${variants.pricePyg})`,
@@ -191,6 +193,7 @@ export async function listAdminProducts(
   return {
     rows: rows.map((row) => ({
       ...row,
+      revision: Number(row.revision),
       variantCount: Number(row.variantCount),
       minPricePyg: row.minPricePyg === null ? null : Number(row.minPricePyg),
       maxPricePyg: row.maxPricePyg === null ? null : Number(row.maxPricePyg),
@@ -405,6 +408,7 @@ export async function listCategories(executor?: Executor) {
 // ---------------------------------------------------------------------------
 
 export type ProductWrite = {
+  featuredPosition?:number;
   expectedRevision?: number;
   dropiUrl?: string | null;
   saleMode?: "stock" | "enquiry" | "showcase";
@@ -444,6 +448,7 @@ export async function createProduct(
     ivaRate: input.ivaRate,
     isActive: input.isActive,
     isFeatured: input.isFeatured ?? false,
+    featuredPosition:input.featuredPosition??0,
     publishedAt: input.published ? new Date() : null,
   });
 
@@ -478,6 +483,7 @@ export async function updateProduct(
     .update(products)
     .set({
       revision: sql`${products.revision}+1`,
+      featuredPosition:input.featuredPosition,
       saleMode: input.saleMode,
       showPrice:
         (input.saleMode ?? current.saleMode) === "stock"

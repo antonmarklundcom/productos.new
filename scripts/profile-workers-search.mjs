@@ -2,6 +2,7 @@ import {DatabaseSync} from 'node:sqlite';
 import {performance} from 'node:perf_hooks';
 import {writeFile,mkdir} from 'node:fs/promises';
 import path from 'node:path';
+import {normalizedSearchBackfill,normalizedSearchTriggers} from '../workers/d1/search-normalization.mjs';
 import {searchPlan} from '../workers/d1/catalog-search-sql.mjs';
 const output=process.argv[2];
 if(process.argv.length>3||output?.startsWith('--'))throw Error('Usage: node scripts/profile-workers-search.mjs [output.json]');
@@ -12,7 +13,7 @@ function fixture(size){
  const insert=db.prepare('INSERT INTO products VALUES(?,?,?,?,?,?,?,?)');
  const cases=[['Café eléctrico','Ñandutí','Taza térmica'],['Kit de café eléctrico','Casa','Accesorio'],['Accesorio','Marca','Eléctrico para café'],['Niño','Juguete',''],['Nino','Juguete',''],['100% algodón_A!','Textil',''],['100X algodónZA!','Textil','']];
  for(let id=1;id<=size;id++){const row=cases[(id-1)%cases.length];insert.run(id,'synthetic-'+id,row[0]+' '+id,row[1],row[2],id%19===0?2:1,id%17===0?0:1,id%13===0?null:'2026-10-23');}
- db.exec('COMMIT;ANALYZE');return db;
+ db.exec('COMMIT;ALTER TABLE products ADD COLUMN search_name TEXT;ALTER TABLE products ADD COLUMN search_brand TEXT;ALTER TABLE products ADD COLUMN search_description TEXT;');db.exec(normalizedSearchBackfill);for(const trigger of normalizedSearchTriggers)db.exec(trigger);db.exec('CREATE INDEX products_search_name_idx ON products(search_name,id); ANALYZE');return db;
 }
 function oldPlan(term){const cleaned=term.trim().replace(/[+\-><()~*"@]/g,' ').replace(/\s+/g,' ').trim(),args=['%'+cleaned+'%','%'+cleaned+'%'];const from=' FROM products p JOIN categories c ON c.id=p.category_id WHERE '+visible+' AND ';
  return ['(p.name LIKE ? OR p.description LIKE ?)','(p.name LIKE ? OR p.brand LIKE ?)'].map(predicate=>({count:{sql:'SELECT COUNT(*) AS total'+from+predicate,args},select:{sql:'SELECT p.id,p.slug,p.name,p.brand'+from+predicate+' ORDER BY p.name,p.id LIMIT 40 OFFSET 0',args}}));}
@@ -29,11 +30,11 @@ for(const size of [262,1000,10000]){
    const started=performance.now(),result=variant==='old'?oldRead(db,old):newRead(db,variant==='new'?modern:repeated);const elapsed=performance.now()-started;
    if(round>=2)samples[variant].push(elapsed);if(variant==='old')prior=result;else if(variant==='new')current=result;else repeatedResult=result;
   }
-  if(JSON.stringify(repeatedResult)!==JSON.stringify(current))throw Error('CTE parity mismatch: '+term);
+  if(JSON.stringify(repeatedResult)!==JSON.stringify(current))throw Error('Precomputed normalization parity mismatch: '+term);
   profiles.push({products:size,term,repeatedFolding:{medianSqlWallMs:median(samples.repeated),total:repeatedResult.total,samples:samples.repeated},old:{medianSqlWallMs:median(samples.old),total:prior.total,firstIds:prior.rows.slice(0,5).map(r=>r.id),samples:samples.old,explain:old.map(p=>execute(db,{...p.count,sql:'EXPLAIN QUERY PLAN '+p.count.sql}))},new:{medianSqlWallMs:median(samples.new),total:current.total,firstIds:current.rows.slice(0,5).map(r=>r.id),samples:samples.new,explain:modern.statements.map(p=>execute(db,{...p,sql:'EXPLAIN QUERY PLAN '+p.sql}))}});
  }}finally{db.close();}
 }
-const report={format:1,capturedAt:new Date().toISOString(),scope:'Synthetic in-memory node:sqlite SQL preparation/execution/materialization wall time only; no D1 network, hydration, app render, browser or live data',runtime:process.version,warmups:2,measuredRounds:7,order:'alternating old/new/repeated-folding',indexes:['products primary key','categories primary key','products_category_id_idx'],baseline:'Previous Workers transformed phrase LIKE name/description with brand fallback only on zero first-pass matches; literal wildcards were not escaped',interpretation:'Semantic changes are intentional; additional token folding/ranking work can cost more SQL time. No speed improvement is claimed.',profiles};
+const report={format:1,capturedAt:new Date().toISOString(),scope:'Synthetic in-memory node:sqlite SQL preparation/execution/materialization wall time only; no D1 network, hydration, app render, browser or live data',runtime:process.version,warmups:2,measuredRounds:7,order:'alternating old/new/repeated-folding',indexes:['products primary key','categories primary key','products_category_id_idx','products_search_name_idx'],baseline:'Previous Workers transformed phrase LIKE name/description with brand fallback only on zero first-pass matches; literal wildcards were not escaped',interpretation:'Precomputed normalization is compared against repeated expressions with identical matching/ranking/count semantics. Synthetic SQL-only measurements do not establish visitor latency or D1 billing.',profiles};
 if(output){await mkdir(path.dirname(path.resolve(output)),{recursive:true});await writeFile(output,JSON.stringify(report,null,2)+'\n');}
 console.log(JSON.stringify({result:'PASS',profiles:profiles.length,output:output??null,summary:profiles.map(p=>({products:p.products,term:p.term,oldMs:p.old.medianSqlWallMs,newMs:p.new.medianSqlWallMs,repeatedMs:p.repeatedFolding.medianSqlWallMs,oldCount:p.old.total,newCount:p.new.total}))}));
 

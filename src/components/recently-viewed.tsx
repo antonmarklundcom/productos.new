@@ -10,94 +10,117 @@ import { categoryPlaceholderSrc, productImageUrl } from "@/lib/images";
 import { formatGs } from "@/lib/money";
 import { TESTIDS } from "@/lib/testids";
 
-/**
- * Vistos recientemente (plan-operacion §6.3), sólo cliente.
- *
- * No hay endpoint nuevo para esto (límite §4.7 del plan): se guarda en
- * `localStorage` el mínimo para dibujar una ficha —slug, nombre, precio,
- * imagen— al visitar cada producto, y se dibuja de ahí. Si el precio cambió
- * desde la última visita, se ve el viejo hasta que la compradora vuelva a
- * entrar a esa ficha: aceptable, y es la única alternativa sin inventar un
- * endpoint que el plan no pidió.
- *
- * Renderiza recién después de `useEffect` (arranca en `null`) para que el
- * primer render del servidor y el primero del cliente sean idénticos — nada
- * de esto existe en el servidor, así que cualquier intento de dibujarlo antes
- * de hidratar sería un desajuste. Con `localStorage` bloqueado (o
- * inexistente), el `try/catch` deja la lista vacía y el componente no dibuja
- * nada, sin ningún error en consola (lo verifica `csp.spec.ts`).
- */
-
-export type RecentlyViewedItem = {
+export type RecentlyViewedId = { slug: string; viewedAt: number };
+export type PublicRecentlyViewedProduct = {
   slug: string;
   name: string;
-  pricePyg: number;
+  pricePyg: number | null;
   imageCloudinaryId: string | null;
   imageAlt: string | null;
 };
 
 const STORAGE_KEY = `${CART_STORAGE_KEY}-vistos`;
 const MAX_ITEMS = 8;
+const TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const SAFE_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-function isItem(value: unknown): value is RecentlyViewedItem {
+function isId(value: unknown, now: number): value is RecentlyViewedId {
   if (!value || typeof value !== "object") return false;
-  const item = value as Partial<RecentlyViewedItem>;
+  const item = value as Partial<RecentlyViewedId>;
   return (
     typeof item.slug === "string" &&
-    item.slug !== "" &&
-    typeof item.name === "string" &&
-    Number.isInteger(item.pricePyg) &&
-    (item.imageCloudinaryId === null ||
-      typeof item.imageCloudinaryId === "string") &&
-    (item.imageAlt === null || typeof item.imageAlt === "string")
+    SAFE_SLUG.test(item.slug) &&
+    Number.isSafeInteger(item.viewedAt) &&
+    (item.viewedAt as number) <= now &&
+    now - (item.viewedAt as number) <= TTL_MS
   );
 }
 
-function readList(): RecentlyViewedItem[] {
+function readList(now: number): RecentlyViewedId[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter(isItem) : [];
+    const parsed: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
+    if (!Array.isArray(parsed)) return [];
+    const seen = new Set<string>();
+    return parsed.flatMap((value): RecentlyViewedId[] => {
+      // Migrate the old snapshot format by carrying forward only its slug; its
+      // cached price/name/image are deliberately discarded and re-fetched.
+      const legacy = value && typeof value === "object" ? value as { slug?: unknown; viewedAt?: unknown } : null;
+      const item = isId(value, now)
+        ? value
+        : legacy && typeof legacy.slug === "string" && SAFE_SLUG.test(legacy.slug) && legacy.viewedAt === undefined
+          ? { slug: legacy.slug, viewedAt: now }
+          : null;
+      if (!item || seen.has(item.slug)) return [];
+      seen.add(item.slug);
+      return [item];
+    }).slice(0, MAX_ITEMS);
   } catch {
     return [];
   }
 }
 
-function writeList(items: RecentlyViewedItem[]): void {
+function writeList(items: RecentlyViewedId[]): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(items.slice(0, MAX_ITEMS)));
   } catch {
-    // localStorage bloqueado (modo privado, cookies de terceros apagadas):
-    // no se guarda nada, y no es un error — es sólo que esta compradora no
-    // tiene "vistos recientemente" hoy.
+    // El historial es opcional; si el navegador bloquea el almacenamiento no se muestra.
   }
 }
 
-export function RecentlyViewed({ current }: { current: RecentlyViewedItem }) {
-  const [items, setItems] = useState<RecentlyViewedItem[] | null>(null);
+function isPublicProduct(value: unknown): value is PublicRecentlyViewedProduct {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Partial<PublicRecentlyViewedProduct>;
+  return (
+    typeof item.slug === "string" && SAFE_SLUG.test(item.slug) &&
+    typeof item.name === "string" && item.name.length > 0 && item.name.length <= 240 &&
+    (item.pricePyg === null || (Number.isSafeInteger(item.pricePyg) && (item.pricePyg as number) > 0)) &&
+    (item.imageCloudinaryId === null || typeof item.imageCloudinaryId === "string") &&
+    (item.imageAlt === null || typeof item.imageAlt === "string")
+  );
+}
+
+export function RecentlyViewed({ current }: { current: { slug: string } }) {
+  const [items, setItems] = useState<PublicRecentlyViewedProduct[] | null>(null);
 
   useEffect(() => {
-    // El `setState` va adentro del `setTimeout` y no suelto en el cuerpo del
-    // efecto: un `setState` síncrono ahí dispara un render en cascada y la
-    // regla `set-state-in-effect` de React lo marca (mismo patrón que
-    // `search-box.tsx`). El timeout de 0 alcanza — no hay nada que esperar,
-    // sólo que el `setState` quede en un callback en vez de en el cuerpo.
+    let active = true;
     const timer = setTimeout(() => {
-      const existing = readList();
-      const next = [
-        current,
-        ...existing.filter((item) => item.slug !== current.slug),
-      ].slice(0, MAX_ITEMS);
-      writeList(next);
-      setItems(next.filter((item) => item.slug !== current.slug));
+      void (async () => {
+        const now = Date.now();
+        const existing = readList(now).filter((item) => item.slug !== current.slug);
+        const history = [
+          ...(SAFE_SLUG.test(current.slug) ? [{ slug: current.slug, viewedAt: now }] : []),
+          ...existing,
+        ].slice(0, MAX_ITEMS);
+        writeList(history);
+        const slugs = history.map((item) => item.slug);
+        if (slugs.length === 0) {
+          if (active) setItems([]);
+          return;
+        }
+        try {
+          const query = new URLSearchParams({ slugs: slugs.join(",") });
+          const response = await fetch(`/api/catalog/recently-viewed?${query}`, {
+            cache: "no-store",
+            headers: { Accept: "application/json" },
+          });
+          if (!response.ok) throw new Error("No se pudo actualizar el catálogo.");
+          const payload: unknown = await response.json();
+          const products =
+            payload && typeof payload === "object" && Array.isArray((payload as { products?: unknown }).products)
+              ? (payload as { products: unknown[] }).products.filter(isPublicProduct)
+              : [];
+          if (active) setItems(products.filter((item) => item.slug !== current.slug).slice(0, MAX_ITEMS - 1));
+        } catch {
+          // Sin conexión no usamos precios ni publicación guardados en el navegador.
+          if (active) setItems([]);
+        }
+      })();
     }, 0);
-
-    return () => clearTimeout(timer);
-    // Se re-corre por slug, no por identidad de `current`: la page arma un
-    // objeto nuevo en cada render y no queremos re-escribir localStorage sin
-    // que cambie nada.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
   }, [current.slug]);
 
   if (!items || items.length === 0) return null;
@@ -132,9 +155,11 @@ export function RecentlyViewed({ current }: { current: RecentlyViewedItem }) {
                 <h3 className="group-hover:text-foreground line-clamp-2 text-sm font-medium">
                   {item.name}
                 </h3>
-                <p className="text-muted-foreground mt-auto pt-2 text-sm tabular-nums">
-                  {formatGs(item.pricePyg)}
-                </p>
+                {item.pricePyg !== null ? (
+                  <p className="text-muted-foreground mt-auto pt-2 text-sm tabular-nums">
+                    {formatGs(item.pricePyg)}
+                  </p>
+                ) : null}
               </div>
             </Link>
           );

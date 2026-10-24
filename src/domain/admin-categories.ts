@@ -217,6 +217,7 @@ export async function createCategory(input: {
  * pantalla lo avisa antes de guardar.
  */
 export async function updateCategory(input: {
+  expectedSnapshot?: string;
   categoryId: number;
   name: string;
   slug?: string | null;
@@ -259,6 +260,7 @@ export async function updateCategory(input: {
  * es el momento de re-validar la URL de la categoría.
  */
 export async function setCategoryImage(input: {
+  expectedSnapshot?: string;
   categoryId: number;
   imageCloudinaryId: string;
   imageAlt?: string | null;
@@ -312,6 +314,7 @@ export async function setCategoryImage(input: {
  * con todas las letras.
  */
 export async function setCategoryActive(input: {
+  expectedSnapshot?: string;
   categoryId: number;
   isActive: boolean;
 }): Promise<void> {
@@ -339,6 +342,7 @@ export async function setCategoryActive(input: {
  * cualquier lado.
  */
 export async function moveCategory(input: {
+  expectedSnapshot?: string;
   categoryId: number;
   direction: 'up' | 'down';
 }): Promise<void> {

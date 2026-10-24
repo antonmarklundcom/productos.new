@@ -34,39 +34,41 @@ const SeccionSchema = z.enum(STORE_SETTINGS_SECTIONS as [StoreSettingsSection, .
 
 const GuardarSchema = z.object({
   seccion: SeccionSchema,
+  expectedSnapshot:z.string().max(50000),
   valores: z.record(z.string(), z.unknown()),
 });
 
-export async function guardarAjustes(input: unknown): Promise<AdminActionResult> {
+export async function guardarAjustes(input: unknown): Promise<AdminActionResult<{snapshot?:string}>> {
   try {
     const actor = await requireOwnerSession();
 
     const parsed = GuardarSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: t("adminError.revisaDatos") };
 
-    await saveStoreSettingsSection(parsed.data.seccion, parsed.data.valores, {
+    const saved=await saveStoreSettingsSection(parsed.data.seccion, parsed.data.valores, {
       userId: actor.userId,
+      expectedSnapshot:parsed.data.expectedSnapshot,
     });
 
     revalidatePath("/admin/ajustes");
-    return { ok: true };
+    return { ok: true,snapshot:JSON.stringify(saved[parsed.data.seccion]) };
   } catch (error) {
     if (error instanceof StoreSettingsError) return { ok: false, error: error.message };
     return adminActionError("guardarAjustes", error);
   }
 }
 
-export async function restaurarAjustes(input: unknown): Promise<AdminActionResult> {
+export async function restaurarAjustes(input: unknown): Promise<AdminActionResult<{snapshot?:string}>> {
   try {
     const actor = await requireOwnerSession();
 
-    const parsed = z.object({ seccion: SeccionSchema }).safeParse(input);
+    const parsed = z.object({ seccion: SeccionSchema,expectedSnapshot:z.string().max(50000) }).safeParse(input);
     if (!parsed.success) return { ok: false, error: t("adminError.revisaDatos") };
 
-    await resetStoreSettingsSection(parsed.data.seccion, { userId: actor.userId });
+    const saved=await resetStoreSettingsSection(parsed.data.seccion, { userId: actor.userId,expectedSnapshot:parsed.data.expectedSnapshot });
 
     revalidatePath("/admin/ajustes");
-    return { ok: true };
+    return { ok: true,snapshot:JSON.stringify(saved[parsed.data.seccion]) };
   } catch (error) {
     if (error instanceof StoreSettingsError) return { ok: false, error: error.message };
     return adminActionError("restaurarAjustes", error);
@@ -126,7 +128,7 @@ export async function quitarImagenPortada(): Promise<AdminActionResult> {
 /** Cambia sólo la foto: el resto de "Marca y portada" queda como estaba. */
 async function guardarImagenPortada(publicId: string | null, userId: number): Promise<void> {
   const { settings } = await readStoreSettings();
-  await saveStoreSettingsSection("marca", { ...settings.marca, heroImagenId: publicId }, { userId });
+  await saveStoreSettingsSection("marca", { ...settings.marca, heroImagenId: publicId }, { userId,expectedSnapshot:JSON.stringify(settings.marca) });
 }
 
 const TipoImagenMarca = z.enum(["logo", "favicon"]);
@@ -193,5 +195,5 @@ async function guardarImagenMarca(
 ): Promise<void> {
   const { settings } = await readStoreSettings();
   const campo = tipo === "logo" ? "logoId" : "faviconId";
-  await saveStoreSettingsSection("identidad", { ...settings.identidad, [campo]: publicId }, { userId });
+  await saveStoreSettingsSection("identidad", { ...settings.identidad, [campo]: publicId }, { userId,expectedSnapshot:JSON.stringify(settings.identidad) });
 }

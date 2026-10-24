@@ -63,6 +63,7 @@ import {
 
 const SupplierCostSchema = z
   .object({
+    expectedRevision:z.number().int().positive(),
     productId: z.number().int().positive(),
     variantId: z.number().int().positive(),
     offerId: z.number().int().positive().optional(),
@@ -108,10 +109,12 @@ export async function saveVariantSupplierCost(
     const db = getDb();
     if (!(await supplierCostsReady(db)))
       return { ok: false, error: t("panel.costos.migracion") };
-    const { productId, variantId, offerId, checkedAt, ...offer } = parsed.data;
+    const { productId, variantId, offerId, checkedAt, expectedRevision, ...offer } = parsed.data;
     const productUrl = supplierLink(offer.productUrl);
     const supplierUrl = supplierLink(offer.supplierUrl);
     await db.transaction(async (tx) => {
+      const [baseline]=await tx.select({revision:products.revision}).from(products).where(eq(products.id,productId)).for("update");
+      if(!baseline||baseline.revision!==expectedRevision)throw catalogRevisionConflict();
       await tx.update(products).set({revision:sql`${products.revision}+1`}).where(eq(products.id,productId));
       const [variant] = await tx
         .select({ id: variants.id })
@@ -162,6 +165,7 @@ import {
  */
 
 const ProductSchema = z.object({
+  featuredPosition:z.number().int().min(0).max(1000000).optional(),
   expectedRevision: z.number().int().positive().max(2147483646).optional(),
   dropiUrl: z
     .string()
@@ -224,6 +228,7 @@ export async function saveProduct(
     }
 
     const write = {
+      featuredPosition:parsed.data.featuredPosition,
       expectedRevision: parsed.data.expectedRevision,
       saleMode: parsed.data.saleMode,
       showPrice: parsed.data.showPrice,
@@ -389,7 +394,7 @@ export async function adjustVariantStock(
  */
 export async function uploadProductImage(
   formData: FormData
-): Promise<AdminActionResult> {
+): Promise<AdminActionResult<{revision?:number}>> {
   try {
     const actor=await requireStaffSession();
 
@@ -440,7 +445,7 @@ const RemoveImageSchema = z.object({
 
 export async function removeProductImage(
   input: unknown
-): Promise<AdminActionResult> {
+): Promise<AdminActionResult<{revision?:number;tombstoneId?:string}>> {
   try {
     const actor=await requireStaffSession();
 
@@ -560,6 +565,10 @@ export async function previewCatalogImport(
 
 export type CatalogImportApplyResult =
   | ({ ok: true } & CatalogImportSummary & {
+        stagedReady?:boolean;
+        importId?:string;
+        nextOffset?:number|null;
+        totalProducts?:number;
         variantesEscritas: number;
         fotosSubidas: number;
         fotosOmitidas: number;
@@ -842,4 +851,17 @@ export async function duplicateProductAction(
   } catch (error) {
     return adminActionError("duplicateProductAction", error);
   }
+}
+
+export async function editProductImage(_input:unknown):Promise<AdminActionResult<{revision:number}>> {await requireStaffSession();void _input;return{ok:false,error:"Esta función requiere el catálogo nativo."};}
+export async function reorderProductImages(_input:unknown):Promise<AdminActionResult<{revision:number}>> {await requireStaffSession();void _input;return{ok:false,error:"Esta función requiere el catálogo nativo."};}
+export async function restoreProductImage(_input:unknown):Promise<AdminActionResult<{revision:number}>> {await requireStaffSession();void _input;return{ok:false,error:"Esta función requiere el catálogo nativo."};}
+
+export async function listRemovedProductImages(_input:unknown):Promise<AdminActionResult<{images:Array<{id:string;alt:string|null}>}>>{await requireStaffSession();void _input;return{ok:true,images:[]};}
+
+/** Native Workers replaces this body with its actor-bound atomic publisher. */
+export async function publishCatalogImport(input:{importId:string}):Promise<CatalogImportApplyResult>{
+  void input;
+  await requireStaffSession();
+  return {ok:false,errores:["La publicación completa está disponible en el catálogo nativo."]};
 }

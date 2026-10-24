@@ -1,4 +1,5 @@
 import {protectStagingResponse} from "./policy.mjs";
+import {recordCacheMetric} from "./cache-metrics.mjs";
 
 const representationHeaders = ["rsc", "next-router-state-tree", "next-router-prefetch", "next-router-segment-prefetch", "next-url", "x-vinext-interception-context", "x-vinext-interception-id", "x-vinext-mounted-slots", "x-vinext-rsc-render-mode", "x-vinext-rsc-state-fingerprint"];
 const catalogPath = (path) => path === "/" || /^\/(?:producto|categoria)\/[a-z0-9-]+\/?$/.test(path);
@@ -69,8 +70,8 @@ export async function catalogResponse(request, env, ctx, render, cacheStorage = 
       const hit = await cache.match(request);
       const expiresAt = Number(hit?.headers.get("x-catalog-expires-at") || 0);
       const remaining = Math.floor((expiresAt - Date.now()) / 1000);
-      if (hit && remaining >= 1) return publicResponse(hit, request, env, "HIT", remaining, expiresAt);
-    } catch { cache = undefined; }
+      if (hit && remaining >= 1) {recordCacheMetric("html_hit");return publicResponse(hit, request, env, "HIT", remaining, expiresAt);}
+    } catch { recordCacheMetric("html_read_error");cache = undefined; }
   }
   // Framework ISR remains disabled. The reviewed anonymous catalog render
   // opts in at middleware; explicit private/no-store response policies still win.
@@ -85,16 +86,24 @@ export async function catalogResponse(request, env, ctx, render, cacheStorage = 
     response = new Response(body, {status:response.status,statusText:response.statusText,headers:response.headers});
     const expiresAt = Math.min(Date.now() + ttl * 1000, dataContext?.expiresAt ?? Infinity);
     const remaining = Math.floor((expiresAt - Date.now()) / 1000);
-    if (remaining >= 1) {
+    if (remaining >= 1 && !dataContext?.failed && cacheableCatalogResponse(response)) {
       const result = publicResponse(response, request, env, "MISS", remaining, expiresAt);
-      ctx.waitUntil(cache.put(request, result.clone()).catch(() => {}));
+      recordCacheMetric("html_miss");
+      ctx.waitUntil(cache.put(request, result.clone()).catch(() => recordCacheMetric("html_write_error")));
       return result;
     }
   }
+  // Streamed readers may fail after headers were initially accepted. Never store
+  // or advertise a successful public response for that completed failed render.
+  const path = new URL(request.url).pathname;
+  // Catalogue HTML/RSC failures become 503. Keep the deliberate static-only
+  // sitemap fallback status; its XML is never eligible for the HTML cache.
+  if (dataContext?.failed && response.status === 200 && (catalogPath(path) || path === "/buscar")) response = new Response(response.body,{status:503,headers:response.headers});
+  recordCacheMetric("html_bypass");
   const result = protectStagingResponse(response);
   result.headers.set("x-catalog-cache", "BYPASS");
-  if (productionPublicRequest(request, env) && request.method === "GET" &&
-      !new URL(request.url).pathname.startsWith("/admin") &&
+  if (productionPublicRequest(request, env) && ["GET", "HEAD"].includes(request.method) &&
+      !/^\/(?:admin|api|checkout|pedido|cuenta|favoritos|setup|dev)(?:\/|$)/.test(new URL(request.url).pathname) &&
       !request.headers.has("cookie") && !request.headers.has("authorization") &&
       response.status === 200) result.headers.delete("x-robots-tag");
   return result;

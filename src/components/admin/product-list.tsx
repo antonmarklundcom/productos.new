@@ -12,6 +12,7 @@ import { t, tPlural } from "@/i18n";
 
 export type ProductListRow = {
   id: number;
+  revision:number;
   slug: string;
   name: string;
   categoryName: string;
@@ -92,6 +93,7 @@ export function ProductList({
       {selected.size > 0 ? (
         <BulkActionsBar
           productIds={[...selected]}
+          expectedRevisions={Object.fromEntries(rows.filter(p=>selected.has(p.id)).map(p=>[p.id,p.revision]))}
           categories={categories}
           canBulkPrice={canBulkPrice}
           onDone={() => setSelected(new Set())}

@@ -1,3 +1,5 @@
+import { executeAdminBatch } from "./admin-batch";
+import { catalogConflict } from "./catalog-durability";
 import { requireStaffSession } from "../../src/lib/admin-guard";
 import { catalogAudit, products } from "./schema";
 import { randomUUID } from "node:crypto";
@@ -21,9 +23,12 @@ export async function readSupplierCosts(variantIds: number[]) {
 }
 
 /** Native D1 batch makes switching the preferred offer atomic. */
-export async function saveD1SupplierOffer(productId: number, variantId: number, offerId: number | undefined, input: SupplierOfferWrite) {
+export async function saveD1SupplierOffer(productId: number, variantId: number, offerId: number | undefined, input: SupplierOfferWrite, expectedRevision:number) {
   const actor=await requireStaffSession();
-  const db = getNativeDb();
+  return writeD1SupplierOffer(getNativeDb(),actor.userId,productId,variantId,offerId,input,expectedRevision);
+}
+export async function writeD1SupplierOffer(db:ReturnType<typeof getNativeDb>,actorId:number,productId:number,variantId:number,offerId:number|undefined,input:SupplierOfferWrite,expectedRevision:number){
+  if(!Number.isSafeInteger(expectedRevision)||expectedRevision<1)throw catalogConflict();
   if (input.isPreferred && (!input.isActive || !input.isConfirmed || input.unitCostPyg == null)) throw new Error("El proveedor preferido debe estar activo, confirmado y tener costo.");
   if (input.unitCostPyg != null && (!Number.isSafeInteger(input.unitCostPyg) || input.unitCostPyg < 0)) throw new Error("Costo inválido.");
   const [variant] = await db.select({id: variants.id}).from(variants).where(and(eq(variants.id, variantId), eq(variants.productId, productId)));
@@ -34,9 +39,10 @@ export async function saveD1SupplierOffer(productId: number, variantId: number, 
   }
   const save = offerId === undefined ? db.insert(supplierOffers).values({...input,variantId}) : db.update(supplierOffers).set(input).where(and(eq(supplierOffers.id,offerId),eq(supplierOffers.variantId,variantId)));
   const revision=db.update(products).set({revision:sql`${products.revision}+1`}).where(eq(products.id,productId));
-  const audit=db.insert(catalogAudit).values({id:randomUUID(),actorId:actor.userId,operation:"save-supplier",recordType:"product",recordId:productId,revision:sql`(SELECT revision FROM products WHERE id=${productId})`,fields:JSON.stringify(["supplierOffers"])});
-  if (input.isPreferred) await db.batch([db.update(supplierOffers).set({isPreferred:false}).where(eq(supplierOffers.variantId,variantId)), save,revision,audit]);
-  else await db.batch([save,revision,audit]);
+  const audit=db.insert(catalogAudit).values({id:randomUUID(),actorId,operation:"save-supplier",recordType:"product",recordId:productId,revision:sql`(SELECT revision FROM products WHERE id=${productId})`,fields:JSON.stringify(["supplierOffers"])});
+  try{if (input.isPreferred) await executeAdminBatch(db,[db.run(sql`INSERT INTO counters(name,value) SELECT ${randomUUID()},-1 WHERE NOT EXISTS(SELECT 1 FROM products WHERE id=${productId} AND revision=${expectedRevision})`),db.update(supplierOffers).set({isPreferred:false}).where(eq(supplierOffers.variantId,variantId)), save,revision,audit]);
+  else await executeAdminBatch(db,[db.run(sql`INSERT INTO counters(name,value) SELECT ${randomUUID()},-1 WHERE NOT EXISTS(SELECT 1 FROM products WHERE id=${productId} AND revision=${expectedRevision})`),save,revision,audit]);
+  }catch(error){const row=await db.select({revision:products.revision}).from(products).where(eq(products.id,productId));if(row[0]?.revision!==expectedRevision)throw catalogConflict();throw error;}
 }
 export async function writeSupplierOffer(_variantId:number, _offerId:number|undefined, _input:SupplierOfferWrite, _executor?:NativeDatabase): Promise<never> { void [_variantId,_offerId,_input,_executor]; throw new Error("D1_STAGING_USE_ATOMIC_SUPPLIER_SAVE"); }
 export async function writeSupplierCost(_variantId:number, _input:SupplierCostWrite): Promise<never> { void [_variantId,_input]; throw new Error("D1_STAGING_IMPORT_NOT_PORTED"); }

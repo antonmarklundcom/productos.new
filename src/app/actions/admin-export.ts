@@ -142,7 +142,7 @@ export async function exportProductsCsv(
       return { ok: false, error: t("adminError.filtros") };
     }
 
-    const rows = await listVariantsForExport({
+    const exportRows = await listVariantsForExport({
       search: parsed.data.q,
       categoryId: parsed.data.categoria,
       featured: parsed.data.destacados ? true : undefined,
@@ -152,7 +152,8 @@ export async function exportProductsCsv(
       maxPricePyg: parsed.data.hasta,
       minMarginPercent: parsed.data.margen ? 50 : undefined,
       costState: parsed.data.costos,
-    });
+    }, EXPORT_MAX_ROWS + 1);
+    const rows = exportRows.slice(0, EXPORT_MAX_ROWS);
 
     const csv = toCsv(
       [
@@ -171,17 +172,17 @@ export async function exportProductsCsv(
         "Recargo (%)",
       ],
       rows.map((row) => [
-        row.sku,
-        row.productName,
-        row.categoryName,
-        row.label,
+        safeSpreadsheetText(row.sku),
+        safeSpreadsheetText(row.productName),
+        safeSpreadsheetText(row.categoryName),
+        safeSpreadsheetText(row.label),
         row.pricePyg,
         row.onHand,
         row.saleMode,
         row.showPrice ? "true" : "false",
-        row.dropiUrl ?? "",
+        safeSpreadsheetText(row.dropiUrl ?? ""),
         row.unitCostPyg ?? "",
-        row.unitCostPyg === null ? "" : (row.costSource ?? ""),
+        row.unitCostPyg === null ? "" : safeSpreadsheetText(row.costSource ?? ""),
         productMargin(row.pricePyg, row.unitCostPyg)?.marginPercent?.toFixed(
           2
         ) ?? "",
@@ -196,7 +197,7 @@ export async function exportProductsCsv(
       csv,
       filename: csvFilename("productos", isoDayPY()),
       rows: rows.length,
-      truncated: rows.length === EXPORT_MAX_ROWS,
+      truncated: exportRows.length > EXPORT_MAX_ROWS,
     };
   } catch (error) {
     return adminActionError("exportProductsCsv", error);
@@ -259,3 +260,5 @@ export async function exportMarketingOptInsCsv(): Promise<
     return adminActionError("exportMarketingOptInsCsv", error);
   }
 }
+
+function safeSpreadsheetText(value:string):string { return /^[\s\u0000-\u001f]*[=+\-@]/.test(value) ? "\'" + value : value; }

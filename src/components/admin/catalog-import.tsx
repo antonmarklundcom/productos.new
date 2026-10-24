@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import {
   applyCatalogImport,
+  publishCatalogImport,
   previewCatalogImport,
   type CatalogImportSummary,
 } from "@/app/actions/admin-products";
@@ -30,6 +31,9 @@ export function CatalogImportForm() {
   const [csvText, setCsvText] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
   const [pisarStock, setPisarStock] = useState(false);
+  const [republish, setRepublish] = useState(false);
+  const [staged, setStaged] = useState(false);
+  const [stagedId, setStagedId] = useState<string|null>(null);
   const [summary, setSummary] = useState<CatalogImportSummary | null>(null);
   const [duplicatesReviewed, setDuplicatesReviewed] = useState(false);
   const [errores, setErrores] = useState<string[] | null>(null);
@@ -55,6 +59,8 @@ export function CatalogImportForm() {
     const formData = new FormData();
     formData.set("file", file);
     formData.set("pisarStock", pisarStock ? "true" : "false");
+    formData.set("republish", String(republish));
+    formData.set("staged", String(staged));
     if (duplicatesReviewed && summary?.advertencias?.length)
       formData.set("duplicateReview", JSON.stringify(summary.advertencias));
     return formData;
@@ -86,10 +92,13 @@ export function CatalogImportForm() {
       // Store only a digest and random identity; file bytes and supplier data stay out of browser storage.
       const selectedFile=formData.get("file") as File;
       const digest=await crypto.subtle.digest("SHA-256",await selectedFile.arrayBuffer());
-      const fingerprint=Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,"0")).join("")+":"+String(pisarStock);
+      const fileDigest=Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,"0")).join("");
+      const fingerprint=fileDigest+":"+JSON.stringify([pisarStock,republish,staged]);
       const storageKey="catalog-import-v1";
       let pending:{id:string;fingerprint:string}|null=null;
       try{const saved=sessionStorage.getItem(storageKey);if(saved)pending=JSON.parse(saved);}catch{setErrores(["No se pudo recuperar la identidad de importación. Usá Nueva importación para comenzar otra."]);return;}
+      // Legacy pending identities remain valid only for the exact file and default publication options.
+      if(pending&&!republish&&!staged&&pending.fingerprint===fileDigest+":"+String(pisarStock))pending={...pending,fingerprint};
       if(pending&&pending.fingerprint!==fingerprint){setErrores(["Hay otra importación pendiente con un archivo u opciones distintos. Volvé a elegir el original para continuar o usá Nueva importación."]);return;}
       if(!pending){pending={id:crypto.randomUUID(),fingerprint};try{sessionStorage.setItem(storageKey,JSON.stringify(pending));}catch{setErrores(["El navegador no permite guardar la identidad para reintentar de forma segura."]);return;}}
       formData.set("importId",pending.id);
@@ -100,6 +109,7 @@ export function CatalogImportForm() {
         setSummary(null);
         return;
       }
+      if (result.stagedReady && result.importId) { setStagedId(result.importId); setErrores(null); toast.success("Planilla preparada. Revisá el resumen y publicá cuando corresponda."); return; }
       toast.success(
         result.fotosSubidas > 0
           ? t("panel.productos.importar.listoConFotos", {
@@ -146,7 +156,7 @@ export function CatalogImportForm() {
       </p>
 
       {catalogOnly ? (<>
-      <button type="button" className="mt-2 text-xs underline" disabled={isPending} onClick={()=>{sessionStorage.removeItem("catalog-import-v1");setSummary(null);setErrores(null);}}>Nueva importación</button>
+      <button type="button" className="mt-2 text-xs underline" disabled={isPending} onClick={()=>{sessionStorage.removeItem("catalog-import-v1");setStagedId(null);setSummary(null);setErrores(null);}}>Nueva importación</button>
       <p className="text-muted-foreground mt-1 text-xs">Si se corta la conexión o recargás, elegí el mismo archivo y opciones para continuar desde los lotes confirmados. Los lotes ya guardados pueden estar publicados.</p>
       </>) : null}
       <fieldset
@@ -239,6 +249,8 @@ export function CatalogImportForm() {
         {t("panel.productos.importar.pisarStock")}
       </label>
 
+      {catalogOnly ? <div className="mt-3 grid gap-2 text-xs"><label><input type="checkbox" checked={republish} disabled={isPending} onChange={event=>{setRepublish(event.target.checked);setSummary(null);setStagedId(null);}} /> Reactivar productos y variantes ocultos. Sin esta opción se conserva su visibilidad.</label><label><input type="checkbox" checked={staged} disabled={isPending} onChange={event=>{setStaged(event.target.checked);setSummary(null);setStagedId(null);}} /> Preparar y publicar la planilla completa después de revisar (hasta 50 productos y 250 variantes).</label><p>{staged ? "La preparación no cambia el catálogo público. La publicación completa es atómica; si hay cambios de otro editor se rechaza." : "Cada lote confirmado puede publicarse antes de terminar el archivo."}</p></div> : null}
+      {stagedId ? <button type="button" disabled={isPending} className="mt-3 rounded border p-2 text-sm" onClick={()=>startTransition(async()=>{try{const result=await publishCatalogImport({importId:stagedId});if(!result.ok){setErrores(result.errores);return;}sessionStorage.removeItem("catalog-import-v1");setStagedId(null);setSummary(null);toast.success("Planilla publicada.");}catch{setErrores(["Se interrumpió la conexión. Reintentá Publicar: el recibo evita repetir la publicación."]);}})}>Publicar planilla completa</button> : null}
       {errores && errores.length > 0 ? (
         <ul className="border-destructive/40 bg-destructive/5 text-destructive mt-3 max-h-48 list-disc space-y-1 overflow-y-auto rounded-lg border p-3 pl-6 text-xs">
           {errores.map((error, index) => (
@@ -319,7 +331,7 @@ export function CatalogImportForm() {
             type="button"
             onClick={confirmar}
             disabled={
-              isPending ||
+              isPending || Boolean(stagedId) ||
               Boolean(summary.advertencias?.length && !duplicatesReviewed)
             }
             className="bg-primary text-primary-foreground mt-3 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-60"

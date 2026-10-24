@@ -8,8 +8,8 @@ import { slugify as slugifyCategory } from "../../src/lib/slug";
 import { parseRef } from "../../src/lib/imagenes-r2";
 
 /** Each five-product D1 batch commits categories, catalog, costs and photos together. */
-export async function writeD1CatalogBatch(binding:D1Binding,items:readonly CatalogoProducto[],overwriteStock=false,expectedCategoryIds?:ReadonlyMap<string,number>, identity?:ImportIdentity){
-  if(!items.length||items.length>5)throw new Error("Usá de uno a cinco productos por lote.");
+export async function writeD1CatalogBatch(binding:D1Binding,items:readonly CatalogoProducto[],overwriteStock=false,expectedCategoryIds?:ReadonlyMap<string,number>, identity?:ImportIdentity, republish=false, options?:{maxBatchProducts?:number;guardStatements?:ReturnType<D1Binding["prepare"]>[];extraStatements?:ReturnType<D1Binding["prepare"]>[]} ){
+  if(!items.length||items.length>Math.min(50,options?.maxBatchProducts??5))throw new Error("Usá de uno a cinco productos por lote.");
   if(identity){
     await readImportRun(binding,identity.id,identity.actorId,identity.fingerprint);
     const receipt=await readBatchReceipt(binding,identity);
@@ -25,6 +25,7 @@ export async function writeD1CatalogBatch(binding:D1Binding,items:readonly Catal
   if(identity){
     statements.push(prepare("INSERT INTO counters(name,value) SELECT ?,-1 WHERE NOT EXISTS(SELECT 1 FROM catalog_import_runs WHERE id=? AND actor_id=? AND fingerprint=? AND next_offset=?)",[guard+"-checkpoint",identity.id,identity.actorId,identity.fingerprint,identity.offset]));
   }
+  statements.push(...(options?.guardStatements??[]));
   let variantsWritten=0;
   for(const p of items){
     const resolved=resolveCatalogCategory(p.categoryName,categoryRows),category=resolved.slug,dropi=normalizeDropiUrl(p.dropiUrl);
@@ -35,7 +36,8 @@ export async function writeD1CatalogBatch(binding:D1Binding,items:readonly Catal
       statements.push(prepare(`INSERT INTO categories(slug,name,position,is_active) VALUES(?,?,(SELECT COALESCE(MAX(position),-1)+1 FROM categories),1) ON CONFLICT(slug) DO NOTHING`,[category,p.categoryName]));
       if(identity)statements.push(prepare("INSERT INTO catalog_audit(id,actor_id,operation,record_type,record_id,revision,fields) SELECT ?,?,'import-category','category',id,1,? FROM categories WHERE slug=? AND changes()=1",[identity.id+":"+identity.offset+":category:"+category,identity.actorId,JSON.stringify(["name","slug","isActive"]),category]));
     }
-    const updates=["name=excluded.name","description=excluded.description","category_id=excluded.category_id","brand=excluded.brand","iva_rate=excluded.iva_rate","is_active=1","published_at=COALESCE(products.published_at,CURRENT_TIMESTAMP)","updated_at=CURRENT_TIMESTAMP"];
+    const updates=["name=excluded.name","description=excluded.description","category_id=excluded.category_id","brand=excluded.brand","iva_rate=excluded.iva_rate","updated_at=CURRENT_TIMESTAMP"];
+    if(republish)updates.push("is_active=1","published_at=COALESCE(products.published_at,CURRENT_TIMESTAMP)");
     if(p.saleMode!==undefined)updates.push("sale_mode=excluded.sale_mode");
     if(p.showPrice!==undefined)updates.push("show_price=excluded.show_price");
     if(dropi!==undefined)updates.push("dropi_url=excluded.dropi_url");
@@ -45,8 +47,8 @@ export async function writeD1CatalogBatch(binding:D1Binding,items:readonly Catal
       if(!v.sku||(v.costSource?.length??0)>200)throw new Error("SKU o fuente de costo inválidos.");
       // A real CHECK within the batch aborts all writes if SKU ownership changed after preview.
       statements.push(prepare(`INSERT INTO counters(name,value) VALUES(?,CASE WHEN NOT EXISTS(SELECT 1 FROM variants v JOIN products p ON p.id=v.product_id WHERE v.sku=? AND p.slug<>?) THEN 0 ELSE -1 END) ON CONFLICT(name) DO UPDATE SET value=excluded.value`,[guard,v.sku,p.slug]));
-      statements.push(prepare(`INSERT INTO variants(product_id,sku,label,price_pyg,compare_at_pyg,on_hand,position,is_active) VALUES((SELECT id FROM products WHERE slug=?),?,?,?,?,?,?,1) ON CONFLICT(sku) DO UPDATE SET label=excluded.label,price_pyg=excluded.price_pyg,compare_at_pyg=excluded.compare_at_pyg,position=excluded.position,is_active=1,on_hand=${overwriteStock?"excluded.on_hand":"variants.on_hand"}`,[p.slug,v.sku,v.label,v.pricePyg,v.compareAtPyg,v.onHand,position]));
-      if(v.unitCostPyg!==undefined)statements.push(prepare(`INSERT INTO supplier_offers(id,variant_id,unit_cost_pyg,source,source_type,product_url,is_confirmed,is_active,is_preferred) VALUES((SELECT s.id FROM supplier_offers s JOIN variants v ON v.id=s.variant_id WHERE v.sku=? AND s.is_preferred=1),(SELECT id FROM variants WHERE sku=?),?,?,?,?,1,1,1) ON CONFLICT(id) DO UPDATE SET unit_cost_pyg=excluded.unit_cost_pyg,source=excluded.source,updated_at=CURRENT_TIMESTAMP`,[v.sku,v.sku,v.unitCostPyg,v.costSource||null,dropi?"dropi":"other",dropi??null]));
+      statements.push(prepare(`INSERT INTO variants(product_id,sku,label,price_pyg,compare_at_pyg,on_hand,position,is_active) VALUES((SELECT id FROM products WHERE slug=?),?,?,?,?,?,?,1) ON CONFLICT(sku) DO UPDATE SET label=excluded.label,price_pyg=excluded.price_pyg,compare_at_pyg=excluded.compare_at_pyg,position=excluded.position,${republish?"is_active=1,":""}on_hand=${overwriteStock?"excluded.on_hand":"variants.on_hand"}`,[p.slug,v.sku,v.label,v.pricePyg,v.compareAtPyg,v.onHand,position]));
+      if(v.unitCostPyg!==undefined)statements.push(prepare(`INSERT INTO supplier_offers(id,variant_id,unit_cost_pyg,source,source_type,product_url,is_confirmed,is_active,is_preferred) VALUES((SELECT s.id FROM supplier_offers s JOIN variants v ON v.id=s.variant_id WHERE v.sku=? AND s.is_preferred=1),(SELECT id FROM variants WHERE sku=?),?,?,?,?,1,1,1) ON CONFLICT(id) DO UPDATE SET unit_cost_pyg=excluded.unit_cost_pyg,source=excluded.source,source_type=${dropi===undefined?"supplier_offers.source_type":"excluded.source_type"},product_url=${dropi===undefined?"supplier_offers.product_url":"excluded.product_url"},updated_at=CURRENT_TIMESTAMP`,[v.sku,v.sku,v.unitCostPyg,v.costSource||null,dropi?"dropi":"other",dropi??null]));
       variantsWritten++;
     }
     statements.push(prepare("UPDATE products SET revision=revision+1 WHERE slug=?",[p.slug]));
@@ -58,6 +60,7 @@ export async function writeD1CatalogBatch(binding:D1Binding,items:readonly Catal
     statements.push(prepare("INSERT INTO catalog_import_receipts(id,import_id,actor_id,offset,next_offset,variants_written,photos_written) VALUES(?,?,?,?,?,?,?)",[identity.id+":"+identity.offset,identity.id,identity.actorId,identity.offset,identity.offset+items.length,variantsWritten,identity.photosWritten]));
     statements.push(prepare("UPDATE catalog_import_runs SET next_offset=? WHERE id=?",[identity.offset+items.length,identity.id]));
   }
+  statements.push(...(options?.extraStatements??[]));
   statements.push(prepare("DELETE FROM counters WHERE name=?",[guard]));
   if(statements.length>900)throw new Error("Demasiadas variantes para este lote.");
   let result;

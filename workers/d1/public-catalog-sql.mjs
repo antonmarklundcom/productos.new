@@ -1,6 +1,7 @@
+import { displayedPriceSql } from "./display-price-sql.mjs";
 /** Public projection hydrated inside SQLite, avoiding dependent network reads. */
 const published = "p.is_active = 1 AND p.published_at IS NOT NULL AND c.is_active = 1";
-const minPrice = "MIN(CASE WHEN p.show_price = 1 THEN v.price_pyg ELSE NULL END)";
+const minPrice = displayedPriceSql();
 const columns = `p.id, p.slug, p.name, p.description, p.brand, p.iva_rate AS ivaRate,
  p.sale_mode AS saleMode, p.show_price AS showPrice, c.name AS categoryName, c.slug AS categorySlug,
  p.published_at AS publishedAt, c.position AS categoryPosition`;
@@ -54,13 +55,20 @@ export async function catalogRead(db, options = {}) {
  return rows.map(row => hydrate(row));
 }
 export async function featuredRead(db, limit = 8) {
- const selection = `SELECT ${columns} ${joins} WHERE ${published}`;
- const [featured, fallback] = await readBatch(db, [
-  projected(`${selection} AND p.is_featured = 1 ORDER BY p.published_at DESC, p.id ASC LIMIT ?`, [limit], "publishedAt DESC, id ASC"),
-  projected(`${selection} AND NOT EXISTS (SELECT 1 ${joins} WHERE ${published} AND p.is_featured = 1)
-    ORDER BY c.position ASC, p.name ASC, p.id ASC LIMIT ?`, [limit], "categoryPosition ASC, name ASC, id ASC"),
- ]);
- return (featured.length ? featured : fallback).map(row => hydrate(row));
+ const bounded = Math.min(60, Math.max(1, limit));
+ // Curated order wins. Otherwise round-robin categories, with normalized-name
+ // deduplication so repeated names cannot occupy the whole selection.
+ const [rows] = await readBatch(db, [projected(`WITH eligible AS (
+  SELECT ${columns}, p.featured_position AS featuredPosition, p.is_featured AS featured,
+   ROW_NUMBER() OVER (PARTITION BY c.id ORDER BY p.published_at DESC, p.id DESC) AS categoryRank,
+   ROW_NUMBER() OVER (PARTITION BY lower(trim(p.name)) ORDER BY p.published_at DESC, p.id DESC) AS nameRank
+  ${joins} WHERE ${published}
+ ), choices AS (SELECT * FROM eligible WHERE (featured = 1 OR nameRank = 1)
+  AND (featured = 1 OR NOT EXISTS (SELECT 1 FROM eligible WHERE featured = 1)))
+ SELECT * FROM choices ORDER BY CASE WHEN featured = 1 THEN featuredPosition ELSE categoryRank END,
+  categoryPosition, publishedAt DESC, id ASC LIMIT ?`, [bounded],
+ "CASE WHEN featured = 1 THEN featuredPosition ELSE categoryRank END, categoryPosition, publishedAt DESC, id ASC")]);
+ return rows.map(row => hydrate(row));
 }
 export async function productRead(db, slug) {
  const [rows, reviews] = await readBatch(db, [
@@ -101,19 +109,15 @@ export async function relatedRead(db, input, limit = 4) {
  args.push(input.categorySlug, input.productId, limit * 3);
  const [rows] = await readBatch(db, [projected(`SELECT ${columns}, ${minPrice} AS minPrice,
   CASE WHEN p.brand IS ? THEN 0 ELSE 1 END AS brandRank, ${proximity} AS priceDistance ${joins}
-  JOIN variants v ON v.product_id = p.id AND v.is_active = 1 AND v.on_hand > 0
+  JOIN variants v ON v.product_id = p.id AND v.is_active = 1
   WHERE ${published} AND c.slug = ? AND p.id != ? GROUP BY p.id
   ORDER BY brandRank, priceDistance, p.name ASC, p.id ASC LIMIT ?`, args, "brandRank, priceDistance, name ASC, id ASC")]);
- return rows.map(row => hydrate(row)).filter(product => product.variants.some(variant => variant.available > 0)).slice(0, limit);
+ return rows.map(row => hydrate(row)).slice(0, limit);
 }
-export async function latestRead(db, slugs) {
- if (!slugs.length) return [];
- if (slugs.length > 60) throw new Error("D1_HOME_CATEGORY_LIMIT_INVALID");
+export async function latestRead(db, _slugs = [], limit = 4) {
+ void _slugs; // Retained call signature; selection is globally chronological.
  const [rows] = await readBatch(db, [projected(`SELECT ${columns} ${joins} WHERE ${published}
-  AND c.slug IN (${slugs.map(() => "?").join(",")})
-  AND p.id = (SELECT newer.id FROM products newer WHERE newer.category_id = c.id AND newer.is_active = 1
-    AND newer.published_at IS NOT NULL AND EXISTS (SELECT 1 FROM variants v WHERE v.product_id = newer.id AND v.is_active = 1)
-    ORDER BY newer.published_at DESC, newer.id DESC LIMIT 1)`, slugs, "categoryPosition ASC, id ASC")]);
- const bySlug = new Map(rows.map(row => [row.categorySlug, hydrate(row)]));
- return slugs.flatMap(slug => bySlug.has(slug) ? [{products: [bySlug.get(slug)]}] : []).slice(0, 4);
+  AND EXISTS (SELECT 1 FROM variants v WHERE v.product_id = p.id AND v.is_active = 1)
+  ORDER BY p.published_at DESC, p.id DESC LIMIT ?`, [Math.min(60, Math.max(1, limit))], "publishedAt DESC, id DESC")]);
+ return rows.map(row => ({products: [hydrate(row)]}));
 }

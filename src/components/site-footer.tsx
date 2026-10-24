@@ -27,11 +27,28 @@ export async function SiteFooter() {
     <footer className="store-footer">
       <div className="store-width grid gap-8 py-10 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
         <div>
-          <Link href="/" className="flex items-center gap-2">
-            <Image src="/brand/mark.svg" width={32} height={32} alt="" />
-            <span className="text-2xl font-bold tracking-[-0.06em]">
-              {marca.nombre}.
-            </span>
+          <Link
+            href="/"
+            className="flex items-center gap-2"
+            aria-label={`${marca.nombre} — Inicio`}
+          >
+            {marca.logoUrl ? (
+              <Image
+                src={marca.logoUrl}
+                width={160}
+                height={40}
+                alt=""
+                unoptimized
+                className="h-8 w-auto max-w-32 object-contain"
+              />
+            ) : (
+              <>
+                <Image src="/brand/mark.svg" width={32} height={32} alt="" />
+                <span className="text-2xl font-bold tracking-[-0.06em]">
+                  {marca.nombre}.
+                </span>
+              </>
+            )}
           </Link>
           <p className="text-muted-foreground mt-4 max-w-56 text-sm leading-relaxed">
             {ajustes.marca.tagline ?? TIENDA.tagline}

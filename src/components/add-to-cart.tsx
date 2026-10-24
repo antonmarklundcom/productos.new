@@ -97,13 +97,14 @@ export function AddToCart({
                   key={variant.id}
                   type="button"
                   disabled={disabled}
+                  aria-pressed={variant.id === variantId}
                   onClick={() => {
                     setPicked(variant.id);
                     setQty(1);
                     rememberVariant(product.slug, variant.id);
                   }}
                   className={cn(
-                    "rounded-lg border px-3 py-2 text-sm transition-colors",
+                    "rounded-lg border px-3 py-2 text-sm transition-colors focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none",
                     variant.id === variantId
                       ? "border-foreground bg-foreground text-background"
                       : "border-border hover:border-foreground/40",

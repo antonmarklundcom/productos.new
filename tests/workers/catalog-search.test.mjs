@@ -1,6 +1,7 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {DatabaseSync} from "node:sqlite";
+import {normalizedSearchBackfill, normalizedSearchTriggers} from "../../workers/d1/search-normalization.mjs";
 import {searchPlan} from "../../workers/d1/catalog-search-sql.mjs";
 export function searchFixture(size=70) {
  const db=new DatabaseSync(":memory:");
@@ -17,6 +18,8 @@ export function searchFixture(size=70) {
  put(8,"100X algodónZA!");
  put(9,"Niño","");put(10,"Nino","");
  for(let id=20;id<size+20;id++)put(id,"Termo de acero "+String(id).padStart(4,"0"),"Térmica");
+ db.exec("ALTER TABLE products ADD COLUMN search_name TEXT; ALTER TABLE products ADD COLUMN search_brand TEXT; ALTER TABLE products ADD COLUMN search_description TEXT;");
+ db.exec(normalizedSearchBackfill); for (const trigger of normalizedSearchTriggers) db.exec(trigger);
  return db;
 }
 const run=(db,term,options)=>{const plan=searchPlan(term,options);return plan.statements?plan.statements.map(({sql,args})=>db.prepare(sql).all(...args)):[[],[{total:0}]];};
@@ -45,7 +48,7 @@ test("wildcards and punctuation are literal and page/count share visibility rule
  }finally{db.close();}
 });
 
-test('materialized folding retains exact predicate/ranking/count parity with repeated expressions',()=>{
+test('precomputed fields retain exact predicate/ranking/count parity with repeated expressions',()=>{
  const db=searchFixture();
  try {for(const term of ['CAFE ELECTRICO','eléctrico café','ÑANDUTÍ','100% algodón_A!','Niño','acero termo','uno dos tres cuatro cinco seis siete ocho nueve diez once doce']){
   for(const page of [1,2]){
@@ -53,4 +56,15 @@ test('materialized folding retains exact predicate/ranking/count parity with rep
    assert.deepEqual(materialized.statements.map(s=>db.prepare(s.sql).all(...s.args)),repeated.statements.map(s=>db.prepare(s.sql).all(...s.args)));
   }
  }}finally{db.close();}
+});
+
+test("normalization triggers update search projections on insert and edit",()=>{
+ const db=searchFixture(0);
+ try {
+  db.exec("UPDATE products SET name='Cámara nueva',brand='ÑANDÚ',description='TÉRMICA' WHERE id=1");
+  assert.deepEqual(run(db,"camara ñandu termica")[0].map(r=>r.id),[1]);
+  assert.equal(run(db,"cafe electrico")[1][0].total,2);
+  db.exec("INSERT INTO products(id,slug,name,brand,description,category_id,is_active,published_at) VALUES(99,'insert','CÁMARA','ÑANDÚ','TÉRMICA',1,1,'2026-10-24')");
+  assert.deepEqual(run(db,"camara ñandu termica")[0].map(r=>r.id),[99,1]);
+ } finally {db.close();}
 });

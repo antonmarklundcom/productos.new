@@ -29,9 +29,9 @@ it("showcase does not expose an enquiry or purchase button",()=>{
  render(<AddToCart product={{...product,saleMode:"showcase"}} inquiryLinks={{11:"https://example.com/FIRST"}}/>);
  expect(screen.queryByTestId(TESTIDS.productAddToCart)).toBeNull();expect(screen.queryByTestId(TESTIDS.variantInquiryLink)).toBeNull();
 });
-it("bulk, duplication and stock adjustment explain unavailable mutations",()=>{
- render(<><BulkActionsBar productIds={[1]} categories={[{id:1,name:"Prueba"}]} canBulkPrice onDone={vi.fn()}/><DuplicateProductButton productId={1}/><VariantEditor productId={1} variants={[{id:11,sku:"FIRST",label:"Primera",pricePyg:10000,compareAtPyg:null,isActive:true,onHand:8,heldQty:0,available:8}]}/></>);
- expect(screen.getByTestId(TESTIDS.adminBulkActivate)).toBeDisabled();expect(screen.getByTestId(TESTIDS.adminBulkDeactivate)).toBeDisabled();expect(screen.getByTestId(TESTIDS.adminBulkMoveCategorySelect)).toBeDisabled();expect(screen.getByTestId(TESTIDS.adminProductDuplicate)).toBeDisabled();expect(screen.queryByTestId(TESTIDS.adminBulkPriceOpen)).toBeNull();
+it("native catalogue enables bulk visibility and duplication while stock and price operations stay disabled",()=>{
+ render(<><BulkActionsBar expectedRevisions={{}} productIds={[1]} categories={[{id:1,name:"Prueba"}]} canBulkPrice onDone={vi.fn()}/><DuplicateProductButton expectedRevision={1} productId={1}/><VariantEditor productId={1} variants={[{id:11,sku:"FIRST",label:"Primera",pricePyg:10000,compareAtPyg:null,isActive:true,onHand:8,heldQty:0,available:8}]}/></>);
+ expect(screen.getByTestId(TESTIDS.adminBulkActivate)).toBeEnabled();expect(screen.getByTestId(TESTIDS.adminBulkDeactivate)).toBeEnabled();expect(screen.getByTestId(TESTIDS.adminBulkMoveCategorySelect)).toBeEnabled();expect(screen.getByTestId(TESTIDS.adminProductDuplicate)).toBeEnabled();expect(screen.queryByTestId(TESTIDS.adminBulkPriceOpen)).toBeNull();
  expect(screen.getByRole("button",{name:/Ajustar stock/i})).toBeDisabled();
  expect(screen.getByText(/El ajuste de stock no está habilitado/)).toBeInTheDocument();
 });

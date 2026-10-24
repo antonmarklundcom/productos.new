@@ -201,6 +201,7 @@ export const products = mysqlTable(
      * home llena de destacados que nadie eligió.
      */
     isFeatured: boolean("is_featured").notNull().default(false),
+    featuredPosition: int("featured_position").notNull().default(0),
     publishedAt: datetime("published_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
