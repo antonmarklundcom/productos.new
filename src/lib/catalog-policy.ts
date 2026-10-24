@@ -6,6 +6,7 @@ export const catalogCapabilities = {
   adjustStock: !catalogOnly,
   bulkProducts: true,
   bulkPrices: !catalogOnly,
+  nativeGallery: catalogOnly,
 };
 
 export function effectiveSaleMode(mode?: "stock" | "enquiry" | "showcase") {

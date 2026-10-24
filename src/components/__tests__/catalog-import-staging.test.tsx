@@ -20,11 +20,14 @@ it("requires an explicit publish after preparing, and binds reactivation/staging
  fireEvent.click(screen.getByLabelText(/Reactivar productos/));
  fireEvent.click(screen.getByRole("button",{name:/Revisar/i}));
  await waitFor(()=>expect(previewCatalogImport).toHaveBeenCalledOnce());
- const confirm=await screen.findByRole("button",{name:/Confirmar/i});fireEvent.click(confirm);
+ const confirm=await screen.findByRole("button",{name:/Confirmar/i});
+ await waitFor(()=>expect(confirm).toBeEnabled());
+ fireEvent.click(confirm);
  const publish=await screen.findByRole("button",{name:"Publicar planilla completa"});
  expect(publishCatalogImport).not.toHaveBeenCalled();
  const data=vi.mocked(applyCatalogImport).mock.calls[0]![0];
  expect(data.get("staged")).toBe("true");expect(data.get("republish")).toBe("true");
+ await waitFor(()=>expect(publish).toBeEnabled());
  fireEvent.click(publish);
  await waitFor(()=>expect(publishCatalogImport).toHaveBeenCalledWith({importId:"11111111-1111-4111-8111-111111111111"}));
  await waitFor(()=>expect(screen.queryByRole("button",{name:"Publicar planilla completa"})).toBeNull());

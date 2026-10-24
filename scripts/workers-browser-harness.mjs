@@ -33,6 +33,7 @@ export async function createHarness({
       type: "ESModule",
       path: path.join(root, "scripts/fixtures/workers-browser-entry.mjs"),
     },
+    { type: "ESModule", path: path.join(root, "scripts/fixtures/loopback-csp.mjs") },
     ...files.map((n) => ({
       type: "ESModule",
       path: path.join(root, "dist/server", n),

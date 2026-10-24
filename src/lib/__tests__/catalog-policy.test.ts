@@ -7,11 +7,11 @@ afterEach(()=>{flags.catalogOnly=true;vi.resetModules();});
 it("normal Next commerce preserves stock and its checkout/stock/bulk capabilities",async()=>{
  flags.catalogOnly=false;vi.resetModules();const policy=await import("@/lib/catalog-policy");
  expect(policy.effectiveSaleMode(undefined)).toBe("stock");expect(policy.effectiveSaleMode("stock")).toBe("stock");expect(policy.effectiveSaleMode("enquiry")).toBe("enquiry");expect(policy.effectiveSaleMode("showcase")).toBe("showcase");
- expect(policy.catalogCapabilities).toEqual({checkout:true,adjustStock:true,bulkProducts:true,bulkPrices:true});
+ expect(policy.catalogCapabilities).toEqual({checkout:true,adjustStock:true,bulkProducts:true,bulkPrices:true,nativeGallery:false});
 });
 it("catalogue mode uses enquiry for legacy stock and suppresses transaction capabilities",async()=>{
  flags.catalogOnly=true;vi.resetModules();const policy=await import("@/lib/catalog-policy");
- expect(policy.effectiveSaleMode(undefined)).toBe("enquiry");expect(policy.effectiveSaleMode("stock")).toBe("enquiry");expect(policy.effectiveSaleMode("showcase")).toBe("showcase");expect(policy.catalogCapabilities).toEqual({checkout:false,adjustStock:false,bulkProducts:true,bulkPrices:false});
+ expect(policy.effectiveSaleMode(undefined)).toBe("enquiry");expect(policy.effectiveSaleMode("stock")).toBe("enquiry");expect(policy.effectiveSaleMode("showcase")).toBe("showcase");expect(policy.catalogCapabilities).toEqual({checkout:false,adjustStock:false,bulkProducts:true,bulkPrices:false,nativeGallery:true});
 });
 it("legacy stock enquiry links contain the corresponding variant SKU and canonical product URL",async()=>{
  flags.catalogOnly=true;vi.resetModules();const {productInquiryLinks}=await import("@/domain/product-inquiries");

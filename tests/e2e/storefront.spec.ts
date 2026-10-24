@@ -1,7 +1,7 @@
 import { openFirstCategory } from "../navigation-helper";
 import { expect, test } from "@playwright/test";
 
-test("the storefront renders real HTML, styles, scripts and preparation help pages", async ({
+test("the storefront renders real HTML, styles, scripts and useful help pages", async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -22,22 +22,23 @@ test("the storefront renders real HTML, styles, scripts and preparation help pag
   );
   expect(resources.some((url) => url.includes(".css"))).toBe(true);
   expect(resources.some((url) => url.includes(".js"))).toBe(true);
-  for (const path of [
-    "/envios",
-    "/devoluciones",
-    "/preguntas-frecuentes",
-    "/privacidad",
-    "/contacto",
-  ]) {
-    await page.goto(path);
-    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-    if (path === "/contacto")
-      await expect(page.locator("main")).toContainText("WhatsApp");
-    else
-      await expect(page.locator("main")).toContainText(
-        /preparación|preparando/
-      );
+  const helpPages = [
+    { path: "/envios", title: "Envíos y entregas", content: /opciones de entrega o retiro/i },
+    { path: "/devoluciones", title: "Cambios y devoluciones", content: /consultá con el comercio/i },
+    { path: "/preguntas-frecuentes", title: "Preguntas frecuentes", content: /c[oó]mo compro/i },
+    { path: "/privacidad", title: "Privacidad", content: /qu[eé] datos utiliza/i },
+  ];
+  for (const item of helpPages) {
+    await page.goto(item.path);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(item.title);
+    await expect(page.locator("main")).toContainText(item.content);
+    await expect(page.locator("main")).not.toContainText(/DEMO|preparación|preparando/i);
+    await expect(page.locator('a[href="/contacto"]').first()).toBeAttached();
+    await expect(page.locator("main")).not.toContainText(/\[[^\]]+\]\([^)]+\)/);
   }
+  await page.goto("/contacto");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await expect(page.locator("main")).toContainText("WhatsApp");
   expect(errors).toEqual([]);
 });
 

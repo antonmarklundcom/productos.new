@@ -1,5 +1,6 @@
 "use client";
 
+import { catalogCapabilities } from "@/lib/catalog-policy";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
@@ -27,7 +28,7 @@ export function ProductImages({
   const [removed,setRemoved]=useState<Array<{id:string;alt:string|null}>>([]);
   const [uploadId,setUploadId]=useState<string|null>(null);
   const galleryKey=images.map(image=>image.id).join(",");
-  useEffect(()=>{void listRemovedProductImages({productId}).then(result=>{if(result.ok)setRemoved(result.images);}).catch(()=>{});},[productId,galleryKey]);
+  useEffect(()=>{if(!catalogCapabilities.nativeGallery)return;void listRemovedProductImages({productId}).then(result=>{if(result.ok)setRemoved(result.images);}).catch(()=>{});},[productId,galleryKey]);
   const mutate=(action:(input:unknown)=>Promise<{ok:true;revision?:number}|{ok:false;error:string}>,value:object)=>{
     const expected=revision;
     startTransition(async()=>{try{const result=await action({...value,productId,expectedRevision:expected,operationId:crypto.randomUUID()});if(!result.ok){setError(result.error);return;}acknowledge(expected,result.revision);router.refresh();}catch{setError("La conexión se interrumpió. Conservá tu borrador y recargá para comprobar si se guardó antes de reintentar.");}});
@@ -70,13 +71,15 @@ export function ProductImages({
                 </div>
                 <div className="grid gap-2 p-2">
                   {index===0?<span className="text-xs">Portada</span>:null}
-                  <label className="grid gap-1 text-xs">Descripción
+                  {catalogCapabilities.nativeGallery ? <label className="grid gap-1 text-xs">Descripción
                     <Input key={image.alt} defaultValue={image.alt??""} maxLength={255} aria-label={`Descripción de foto ${index+1}`} onBlur={event=>{if(event.target.value!==(image.alt??""))mutate(editProductImage,{imageId:image.id,alt:event.target.value});}} />
-                  </label>
+                  </label> : <p className="text-xs">Descripción: {image.alt||"Sin descripción"}</p>}
                   <div className="flex flex-wrap gap-1">
+                    {catalogCapabilities.nativeGallery ? <>
                     <Button type="button" size="sm" variant="outline" disabled={isPending||index===0} onClick={()=>mutate(reorderProductImages,{imageIds:[image.id,...images.filter(other=>other.id!==image.id).map(other=>other.id)]})}>Usar de portada</Button>
                     <Button type="button" size="sm" variant="outline" aria-label={`Mover foto ${index+1} antes`} disabled={isPending||index===0} onClick={()=>{const ids=images.map(photo=>photo.id);[ids[index-1],ids[index]]=[ids[index]!,ids[index-1]!];mutate(reorderProductImages,{imageIds:ids});}}>←</Button>
                     <Button type="button" size="sm" variant="outline" aria-label={`Mover foto ${index+1} después`} disabled={isPending||index===images.length-1} onClick={()=>{const ids=images.map(photo=>photo.id);[ids[index+1],ids[index]]=[ids[index]!,ids[index+1]!];mutate(reorderProductImages,{imageIds:ids});}}>→</Button>
+                    </> : null}
                     <Button type="button" variant="ghost" size="sm" disabled={isPending} onClick={()=>mutate(removeProductImage,{imageId:image.id})}>{t("panel.fotos.quitar")}</Button>
                   </div>
                 </div>
@@ -88,7 +91,7 @@ export function ProductImages({
         <p className="text-muted-foreground text-sm">{t("panel.fotos.vacio")}</p>
       )}
 
-      {removed.length?<div className="grid gap-2"><p className="text-sm">Fotos quitadas: podés restaurarlas durante 24 horas.</p>{removed.map(image=><Button key={image.id} type="button" variant="outline" disabled={isPending} onClick={()=>mutate(restoreProductImage,{tombstoneId:image.id})}>Deshacer: {image.alt||"foto"}</Button>)}</div>:null}
+      {catalogCapabilities.nativeGallery&&removed.length?<div className="grid gap-2"><p className="text-sm">Fotos quitadas: podés restaurarlas durante 24 horas.</p>{removed.map(image=><Button key={image.id} type="button" variant="outline" disabled={isPending} onClick={()=>mutate(restoreProductImage,{tombstoneId:image.id})}>Deshacer: {image.alt||"foto"}</Button>)}</div>:null}
       <form
         ref={formRef}
         className="border-border grid gap-3 rounded-xl border p-3"

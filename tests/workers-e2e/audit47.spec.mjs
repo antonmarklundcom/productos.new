@@ -3,8 +3,28 @@ import sharp from 'sharp';
 import {createHarness,restrictBrowser,fixturePassword} from '../../scripts/workers-browser-harness.mjs';
 import {PUBLIC_DATA_CACHE_SECONDS,PUBLIC_PREFETCH_CACHE_SECONDS} from '../../workers/d1/public-cache-budget.mjs';
 let h;
-test.beforeEach(async({context})=>{h=await createHarness({cacheSeconds:30});await restrictBrowser(context,h.baseURL);});
-test.afterEach(async()=>{await h?.close();});
+let diagnostics=[];
+const safeDiagnostic=value=>String(value).replace(/https?:\/\/[^\s"'<>]+/gi,"[url]").replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi,"[email]").replace(/\b(?:token|password|secret|authorization)\s*[:=]\s*\S+/gi,"[private]").slice(0,240);
+const note=value=>{if(diagnostics.length<20)diagnostics.push(value);};
+function observePage(page){
+ page.on('pageerror',error=>note({kind:'pageerror',name:error.name,message:safeDiagnostic(error.message)}));
+ page.on('console',message=>{if(message.type()==='error')note({kind:'console-error',message:safeDiagnostic(message.text())});});
+ page.on('requestfailed',request=>{
+  const url=new URL(request.url());
+  note({kind:'requestfailed',origin:url.origin===h.baseURL?'fixture':'external',route:url.pathname.startsWith('/admin')?'admin':url.pathname.startsWith('/_next/')?'static':url.pathname==='/buscar'?'search':'public',resource:request.resourceType(),navigation:request.isNavigationRequest(),failure:safeDiagnostic(request.failure()?.errorText??'unknown')});
+ });
+}
+
+test.beforeEach(async({context})=>{diagnostics=[];h=await createHarness({cacheSeconds:30});context.on('page',observePage);context.pages().forEach(observePage);await restrictBrowser(context,h.baseURL);});
+test.afterEach(async({context},info)=>{
+ if(info.status!==info.expectedStatus){
+  const hydration=await Promise.all(context.pages().map(page=>page.evaluate(()=>Boolean(window.__NEXT_HYDRATED)).catch(()=>false)));
+  const evidence={fixtureBrowserDiagnostics:diagnostics,hydration};
+  console.log(JSON.stringify(evidence));
+  await info.attach('sanitized-browser-fixture-diagnostics',{body:Buffer.from(JSON.stringify(evidence)),contentType:'application/json'});
+ }
+ await h?.close();
+});
 async function rendered(route,clock,headers={}) {
  return test.step(`${headers.rsc ? 'RSC' : 'HTML'} fixture render ${route}`,async()=>{
   let target=new URL(h.baseURL+route);
@@ -85,8 +105,8 @@ test('semantic forms, variant selection and gallery dialog support keyboard stat
  await h.db.exec("INSERT INTO variants(product_id,sku,label,price_pyg,on_hand,is_active) VALUES(1,'SYNTH-ALT','Alternative option',60000,0,1); INSERT INTO product_images(product_id,cloudinary_id,alt,position) VALUES(1,'invalid-fixture-placeholder-one','Synthetic first',0),(1,'invalid-fixture-placeholder-two','Synthetic second',1)");
  await page.goto(h.baseURL+'/producto/synthetic-visible',{waitUntil:'networkidle'});
  await expect(page.locator('h1')).toHaveCount(1);await expect(page.locator('form form')).toHaveCount(0);
- const alternative=page.getByRole('button',{name:'Alternative option',exact:true});await alternative.focus();await page.keyboard.press('Enter');await expect(alternative).toHaveAttribute('aria-pressed','true');
- const opener=page.getByRole('button',{name:/Ampliar imagen/});await opener.focus();await page.keyboard.press('Enter');
+ const alternative=page.getByRole('button',{name:'Alternative option',exact:true});await alternative.focus();await expect(alternative).toBeFocused();await page.keyboard.press('Enter');await expect(alternative).toHaveAttribute('aria-pressed','true');
+ const opener=page.getByRole('button',{name:/Ampliar imagen/});await opener.focus();await expect(opener).toBeFocused();await page.keyboard.press('Enter');
  const dialog=page.getByRole('dialog');await expect(dialog).toBeVisible();await page.keyboard.press('ArrowRight');await expect(dialog).toContainText('2 / 2');
  await page.keyboard.press('Escape');await expect(dialog).not.toBeVisible();await expect(opener).toBeFocused();
  const semantic=await page.evaluate(()=>({imagesWithoutAlt:document.querySelectorAll('img:not([alt])').length,unnamedFields:[...document.querySelectorAll('input:not([type="hidden"]),select,textarea')].filter(el=>!el.labels?.length&&!el.getAttribute('aria-label')&&!el.getAttribute('aria-labelledby')&&!['submit','button'].includes(el.type)).length}));
@@ -99,10 +119,14 @@ test('owner forms and real canvas image preparation persist across supported bro
  await page.goto(h.baseURL+'/admin/productos/1',{waitUntil:'networkidle'});
  const png=await sharp({create:{width:640,height:480,channels:3,background:'#237d48'}}).png().toBuffer();
  await page.locator('input#file').setInputFiles({name:'synthetic-engine.png',mimeType:'image/png',buffer:png});
- await page.locator('input#file').locator('xpath=ancestor::form').getByRole('button',{name:/subir/i}).click();
+ const upload=page.locator('input#file').locator('xpath=ancestor::form').getByRole('button',{name:/subir/i});await upload.click();
  await expect.poll(async()=>Number((await h.db.prepare('SELECT COUNT(*) n FROM product_images WHERE product_id=1').first()).n)).toBe(1);
  const saved=await h.db.prepare('SELECT cloudinary_id FROM product_images WHERE product_id=1').first();expect(saved.cloudinary_id).toMatch(/^r2:p1\//);
- await page.reload({waitUntil:'networkidle'});await expect(page.locator('form form')).toHaveCount(0);
+ // D1 commit precedes action acknowledgement/router.refresh. Wait for the
+ // rendered gallery and idle submit before starting a document reload.
+ await expect(page.getByLabel('Descripción de foto 1',{exact:true})).toBeVisible();
+ await expect(upload).toBeEnabled();await page.waitForLoadState('networkidle');
+ await page.reload({waitUntil:'networkidle'});await expect(page.getByLabel('Descripción de foto 1',{exact:true})).toBeVisible();await expect(page.locator('form form')).toHaveCount(0);
  await page.goto(h.baseURL+'/admin/categorias',{waitUntil:'networkidle'});await expect(page.locator('form form')).toHaveCount(0);expect(warnings).toEqual([]);
 });
 

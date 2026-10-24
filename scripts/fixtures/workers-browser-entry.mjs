@@ -1,3 +1,4 @@
+import {adaptHttpLoopbackCsp} from "./loopback-csp.mjs";
 import app from "../../dist/server/index.js";
 // Test-only adapter: never imported by a deployment entry point.
 const fixtureWorker = {
@@ -78,6 +79,7 @@ const fixtureWorker = {
         "location",
         external.origin + location.slice(internal.origin.length)
       );
+    adaptHttpLoopbackCsp(output, external);
     return new Response(response.body, {
       status: response.status,
       headers: output,
