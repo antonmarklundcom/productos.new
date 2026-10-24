@@ -177,6 +177,7 @@ export default async function AdminProductsPage({
           key={`${JSON.stringify(urlFilters)}:${result.page}`}
           rows={result.rows.map((product) => ({
             id: product.id,
+            revision:product.revision,
             slug: product.slug,
             name: product.name,
             categoryName: product.categoryName,

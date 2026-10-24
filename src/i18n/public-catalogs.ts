@@ -47,6 +47,8 @@ export const publicCatalogs: Record<string, Record<string, string>> = {
     "filtros.marca.label": "Filtrar por marca",
     "filtros.marca.todas": "Todas las marcas",
     "filtros.marca.conCuenta": "{marca} ({n})",
+    "filtros.categoria": "Categoría",
+    "filtros.todasCategorias": "Todas las categorías",
     "filtros.precio.label": "Filtrar por precio",
     "filtros.precio.cualquiera": "Cualquier precio",
     "filtros.orden.label": "Ordenar",

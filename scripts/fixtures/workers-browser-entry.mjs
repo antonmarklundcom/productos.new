@@ -46,9 +46,31 @@ const fixtureWorker = {
           return typeof value === "function" ? value.bind(target) : value;
         },
       });
+    if (headers.get("x-fixture-product-query-outage") === "true")
+      bindings.DB = new Proxy(env.DB, {
+        get(target,key) {
+          if (key === "prepare") return sql => {
+            if (sql.includes("WITH candidates AS")) throw Error("SYNTHETIC_DEFERRED_PRODUCT_QUERY_FAILURE");
+            return target.prepare(sql);
+          };
+          const value = Reflect.get(target,key);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
     if (headers.get("x-fixture-cache") === "true")
       bindings.WORKERS_PUBLIC_CACHE_SECONDS = "30";
-    const response = await app.fetch(input, bindings, ctx),
+    // Only the isolated fixture accepts a controlled clock. Buffer streamed
+    // readers before restoring it so DTO and HTML expiry see the same instant.
+    const requestedClock = Number(headers.get("x-fixture-clock-ms"));
+    const clocked = headers.has("x-fixture-clock-ms") && Number.isSafeInteger(requestedClock) && requestedClock > 0;
+    const realNow = Date.now;
+    let response;
+    try {
+      if (clocked) Date.now = () => requestedClock;
+      response = await app.fetch(input, bindings, ctx);
+      if (clocked) response = new Response(await response.arrayBuffer(), {status:response.status,headers:response.headers});
+    } finally { Date.now = realNow; }
+    const
       output = new Headers(response.headers),
       location = output.get("location");
     if (location?.startsWith(internal.origin))

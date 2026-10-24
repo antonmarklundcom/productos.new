@@ -1,5 +1,6 @@
 "use client";
 
+import { useAdminDraft } from "./admin-draft";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
@@ -41,6 +42,7 @@ export type TipoCampo = "texto" | "booleano" | "lista" | "triestado";
  */
 export function SettingsSectionForm({
   seccion,
+  expectedSettings,
   campos,
   anidarEn,
   restaurar,
@@ -48,6 +50,7 @@ export function SettingsSectionForm({
   children,
 }: {
   seccion: StoreSettingsSection;
+  expectedSettings?:Partial<Record<StoreSettingsSection,unknown>>;
   campos: Record<string, TipoCampo>;
   /** Para "páginas": los valores viajan como `{ [slug]: valores }`. */
   anidarEn?: string;
@@ -60,24 +63,27 @@ export function SettingsSectionForm({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const {bindForm:draftRef,onInput:saveDraft,clear:clearDraft,recovery:draftRecovery}=useAdminDraft("settings:"+seccion+":"+(anidarEn??""),expectedSettings?.[seccion]);
+  const [baseline,setBaseline]=useState(()=>JSON.stringify(expectedSettings?.[seccion]??null));
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  const correr = (accion: () => Promise<{ ok: true } | { ok: false; error: string }>, ok: string) => {
+  const correr = (accion: () => Promise<{ ok: true;snapshot?:string } | { ok: false; error: string }>, ok: string) => {
     setError(null);
     startTransition(async () => {
-      const result = await accion();
+      let result;try{result = await accion();}catch{setError("Se interrumpió la conexión. Tu borrador sigue aquí; recargá para comprobar el guardado antes de reintentar.");return;}
       if (!result.ok) {
         setError(result.error);
         return;
       }
-      toast.success(ok);
+      if(result.snapshot)setBaseline(result.snapshot);
+      clearDraft();toast.success(ok);
       router.refresh();
     });
   };
 
   return (
-    <form
+    <form ref={draftRef} onInput={saveDraft}
       className="grid gap-4"
       onSubmit={(event) => {
         event.preventDefault();
@@ -87,12 +93,14 @@ export function SettingsSectionForm({
           () =>
             guardarAjustes({
               seccion,
+              expectedSnapshot:baseline,
               valores: anidarEn ? { [anidarEn]: valores } : valores,
             }),
           t("panel.ajustes.guardado"),
         );
       }}
     >
+      {draftRecovery}
       {error ? (
         <p role="alert" className="border-destructive/40 text-destructive rounded-lg border p-3 text-sm">
           {error}
@@ -114,8 +122,8 @@ export function SettingsSectionForm({
             correr(
               () =>
                 restaurar
-                  ? guardarAjustes({ seccion, valores: restaurar })
-                  : restaurarAjustes({ seccion }),
+                  ? guardarAjustes({ seccion, valores: restaurar,expectedSnapshot:baseline })
+                  : restaurarAjustes({ seccion,expectedSnapshot:baseline }),
               t("panel.ajustes.restaurado"),
             );
           }}

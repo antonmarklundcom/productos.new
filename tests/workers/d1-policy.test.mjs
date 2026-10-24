@@ -29,7 +29,7 @@ test('D1 action guard blocks IDs even when posted to another allowed page',()=>{
  const transformed=plugin.transform(source,path.join(root,'src/app/actions/admin-products.ts')).code;
  assert.match(transformed,/saveD1SupplierOffer\(productId, variantId/);
  assert.doesNotMatch(transformed,/await db\.transaction\(async \(tx\) =>/);
- for(const name of ['adjustVariantStock','bulkAdjustProductPrices','duplicateProductAction']){
+ for(const name of ['adjustVariantStock','bulkAdjustProductPrices']){
   const body=transformed.slice(transformed.indexOf('export async function '+name));
   assert.match(body.slice(body.indexOf('{'),body.indexOf('{')+160),/throw new Error\("Esta función/);
  }
@@ -38,6 +38,17 @@ test('D1 action guard blocks IDs even when posted to another allowed page',()=>{
  assert.match(transformed,/return applyD1CatalogImport\(formData\)/);
  assert.match(transformed,/return uploadD1ProductImage\(formData\)/);
  assert.match(transformed,/return removeD1ProductImage\(input\)/);
+ assert.match(transformed,/return duplicateD1Product\(input\)/);
+ assert.match(transformed,/return bulkSetD1ProductsActive\(input\)/);
+ assert.match(transformed,/return bulkMoveD1ProductsCategory\(input\)/);
+ const nativeCatalog=readFileSync(path.join(root,'workers/d1/catalog-actions.ts'),'utf8');
+ const duplicate=nativeCatalog.slice(nativeCatalog.indexOf('export async function duplicateD1Product'));
+ assert.match(duplicate.slice(0,400),/await requireStaffSession\(\)/);
+ assert.match(duplicate.slice(0,400),/duplicateCatalogProduct\(getNativeDb\(\)\.\$client,actor\.userId,input\)/);
+ const nativeBulk=readFileSync(path.join(root,'workers/d1/native-bulk.ts'),'utf8');
+ assert.match(nativeBulk,/revisionGuard\(db,input\.productId,input\.expectedRevision\)/);
+ assert.match(nativeBulk,/receipt\(db,input\.operationId,actor,fingerprint\)/);
+
  assert.match(auth,/await rateLimit\(/);assert.match(auth,/await resetRateLimitKey\(/);
 });
 

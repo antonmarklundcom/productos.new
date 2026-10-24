@@ -1,0 +1,76 @@
+import assert from "node:assert/strict";
+import {test} from "node:test";
+import {readFileSync,readdirSync} from "node:fs";
+import {getPlatformProxy} from "wrangler";
+import type {AnyD1Database} from "drizzle-orm/d1";
+import {mutateBulkCatalog,duplicateCatalogProduct} from "../../workers/d1/native-bulk";
+import {applyStoredCatalogPlan,loadCatalogPlan,catalogPlanFingerprint,getOrCreateCatalogPlan} from "../../workers/d1/catalog-staging";
+import {importFingerprint} from "../../workers/d1/catalog-durability";
+import {writeD1CatalogBatch} from "../../workers/d1/catalog-import-write";
+import {parseCatalogo} from "../../src/domain/catalog-import";
+import {withD1Database} from "../../workers/d1/database";
+
+test("bulk and staged receipts survive lost ACKs, reject stale/foreign writes, and resume legacy partial imports",{timeout:120000},async()=>{
+ const platform=await getPlatformProxy<{DB:AnyD1Database}>({configPath:"workers/d1/local-settings-test.wrangler.jsonc",persist:false});
+ try{
+ const db=platform.env.DB;
+ for(const name of readdirSync("workers/d1/migrations").filter(n=>n.endsWith(".sql")).sort())for(const statement of readFileSync("workers/d1/migrations/"+name,"utf8").split("--> statement-breakpoint"))if(statement.trim())await db.prepare(statement).run();
+ await db.prepare("INSERT INTO categories(id,slug,name) VALUES(1,'prueba','Prueba')").run();
+ await db.prepare("INSERT INTO products(id,slug,name,category_id,sale_mode,revision) VALUES(1,'uno','Uno',1,'enquiry',1),(2,'dos','Dos',1,'enquiry',2)").run();
+ await db.prepare("INSERT INTO variants(product_id,sku,label,price_pyg,on_hand) VALUES(1,'UNO','Unica',12000,8)").run();
+ const lost={prepare:db.prepare.bind(db),batch:async(statements:Parameters<typeof db.batch>[0])=>{await db.batch(statements);throw new Error("LOST_ACK");}} as AnyD1Database;
+ const input={operationId:crypto.randomUUID(),productIds:[1,2],expectedRevisions:{"1":1,"2":1},isActive:false};
+ assert.deepEqual(await mutateBulkCatalog(lost,1,input,"active"),{afectados:1,conflictos:[2]});
+ assert.deepEqual(await mutateBulkCatalog(db,1,input,"active"),{afectados:1,conflictos:[2]});
+ assert.equal(await db.prepare("SELECT revision FROM products WHERE id=1").first("revision"),2);
+ await assert.rejects(mutateBulkCatalog(db,2,input,"active"),/otro usuario/);
+ const copyInput={operationId:crypto.randomUUID(),productId:1,expectedRevision:2};
+ const copy=await duplicateCatalogProduct(lost,1,copyInput);
+ assert.equal((await duplicateCatalogProduct(db,1,copyInput)).productId,copy.productId);
+ const draft=await db.prepare("SELECT is_active,published_at FROM products WHERE id=?").bind(copy.productId!).first<{is_active:number;published_at:string|null}>();
+ assert.equal(draft?.is_active,0);assert.equal(draft?.published_at,null);
+ assert.equal(await db.prepare("SELECT on_hand FROM variants WHERE product_id=?").bind(copy.productId!).first("on_hand"),0);
+ const id=crypto.randomUUID(),fingerprint=catalogPlanFingerprint(new Uint8Array([1]),false,false,true);
+ const product={slug:"nuevo",name:"Nuevo",categoryName:"Prueba",description:null,brand:null,ivaRate:10,saleMode:"enquiry",showPrice:false,fotos:[],variants:[{sku:"NUEVO",label:"Unica",pricePyg:1000,compareAtPyg:null,onHand:0}]};
+ const plan={productos:[product],errores:[],productosNuevos:1,productosActualizar:0,variantesNuevas:1,variantesActualizar:0,fotosNuevas:0,categoriasNuevas:[],categoryIds:[["prueba",1]],baseline:[{slug:"nuevo",id:null,revision:null}],overwrite:false,republish:false};
+ await db.prepare("INSERT INTO catalog_import_plans(import_id,actor_id,fingerprint,plan_json,mode) VALUES(?,1,?,?,'staged')").bind(id,fingerprint,JSON.stringify(plan)).run();
+ await db.prepare("INSERT INTO catalog_import_runs(id,actor_id,fingerprint,total_products,summary_json) VALUES(?,1,?,1,?)").bind(id,fingerprint,JSON.stringify(plan)).run();
+ const row=(await loadCatalogPlan(db,id,1))!;
+ const staged=await applyStoredCatalogPlan(db,undefined,id,1,row,0);
+ assert.equal(staged.stagedReady,true);assert.equal(await db.prepare("SELECT COUNT(*) n FROM products WHERE slug='nuevo'").first("n"),0);
+ await assert.rejects(loadCatalogPlan(db,id,2),/otro archivo/);
+ const ready=(await loadCatalogPlan(db,id,1))!;
+ await db.prepare("INSERT INTO products(slug,name,category_id,sale_mode) VALUES('nuevo','Otro editor',1,'enquiry')").run();
+ await assert.rejects(applyStoredCatalogPlan(db,undefined,id,1,ready,0,true));
+ assert.equal(await db.prepare("SELECT COUNT(*) n FROM variants WHERE sku='NUEVO'").first("n"),0);
+ await db.prepare("DELETE FROM products WHERE slug='nuevo'").run();
+ await applyStoredCatalogPlan(lost,undefined,id,1,ready,0,true);
+ await applyStoredCatalogPlan(db,undefined,id,1,(await loadCatalogPlan(db,id,1))!,0,true);
+ assert.equal(await db.prepare("SELECT COUNT(*) n FROM products WHERE slug='nuevo'").first("n"),1);
+ assert.equal(await db.prepare("SELECT status FROM catalog_import_plans WHERE import_id=?").bind(id).first("status"),"published");
+
+ const legacyCsv="SKU;Producto;Categoria;Variante;Precio;Stock\n"+Array.from({length:6},(_,i)=>"LEGACY-"+i+";Legado"+i+";Prueba;Unica;1000;0").join("\n");
+ const legacyBytes=new TextEncoder().encode(legacyCsv),legacyFingerprint=importFingerprint(legacyBytes,false),legacyId=crypto.randomUUID();
+ assert.equal(catalogPlanFingerprint(legacyBytes,false,false,false),legacyFingerprint);
+ assert.notEqual(catalogPlanFingerprint(legacyBytes,false,true,false),legacyFingerprint);
+ const legacyProducts=parseCatalogo(legacyCsv).productos;
+ assert.equal(legacyProducts.length,6);
+ const originalSummary=JSON.stringify({productosNuevos:6,productosActualizar:0,variantesNuevas:6,variantesActualizar:0,fotosNuevas:0});
+ await db.prepare("INSERT INTO catalog_import_runs(id,actor_id,fingerprint,total_products,next_offset,summary_json) VALUES(?,1,?,6,0,?)").bind(legacyId,legacyFingerprint,originalSummary).run();
+ await writeD1CatalogBatch(db,legacyProducts.slice(0,5),false,undefined,{id:legacyId,actorId:1,fingerprint:legacyFingerprint,offset:0,totalProducts:6,photosWritten:0});
+ const originalRevisions=JSON.stringify((await db.prepare("SELECT slug,revision FROM products WHERE slug LIKE 'legado%' ORDER BY slug").all()).results);
+ await withD1Database(db,async()=>{
+  await assert.rejects(getOrCreateCatalogPlan(db,legacyId,2,legacyFingerprint,legacyCsv,false,false,false,null),/otro archivo/);
+  assert.equal(await db.prepare("SELECT COUNT(*) n FROM catalog_import_plans WHERE import_id=?").bind(legacyId).first("n"),0);
+  const upgrade=await getOrCreateCatalogPlan(db,legacyId,1,legacyFingerprint,legacyCsv,false,false,false,null);
+  const replay=await applyStoredCatalogPlan(db,undefined,legacyId,1,upgrade,0);
+  assert.equal(replay.nextOffset,5);assert.equal(replay.productosNuevos,6);assert.equal(replay.productosActualizar,0);
+  assert.equal(JSON.stringify((await db.prepare("SELECT slug,revision FROM products WHERE slug LIKE 'legado%' ORDER BY slug").all()).results),originalRevisions);
+  await applyStoredCatalogPlan(db,undefined,legacyId,1,upgrade,5);
+  return new Response(null);
+ });
+ assert.equal(await db.prepare("SELECT COUNT(*) n FROM products WHERE slug LIKE 'legado%'").first("n"),6);
+ assert.equal(await db.prepare("SELECT COUNT(*) n FROM catalog_import_receipts WHERE import_id=?").bind(legacyId).first("n"),2);
+ assert.equal(await db.prepare("SELECT summary_json FROM catalog_import_runs WHERE id=?").bind(legacyId).first("summary_json"),originalSummary);
+ }finally{await platform.dispose();}
+});

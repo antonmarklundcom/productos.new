@@ -18,6 +18,7 @@ export const origin =
 export const fixturePassword = "Synthetic-fixture-password-2026";
 export async function createHarness({
   diagnostics = false,
+  cacheSeconds = 0,
   sessionSecret = "synthetic-browser-session-key-" + randomUUID(),
 } = {}) {
   await access(path.join(root, "dist/server/index.js"));
@@ -55,7 +56,7 @@ export async function createHarness({
             SESSION_SECRET: sessionSecret,
             WORKERS_D1_STAGING: "true",
             WORKERS_PRODUCTION_READY: "true",
-            WORKERS_PUBLIC_CACHE_SECONDS: "0",
+            WORKERS_PUBLIC_CACHE_SECONDS: String(cacheSeconds),
             WORKERS_PUBLIC_DIAGNOSTICS: String(diagnostics),
             NEXT_PUBLIC_SITE_URL: origin,
             ADMIN_PASSWORD_RESET_ENABLED: "true",

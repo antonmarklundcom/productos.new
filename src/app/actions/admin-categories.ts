@@ -84,6 +84,7 @@ export async function crearCategoria(input: unknown): Promise<AdminActionResult<
 
 const UpdateSchema = z.object({
   categoryId: z.number().int().positive(),
+  expectedSnapshot:z.string().max(8000).optional(),
   name: z.string().trim().min(1, t("adminForm.nombreCategoria")).max(120),
   slug: z.string().trim().max(120).optional(),
   /**
@@ -107,6 +108,7 @@ export async function editarCategoria(input: unknown): Promise<AdminActionResult
 
     await updateCategory({
       categoryId: parsed.data.categoryId,
+      expectedSnapshot:parsed.data.expectedSnapshot,
       name: parsed.data.name,
       slug: parsed.data.slug || null,
       description: parsed.data.description,
@@ -140,7 +142,7 @@ export async function editarCategoria(input: unknown): Promise<AdminActionResult
  * en Cloudinary, y el peor caso de hacerlo al revés es una categoría apuntando
  * a una foto que ya no existe.
  */
-export async function uploadCategoryImage(formData: FormData): Promise<AdminActionResult> {
+export async function uploadCategoryImage(formData: FormData): Promise<AdminActionResult<{snapshot?:string}>> {
   try {
     await requireOwnerSession();
 
@@ -188,6 +190,7 @@ export async function uploadCategoryImage(formData: FormData): Promise<AdminActi
 
 const ActiveSchema = z.object({
   categoryId: z.number().int().positive(),
+  expectedSnapshot:z.string().max(8000).optional(),
   isActive: z.boolean(),
 });
 
@@ -200,6 +203,7 @@ export async function cambiarEstadoCategoria(input: unknown): Promise<AdminActio
 
     await setCategoryActive({
       categoryId: parsed.data.categoryId,
+      expectedSnapshot:parsed.data.expectedSnapshot,
       isActive: parsed.data.isActive,
     });
 
@@ -213,6 +217,7 @@ export async function cambiarEstadoCategoria(input: unknown): Promise<AdminActio
 
 const MoveSchema = z.object({
   categoryId: z.number().int().positive(),
+  expectedSnapshot:z.string().max(8000).optional(),
   direction: z.enum(["up", "down"]),
 });
 
@@ -225,6 +230,7 @@ export async function moverCategoria(input: unknown): Promise<AdminActionResult>
 
     await moveCategory({
       categoryId: parsed.data.categoryId,
+      expectedSnapshot:parsed.data.expectedSnapshot,
       direction: parsed.data.direction,
     });
 

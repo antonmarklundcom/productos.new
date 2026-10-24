@@ -1,3 +1,4 @@
+import { executeAdminBatch } from "./admin-batch";
 import { randomUUID } from "node:crypto";
 import { requireOwnerSession } from "../../src/lib/admin-guard";
 import { catalogAudit } from "./schema";
@@ -42,26 +43,26 @@ export async function createCategory(input:{name:string;slug?:string|null}&Categ
   if(!row)throw new AdminCategoryError("adminError.categoria.noPude");
   return {...row,productos:0,publicados:0};
 }
-export async function updateCategory(input:{categoryId:number;name:string;slug?:string|null}&CategoryPresentation) {
+export async function updateCategory(input:{expectedSnapshot?:string;categoryId:number;name:string;slug?:string|null}&CategoryPresentation) {
   const actor=await requireOwnerSession();
   const {name,slug}=normalizar(input);
   const db=getNativeDb();
-  const [changed]=await db.batch([db.update(categories).set({name,slug,...presentation(input)}).where(eq(categories.id,input.categoryId)).returning({id:categories.id}),...categoryEffects(db,actor.userId,input.categoryId,"save-category",["name","slug","description","images"])]);
-  const updated=changed[0];
+  const [_,changed]=await guardedCategoryBatch(db,input.categoryId,input.expectedSnapshot,[categoryGuard(db,input.categoryId,input.expectedSnapshot),db.update(categories).set({name,slug,...presentation(input)}).where(eq(categories.id,input.categoryId)).returning({id:categories.id}),...categoryEffects(db,actor.userId,input.categoryId,"save-category",["name","slug","description","images"])]);
+  void _;const updated=changed.results[0];
   if(!updated)throw new AdminCategoryError("adminError.categoria.noExiste");
 }
-export async function setCategoryActive(input:{categoryId:number;isActive:boolean}) {
+export async function setCategoryActive(input:{expectedSnapshot?:string;categoryId:number;isActive:boolean}) {
   const actor=await requireOwnerSession(),db=getNativeDb();
-  const [changed]=await db.batch([db.update(categories).set({isActive:input.isActive}).where(eq(categories.id,input.categoryId)).returning({id:categories.id}),...categoryEffects(db,actor.userId,input.categoryId,"set-category-active",["isActive"])]);
-  const updated=changed[0];
+  const [_,changed]=await guardedCategoryBatch(db,input.categoryId,input.expectedSnapshot,[categoryGuard(db,input.categoryId,input.expectedSnapshot),db.update(categories).set({isActive:input.isActive}).where(eq(categories.id,input.categoryId)).returning({id:categories.id}),...categoryEffects(db,actor.userId,input.categoryId,"set-category-active",["isActive"])]);
+  void _;const updated=changed.results[0];
   if(!updated)throw new AdminCategoryError("adminError.categoria.noExiste");
 }
-export async function moveCategory(input:{categoryId:number;direction:"up"|"down"}) {
+export async function moveCategory(input:{expectedSnapshot?:string;categoryId:number;direction:"up"|"down"}) {
   const actor=await requireOwnerSession(),db=getNativeDb();
   const delta=input.direction==="up"?-1:1;
   // A single statement reads and rewrites the complete ordering; there is no
   // async read/change gap or invented FOR UPDATE support.
-  await db.batch([db.run(sql`WITH ranked AS (
+  await guardedCategoryBatch(db,input.categoryId,input.expectedSnapshot,[categoryGuard(db,input.categoryId,input.expectedSnapshot),db.run(sql`WITH ranked AS (
     SELECT id, ROW_NUMBER() OVER (ORDER BY position,id)-1 AS rank FROM categories
   ), moving AS (SELECT rank FROM ranked WHERE id=${input.categoryId})
   UPDATE categories SET position=(SELECT CASE
@@ -80,4 +81,13 @@ export async function setCategoryImage():Promise<never> {throw new Error("D1_STA
 
 function categoryEffects(db:ReturnType<typeof getNativeDb>,actorId:number,id:number,operation:string,fields:string[]){
  return [db.run(sql`INSERT INTO counters(name,value) SELECT ${randomUUID()},-1 WHERE NOT EXISTS(SELECT 1 FROM categories WHERE id=${id})`),db.update(products).set({revision:sql`${products.revision}+1`}).where(eq(products.categoryId,id)),db.insert(catalogAudit).values({id:randomUUID(),actorId,operation,recordType:"category",recordId:id,revision:sql`(SELECT COALESCE(MAX(revision),0)+1 FROM catalog_audit WHERE record_type='category' AND record_id=${id})`,fields:JSON.stringify(fields)})] as const;
+}
+
+export function categoryGuard(db:ReturnType<typeof getNativeDb>,id:number,expected:string|undefined){
+ if(typeof expected!=="string"||expected.length>8000)throw new Error("La categoría cambió. Tu borrador sigue aquí; recargá para comparar antes de guardar.");
+ return db.run(sql`INSERT INTO counters(name,value) SELECT ${randomUUID()},-1 WHERE NOT EXISTS(SELECT 1 FROM categories WHERE id=${id} AND json_array(slug,name,description,image_cloudinary_id,image_alt,is_active,position)=${expected})`);
+}
+
+async function guardedCategoryBatch(db:ReturnType<typeof getNativeDb>,id:number,expected:string|undefined,statements:Parameters<typeof executeAdminBatch>[1]){
+ try{return await executeAdminBatch(db,statements);}catch(error){const row=await db.get<{snapshot:string}>(sql`SELECT json_array(slug,name,description,image_cloudinary_id,image_alt,is_active,position) snapshot FROM categories WHERE id=${id}`);if(row?.snapshot!==expected){const conflict=new Error("La categoría cambió. Tu borrador sigue aquí; recargá para comparar antes de guardar.");conflict.name="AdminInputError";throw conflict;}throw error;}
 }

@@ -1,6 +1,8 @@
 "use client";
 
 import { catalogCapabilities } from "@/lib/catalog-policy";
+import { useAdminDraft } from "./admin-draft";
+import { useProductRevision } from "./product-revision";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -129,12 +131,13 @@ function VariantFields({
   onDone: () => void;
 }) {
   const router = useRouter();
-  const [expectedRevision] = useState(revision);
+  const {revision:expectedRevision,acknowledge} = useProductRevision(revision);
+  const {bindForm:draftRef,onInput:saveDraft,clear:clearDraft,recovery:draftRecovery}=useAdminDraft("variant:"+productId+":"+(variant?.id??"new"),revision);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
   return (
-    <form
+    <form ref={draftRef} onInput={saveDraft}
       className="border-border grid gap-3 rounded-lg border p-3"
       onSubmit={(event) => {
         event.preventDefault();
@@ -145,7 +148,7 @@ function VariantFields({
         const reorderPointRaw = String(data.get("reorderPoint") ?? "").trim();
 
         startTransition(async () => {
-          const result = await saveProductVariant({
+          try{const result = await saveProductVariant({
             productId,
             variantId: variant?.id,
             expectedRevision,
@@ -161,12 +164,15 @@ function VariantFields({
             setError(result.error);
             return;
           }
+          clearDraft();acknowledge(expectedRevision);
           toast.success(t("panel.variante.guardada"));
           onDone();
           router.refresh();
+          }catch{setError("Se interrumpió la conexión. El borrador sigue aquí; recargá y comprobá el guardado antes de reintentar.");}
         });
       }}
     >
+      {draftRecovery}
       {error ? (
         <p
           role="alert"

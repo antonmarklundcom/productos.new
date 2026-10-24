@@ -1,4 +1,7 @@
+"use client";
+
 import Image from "next/image";
+import { useState } from "react";
 
 import { t } from "@/i18n/client";
 import {
@@ -27,6 +30,14 @@ const CATEGORIAS_CONOCIDAS = new Set([
   "moda",
   "deportes",
 ]);
+
+let reportedImageLoadFailure = false;
+function reportImageLoadFailure(): void {
+  if (reportedImageLoadFailure) return;
+  reportedImageLoadFailure = true;
+  // A single bounded category; never include a product name, URL, or image ID.
+  console.warn("[catalog-image] load failed; showing category placeholder");
+}
 
 /** `"hogar-y-cocina"` → `"Hogar y cocina"`. Sólo para el texto del placeholder. */
 function nombreLegible(categorySlug: string): string {
@@ -63,6 +74,8 @@ export function ProductImage({
   priority?: boolean;
   sizes?: string;
 }) {
+  const [failedId, setFailedId] = useState<string | null>(null);
+  const failed = Boolean(image && failedId === image.cloudinaryId);
   const preview = image?.cloudinaryId.match(/^local-preview:([a-z-]+)$/)?.[1];
   const url = preview
     ? `/api/preview-image/${preview}`
@@ -73,7 +86,7 @@ export function ProductImage({
   );
 
   const sources = productImageSources(image?.cloudinaryId);
-  if (sources) {
+  if (sources && !failed) {
     return (
       <div className={wrapper}>
         {/* eslint-disable-next-line @next/next/no-img-element -- next/image unoptimized cannot emit srcset. */}
@@ -85,13 +98,17 @@ export function ProductImage({
           loading={priority ? "eager" : "lazy"}
           fetchPriority={priority ? "high" : undefined}
           decoding="async"
+          onError={() => {
+            reportImageLoadFailure();
+            if (image) setFailedId(image.cloudinaryId);
+          }}
           className="absolute inset-0 h-full w-full object-contain"
         />
       </div>
     );
   }
 
-  if (!url) {
+  if (!url || failed) {
     // == S18 == Una categoría fuera de las cuatro del seed (una tienda que
     // agregó las suyas) no cae en `categoryPlaceholderSrc`, que sin
     // conocerla mostraría el mismo dibujo genérico de "producto" sin decir
@@ -143,6 +160,10 @@ export function ProductImage({
         className={publicBase() ? "object-contain" : "object-cover"}
         placeholder={image?.blurDataUrl ? "blur" : "empty"}
         blurDataURL={image?.blurDataUrl ?? undefined}
+        onError={() => {
+          reportImageLoadFailure();
+          if (image) setFailedId(image.cloudinaryId);
+        }}
       />
     </div>
   );

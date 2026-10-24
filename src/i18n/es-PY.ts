@@ -123,6 +123,8 @@ export const esPY = {
   "filtros.marca.label": "Filtrar por marca",
   "filtros.marca.todas": "Todas las marcas",
   "filtros.marca.conCuenta": "{marca} ({n})",
+  "filtros.categoria": "Categoría",
+  "filtros.todasCategorias": "Todas las categorías",
   "filtros.precio.label": "Filtrar por precio",
   "filtros.precio.cualquiera": "Cualquier precio",
   "filtros.orden.label": "Ordenar",
@@ -1200,7 +1202,6 @@ export const esPY = {
 
   "panel.fotos.alt": "Foto del producto",
   "panel.fotos.quitar": "Quitar",
-  "panel.fotos.quitada": "Foto quitada.",
   "panel.fotos.subida": "Foto subida.",
   "panel.fotos.vacio":
     "Todavía no hay fotos: en la tienda se ve un placeholder de color.",

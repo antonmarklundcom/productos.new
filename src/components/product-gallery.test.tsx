@@ -67,6 +67,46 @@ describe("ProductGallery with R2", () => {
     expect(zoom).toHaveClass("object-contain");
     expect(zoom).toHaveAttribute("sizes", "90vw");
   });
+  it("navigates the zoom with keyboard and controls while keeping the selected photo", () => {
+    vi.stubEnv("NEXT_PUBLIC_IMAGENES_URL", "https://img.test");
+    render(
+      <ProductGallery images={photos} name="Cepillo" categorySlug="hogar-y-cocina" />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Ampliar imagen de Cepillo" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.keyDown(dialog, { key: "ArrowRight" });
+    expect(within(dialog).getByText("2 / 2")).toBeInTheDocument();
+    expect(within(dialog).getByRole("img")).toHaveAttribute(
+      "src",
+      "https://img.test/p1/cepillo-abcdef0123-480.webp"
+    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "Imagen anterior" }));
+    expect(within(dialog).getByText("1 / 2")).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Imagen siguiente" }));
+    fireEvent.pointerDown(dialog, { pointerType: "touch", clientX: 160, clientY: 40 });
+    fireEvent.pointerUp(dialog, { pointerType: "touch", clientX: 80, clientY: 40 });
+    expect(within(dialog).getByText("1 / 2")).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cerrar imagen" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ampliar imagen de Cepillo" }));
+    expect(within(screen.getByRole("dialog")).getByText("1 / 2")).toBeInTheDocument();
+  });
+
+  it("shows the category placeholder after a product image fails once", () => {
+    vi.stubEnv("NEXT_PUBLIC_IMAGENES_URL", "");
+    vi.stubEnv("CLOUDINARY_CLOUD_NAME", "demo");
+    render(
+      <ProductImage
+        image={{ cloudinaryId: "productos/cepillo", alt: "Cepillo", blurDataUrl: null }}
+        alt="Cepillo"
+        categorySlug="hogar-y-cocina"
+      />
+    );
+    fireEvent.error(screen.getByRole("img"));
+    expect(screen.getByRole("img").getAttribute("src")).toContain(
+      "/placeholders/hogar-y-cocina.svg"
+    );
+  });
+
   it("falls back to the existing placeholder when R2 is disabled", () => {
     vi.stubEnv("NEXT_PUBLIC_IMAGENES_URL", "");
     render(

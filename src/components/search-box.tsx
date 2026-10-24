@@ -1,7 +1,7 @@
 "use client";
 
-import { Search } from "lucide-react";
 import { catalogOnly } from "@/config/catalog-capabilities";
+import { Search } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 
@@ -50,6 +50,7 @@ export function SearchBox({ className }: { className?: string }) {
     draftListeners.forEach((listener) => listener());
   }, [committedQuery]);
   const [suggestions, setSuggestions] = useState<SearchSuggestion[]>([]);
+  const [suggestionsTerm, setSuggestionsTerm] = useState("");
   const [open, setOpen] = useState(false);
   const [highlighted, setHighlighted] = useState(-1);
   const listId = useId();
@@ -72,15 +73,24 @@ export function SearchBox({ className }: { className?: string }) {
       un término que ya no está escrito.
     */
     let cancelado = false;
+    const controller = new AbortController();
     const timer = setTimeout(async () => {
-      const rows = !catalogOnly && buscable ? await sugerirProductos(cleaned) : [];
+      let rows: SearchSuggestion[] = [];
+      try {
+        if (buscable && catalogOnly) {
+          const response = await fetch(`/api/catalog/suggest?q=${encodeURIComponent(cleaned)}`, {signal:controller.signal});
+          if (response.ok) rows = (await response.json() as {products: SearchSuggestion[]}).products;
+        } else if (buscable) rows = await sugerirProductos(cleaned);
+      } catch { /* Search submit remains available. */ }
       if (cancelado) return;
       setSuggestions(rows);
+      setSuggestionsTerm(cleaned);
       setHighlighted(-1);
     }, DEBOUNCE_MS);
 
     return () => {
       cancelado = true;
+      controller.abort();
       clearTimeout(timer);
     };
   }, [cleaned, buscable]);
@@ -111,7 +121,7 @@ export function SearchBox({ className }: { className?: string }) {
   // También se mira `buscable`: entre que alguien borra hasta dejar una letra
   // y que el efecto limpie la lista pasa un debounce, y en ese rato las
   // sugerencias viejas no tienen nada que ver con lo que dice el campo.
-  const visibles = open && buscable && suggestions.length > 0;
+  const visibles = open && buscable && suggestionsTerm === cleaned && suggestions.length > 0;
 
   return (
     <div ref={containerRef} className={className}>
@@ -123,7 +133,7 @@ export function SearchBox({ className }: { className?: string }) {
           event.preventDefault();
           // Con una sugerencia marcada con las flechas, Enter va a esa ficha:
           // es lo que la persona está mirando.
-          if (highlighted >= 0 && suggestions[highlighted]) {
+          if (visibles && highlighted >= 0 && suggestions[highlighted]) {
             irA(suggestions[highlighted]!.slug);
             return;
           }
@@ -135,6 +145,8 @@ export function SearchBox({ className }: { className?: string }) {
           <Input
             type="search"
             name="q"
+            enterKeyHint="search"
+            maxLength={160}
             value={term}
             onChange={(event) => {
               setTerm(event.target.value);
@@ -163,11 +175,13 @@ export function SearchBox({ className }: { className?: string }) {
             aria-controls={listId}
             aria-autocomplete="list"
             aria-activedescendant={
-              highlighted >= 0 ? `${listId}-${highlighted}` : undefined
+              visibles && highlighted >= 0 ? `${listId}-${highlighted}` : undefined
             }
             autoComplete="off"
-            className="pl-9"
+            className="pl-9 pr-20"
           />
+
+          <button type="submit" className="absolute right-1 top-1/2 -translate-y-1/2 rounded-md px-3 py-1 text-sm font-medium hover:bg-muted">Buscar</button>
 
           {visibles ? (
             <ul
@@ -185,10 +199,7 @@ export function SearchBox({ className }: { className?: string }) {
                     aria-selected={index === highlighted}
                     // `onMouseDown` y no `onClick`: el blur del input dispara
                     // antes que el click y cerraría la lista debajo del dedo.
-                    onMouseDown={(event) => {
-                      event.preventDefault();
-                      irA(item.slug);
-                    }}
+                    onClick={() => irA(item.slug)}
                     onMouseEnter={() => setHighlighted(index)}
                     className={`hover:bg-muted flex w-full flex-col items-start px-3 py-2 text-left text-sm ${
                       index === highlighted ? "bg-muted" : ""
@@ -206,10 +217,7 @@ export function SearchBox({ className }: { className?: string }) {
               <li className="border-border border-t">
                 <button
                   type="button"
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                    buscar(term);
-                  }}
+                  onClick={() => buscar(term)}
                   className="hover:bg-muted text-muted-foreground w-full px-3 py-2 text-left text-xs"
                 >
                   {t("header.buscar.verTodos", { termino: cleaned })}

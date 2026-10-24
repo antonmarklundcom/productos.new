@@ -1,70 +1,84 @@
+import { catalogOnly } from "@/config/catalog-capabilities";
 import type { PaginaSlug } from "@/domain/store-settings-schema";
 
-/** Textos de preparación. Editables en Ajustes; no son políticas comerciales confirmadas. */
+/** Textos generales, editables en Ajustes; no sustituyen datos que debe confirmar el comercio. */
 export const PAGINAS_DEFAULT: Readonly<
   Record<PaginaSlug, { titulo: string; cuerpo: string }>
 > = {
   envios: {
     titulo: "Envíos y entregas",
-    cuerpo: `**Información en preparación**
-Estamos definiendo las zonas de entrega, las opciones de retiro y los costos de envío. Todavía no publicamos cobertura, tarifas ni plazos y no recibimos pedidos.
+    cuerpo: catalogOnly
+      ? `**Consultá las opciones antes de coordinar**
 
-Cuando el catálogo comercial esté disponible, vas a poder revisar las opciones habilitadas y su costo antes de confirmar una compra.
+La cobertura, la modalidad de entrega o retiro, los costos y los plazos dependen de cada operación y deben confirmarse con el comercio antes de coordinarla.
 
-Podés consultar nuestros canales de atención en la página de contacto cuando estén publicados.`,
+[Contactanos](/contacto) para consultar qué opciones están disponibles para tu zona y producto.`
+      : `**Opciones disponibles para tu pedido**
+
+Revisá en el proceso de compra las opciones de entrega o retiro y los costos que estén disponibles para tu pedido. Si necesitás confirmar la cobertura o el plazo antes de comprar, consultá al comercio.
+
+[Contactanos](/contacto) para hacer una consulta.`,
   },
   devoluciones: {
     titulo: "Cambios y devoluciones",
-    cuerpo: `**Política comercial en preparación**
-Antes de habilitar compras vamos a publicar las condiciones, los plazos, los costos y el procedimiento para solicitar un cambio o una devolución.
+    cuerpo: `**Consultá las condiciones de tu operación**
 
-Todavía no recibimos pedidos. No hay una garantía comercial ni un plazo de devolución publicado en este catálogo de preparación.
+Las condiciones aplicables pueden depender del producto y de la operación. Consultá con el comercio antes de confirmar la compra y conservá la información que recibas sobre el procedimiento y los plazos.
 
-Si ya tenés un pedido de una operación anterior, conservá su número y consultá los canales de atención publicados por el comercio.`,
+[Contactanos](/contacto) si necesitás hacer una consulta.`,
   },
   "preguntas-frecuentes": {
     titulo: "Preguntas frecuentes",
-    cuerpo: `**¿Ya puedo comprar?**
-El catálogo comercial está en preparación. Todavía no recibimos pedidos ni pagos.
+    cuerpo: catalogOnly
+      ? `**¿Cómo consulto por un producto?**
+En la ficha del producto podés usar la opción de consulta si está disponible. También podés escribir por los canales publicados en [Contacto](/contacto). Confirmá allí disponibilidad, precio y detalles de la operación.
 
-**¿Qué veo en la vista previa local?**
-Son artículos ficticios marcados como DEMO, con ilustraciones de ejemplo. No representan productos, precios ni stock reales y no se pueden comprar.
+**¿Puedo hacer el pedido o pagar desde este sitio?**
+Este catálogo permite consultar productos; no ofrece un proceso de compra ni de pago en línea.
 
-**¿Cómo voy a encontrar lo que necesito?**
-Podés explorar las categorías o usar el buscador. Cada ficha va a mostrar la información cargada por el comercio.
+**¿Qué opciones de entrega hay?**
+La cobertura, modalidad, costo y plazo se confirman con el comercio para cada consulta. No se coordinan automáticamente desde el catálogo.
 
-**¿Necesito una cuenta para comprar?**
-Cuando se habiliten las compras, vas a poder comprar como invitado. Las cuentas de cliente son opcionales.
+**¿Puedo seguir un pedido desde el sitio?**
+El seguimiento en línea no está disponible en este catálogo. Para una operación coordinada con el comercio, consultá sus canales publicados.`
+      : `**¿Cómo compro?**
+Agregá los productos disponibles al carrito y seguí los pasos del proceso de compra. Revisá el resumen y las condiciones que aparezcan antes de confirmar.
 
-**¿En qué moneda se muestran los precios?**
-En guaraníes paraguayos (PYG), sin decimales, cuando el comercio publique precios confirmados.
+**¿Cómo consulto por un producto?**
+Podés usar la opción de consulta en la ficha si está disponible, o escribir por los canales publicados en [Contacto](/contacto).
 
-**¿Cuáles son los medios de pago y las opciones de entrega?**
-Todavía no están publicados. Antes de habilitar compras se van a confirmar los medios disponibles, la cobertura y los costos.
+**¿Qué medios de pago y opciones de entrega hay?**
+Las opciones habilitadas y sus costos se muestran durante el proceso de compra. Si necesitás confirmarlas antes, consultá al comercio.
 
-**¿Cómo consulto un pedido?**
-Usá el enlace privado que recibiste al comprar o la opción Seguí tu pedido. La recuperación del enlace depende de los canales de atención configurados por el comercio.`,
+**¿Cómo consulto el estado de un pedido?**
+Usá la opción de seguimiento disponible en el sitio o escribí por los canales publicados en [Contacto](/contacto).`,
   },
   terminos: {
     titulo: "Términos y condiciones",
-    cuerpo: `**Catálogo en preparación**
-Esta versión de {{tienda}} permite conocer la estructura del catálogo. Todavía no recibimos pedidos ni pagos.
+    cuerpo: catalogOnly
+      ? `**Catálogo para consultas**
 
-Los artículos DEMO de la vista previa local y sus ilustraciones son ficticios. No constituyen ofertas ni representan disponibilidad o precios comerciales.
+Este sitio presenta información de productos para facilitar consultas al comercio. La ficha no confirma por sí sola disponibilidad ni las condiciones de una operación. Confirmá precio, disponibilidad, entrega y demás detalles directamente con el comercio antes de coordinar una compra.
 
-Antes de habilitar ventas se van a publicar los datos del comercio, las condiciones de compra, los medios de pago y las políticas de envío y devolución.
+Los datos de identificación del comercio y cualquier condición particular deben ser publicados por su responsable en esta página.`
+      : `**Información sobre compras**
 
-Los textos de esta versión se van a completar y revisar con la información real del comercio.`,
+Antes de confirmar un pedido, revisá el producto, el precio, las opciones disponibles y el resumen que presenta el proceso de compra. Las condiciones específicas del comercio deben completarse y mantenerse actualizadas en esta página.
+
+Si necesitás aclarar algún dato antes de comprar, consultá por los canales publicados en [Contacto](/contacto).`,
   },
   privacidad: {
     titulo: "Privacidad",
-    cuerpo: `**Información en preparación**
-Estamos completando los datos del responsable del comercio y el canal para consultas sobre privacidad. Todavía no recibimos pedidos ni pagos.
+    cuerpo: catalogOnly
+      ? `**Información sobre el uso de datos**
 
-El sitio guarda preferencias del carrito y favoritos en tu navegador. El acceso al panel y, si se habilitan, las cuentas de cliente usan cookies de sesión.
+Al usar el catálogo y enviar una consulta, pueden tratarse los datos que ingreses y los necesarios para que funcione el sitio. El comercio debe completar aquí quién es responsable, qué datos utiliza, con qué finalidad, cuánto tiempo los conserva y cómo recibir consultas sobre privacidad.
 
-Al habilitar compras se va a publicar qué información se solicita, para qué se utiliza, los servicios que intervienen y cómo consultar o corregir tus datos.
+Para comunicarte con el comercio, visitá [Contacto](/contacto).`
+      : `**Información sobre el uso de datos**
 
-La analítica y los servicios externos opcionales se habilitan solamente cuando el comercio los configura.`,
+Al navegar, comprar o usar las funciones disponibles, pueden tratarse los datos necesarios para prestar esos servicios. El comercio debe completar aquí quién es responsable, qué datos utiliza, con qué finalidad, cuánto tiempo los conserva, qué servicios intervienen y cómo recibir consultas sobre privacidad.
+
+Para comunicarte con el comercio, visitá [Contacto](/contacto).`,
   },
 };

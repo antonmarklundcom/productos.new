@@ -31,6 +31,7 @@ export default async function AdminCategoriesPage() {
         <CategoriesManager
           categories={categories.map((category, index) => ({
             id: category.id,
+            position:category.position,
             slug: category.slug,
             name: category.name,
             isActive: category.isActive,

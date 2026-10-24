@@ -381,6 +381,7 @@ describe("cobertura de la revisión", () => {
     // tiene que poder decir lo mismo.
     const SIN_GUARD = new Set([path.join(API, "health", "route.ts")]);
     const previewImage = path.join(API, "preview-image", "[name]", "route.ts");
+    const recentCatalogue = path.join(API, "catalog", "recently-viewed", "route.ts");
 
     const offenders: string[] = [];
     for (const file of routes) {
@@ -392,6 +393,29 @@ describe("cobertura de la revisión", () => {
         expect(code).toContain("!isLocalCatalogPreview()");
         expect(code).toContain("!ALLOWED.has(name)");
         expect(code).not.toMatch(/getDb|getPool|require\s*\(|process\.env/);
+        continue;
+      }
+      if (file === recentCatalogue) {
+        // Exact public read-only exception: browser-local history resolves only
+        // an eight-slug allowlisted DTO through the normal publication reader.
+        // Dedicated route tests verify invalid input does zero reads and private
+        // fields/hidden prices never enter the response, including failures.
+        expect(code).toContain("MAX_RECENT_PRODUCTS = 8");
+        expect(code).toContain("MAX_SLUG_LENGTH = 200");
+        expect(code).toContain("slugs.length > MAX_RECENT_PRODUCTS");
+        expect(code).toContain("!SLUG_RE.test(slug)");
+        expect(code).toContain("getProductBySlug(slug)");
+        expect(code).toContain("product.showPrice !== false");
+        expect(code).toContain('"cache-control": "private, no-store"');
+        expect(code.match(/export async function \w+/g)).toEqual(["export async function GET"]);
+        expect(code).not.toMatch(/\.(?:insert|update|delete|execute)\s*\(|getDb|getPool|requireAdmin|supplier|unitCost/);
+        const queries = await readCode(path.join("src", "db", "queries.ts"));
+        const reader = queries.slice(queries.indexOf("export async function getProductBySlug"), queries.indexOf("export async function searchProducts", queries.indexOf("export async function getProductBySlug")));
+        expect(reader).toContain(".innerJoin(categories, eq(products.categoryId, categories.id))");
+        expect(reader).toContain(".where(and(PUBLISHED(), eq(products.slug, slug)))");
+        expect(queries).toContain("eq(products.isActive, true)");
+        expect(queries).toContain("isNotNull(products.publishedAt)");
+        expect(queries).toContain("eq(categories.isActive, true)");
         continue;
       }
       // Firma, secreto o sesión: alguna de las cuatro. Una ruta pública que

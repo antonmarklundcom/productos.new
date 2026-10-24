@@ -31,9 +31,10 @@ export default defineConfig({
     screenshot: "off",
     video: "off",
     serviceWorkers: "block",
-    launchOptions: executablePath ? { executablePath } : {},
   },
   projects: [
-    { name: "built-worker-chromium", use: { browserName: "chromium" } },
+    { name: "built-worker-chromium", use: { browserName: "chromium", launchOptions: executablePath ? {executablePath} : {} } },
+    { name: "built-worker-webkit", testMatch: /audit47\.spec\.mjs$/, use: { browserName: "webkit" } },
+    { name: "built-worker-firefox", testMatch: /audit47\.spec\.mjs$/, use: { browserName: "firefox" } },
   ],
 });

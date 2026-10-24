@@ -13,7 +13,8 @@ import {
   searchProducts,
 } from "@/db/queries";
 import { getDb } from "@/db";
-import { products } from "@/db/schema";
+import { categories, products, variants } from "@/db/schema";
+import { displayedVariant } from "@/lib/display-price";
 import { eq } from "drizzle-orm";
 
 import { reserveStock } from "@/domain/stock";
@@ -77,14 +78,14 @@ describe.skipIf(!hasTestDb)("queries del catálogo", () => {
     expect(overlap).toEqual([]);
   });
 
-  it("ordena por precio mínimo de las variantes", async () => {
+  it("ordena por el precio mostrado de las variantes", async () => {
     const asc = await getCategoryProducts({
       categorySlug: "deportes",
       sort: "precio-asc",
       perPage: 60,
     });
     const prices = asc.products.map((product) =>
-      Math.min(...product.variants.map((variant) => variant.pricePyg))
+      displayedVariant(product)!.pricePyg
     );
     expect([...prices]).toEqual([...prices].sort((a, b) => a - b));
 
@@ -104,7 +105,7 @@ describe.skipIf(!hasTestDb)("queries del catálogo", () => {
     });
     for (const product of baratos.products) {
       expect(
-        Math.min(...product.variants.map((v) => v.pricePyg))
+        displayedVariant(product)!.pricePyg
       ).toBeLessThanOrEqual(100000);
     }
 
@@ -244,4 +245,32 @@ describe.skipIf(!hasTestDb)("queries del catálogo", () => {
       .set({ publishedAt: new Date() })
       .where(eq(products.slug, "jean-slim-hombre"));
   });
+  it("filters and counts the available stock-sale card price, while enquiries use the cheapest active variant", async () => {
+    const rollback = new Error("Synthetic price-policy fixture rollback");
+    await expect(getDb().transaction(async tx => {
+      const slug = `price-policy-${Date.now()}`;
+      const [category] = await tx.insert(categories).values({slug,name:"Synthetic price policy"}).$returningId();
+      const [mixed] = await tx.insert(products).values({slug:slug+"-mixed",name:"Mixed stock",categoryId:category!.id,publishedAt:new Date(),saleMode:"stock",showPrice:true}).$returningId();
+      const [simple] = await tx.insert(products).values({slug:slug+"-simple",name:"Available stock",categoryId:category!.id,publishedAt:new Date(),saleMode:"stock",showPrice:true}).$returningId();
+      await tx.insert(variants).values([
+        {productId:mixed!.id,sku:slug+"-cheap",label:"Unavailable cheap",pricePyg:1000,onHand:0},
+        {productId:mixed!.id,sku:slug+"-available",label:"Available",pricePyg:5000,onHand:2},
+        {productId:simple!.id,sku:slug+"-simple",label:"Available",pricePyg:2000,onHand:1},
+      ]);
+      const bounded = await getCategoryProducts({categorySlug:slug,maxPricePyg:3000,sort:"precio-asc"},tx);
+      expect(bounded.total).toBe(1);expect(bounded.products.map(p=>p.id)).toEqual([simple!.id]);
+      const sorted = await getCategoryProducts({categorySlug:slug,sort:"precio-asc"},tx);
+      expect(sorted.products.map(p=>displayedVariant(p)!.pricePyg)).toEqual([2000,5000]);
+      const exact = await getCategoryProducts({categorySlug:slug,minPricePyg:5000,maxPricePyg:5000},tx);
+      expect(exact.total).toBe(1);expect(exact.products[0]?.id).toBe(mixed!.id);
+      await tx.update(products).set({saleMode:"enquiry"}).where(eq(products.id,mixed!.id));
+      const enquiry = await getCategoryProducts({categorySlug:slug,maxPricePyg:3000,sort:"precio-asc"},tx);
+      expect(enquiry.total).toBe(2);expect(enquiry.products.map(p=>displayedVariant(p)!.pricePyg)).toEqual([1000,2000]);
+      await tx.update(products).set({showPrice:false}).where(eq(products.id,simple!.id));
+      const concealed = await getCategoryProducts({categorySlug:slug,maxPricePyg:3000},tx);
+      expect(concealed.total).toBe(1);expect(concealed.products.map(p=>p.id)).toEqual([mixed!.id]);
+      throw rollback;
+    })).rejects.toBe(rollback);
+  });
+
 });

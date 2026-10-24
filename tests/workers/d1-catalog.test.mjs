@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {spawnSync} from 'node:child_process';
 import path from 'node:path';
+import ts from 'typescript';
 import {readFileSync} from 'node:fs';
 import {d1StagingPlugin} from '../../workers/d1/build-plugin.mjs';
 import {verifyNativeCatalogBundle} from '../../workers/d1/build-verification.mjs';
@@ -16,8 +17,14 @@ test('Workers catalog adapters preserve directives, guards, batching and the exi
  }
  assert.match(readFileSync(path.join(root,'workers/d1/policy.mjs'),'utf8'),/size > 1048576/);
  const code=readFileSync(path.join(root,'workers/d1/catalog-actions.ts'),'utf8');
- for(const name of ["applyD1CatalogImport","uploadD1ProductImage","removeD1ProductImage","saveD1Product","saveD1ProductVariant"]){const body=code.slice(code.indexOf("export async function "+name));assert.match(body.slice(0,250),/await requireStaffSession\(\)/);}
- assert.match(code,/DELETE FROM product_images WHERE id=\? AND product_id=\?/);
+ const ast=ts.createSourceFile('catalog-actions.ts',code,ts.ScriptTarget.Latest,true);
+ const bodyOf=name=>{const fn=ast.statements.find(node=>ts.isFunctionDeclaration(node)&&node.name?.text===name);assert.ok(fn?.body,`missing native action ${name}`);return fn.body.getText(ast);};
+ for(const name of ["applyD1CatalogImport","uploadD1ProductImage","saveD1Product","saveD1ProductVariant"]){assert.match(bodyOf(name),/await requireStaffSession\(\)/);}
+ const helper=bodyOf('galleryAction');assert.match(helper,/await requireStaffSession\(\)/);assert.ok(helper.indexOf('await requireStaffSession()')<helper.indexOf('mutateGallery('));
+ for(const [name,kind] of [['removeD1ProductImage','remove'],['editD1ProductImage','alt'],['reorderD1ProductImages','reorder'],['restoreD1ProductImage','restore']])assert.match(bodyOf(name),new RegExp('return galleryAction\\(input,"'+kind+'"\\)'));
+ const mutations=readFileSync(path.join(root,'workers/d1/gallery-mutations.ts'),'utf8');assert.match(mutations,/DELETE FROM product_images WHERE id=\? AND product_id=\?/);assert.match(mutations,/revisionGuard\(db, input.productId, input.expectedRevision\)/);
+ const actionsFile=path.join(root,'src/app/actions/admin-products.ts'),boundActions=plugin.transform(readFileSync(actionsFile,'utf8'),actionsFile).code;
+ for(const [source,native] of [['removeProductImage','removeD1ProductImage'],['editProductImage','editD1ProductImage'],['reorderProductImages','reorderD1ProductImages'],['restoreProductImage','restoreD1ProductImage']]){assert.ok(boundActions.includes(source));assert.match(boundActions,new RegExp('return '+native+'\\(_?input\\)')); }
  assert.throws(()=>verifyNativeCatalogBundle('legacy Cloudinary upload'),/omitted native catalog/);
  assert.doesNotThrow(()=>verifyNativeCatalogBundle('D1_CATALOG_BATCH_FAILED Falta una foto en R2 La foto preparada tiene un formato o tamaño inválido'));
 });

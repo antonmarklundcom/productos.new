@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useAdminDraft } from "./admin-draft";
+import { useProductRevision } from "./product-revision";
 import { useRouter } from "next/navigation";
 import { saveVariantSupplierCost } from "@/app/actions/admin-products";
 import type { SupplierOffer } from "@/domain/supplier-costs";
@@ -52,7 +54,7 @@ export function SupplierCostEditor({
       <div className="mt-3 grid gap-3 lg:grid-cols-2">
         {variant.supplierOffers.map((offer) => (
           <OfferCard
-            key={`${offer.id}-${offer.updatedAt.toISOString()}`}
+            key={offer.id}
             productId={productId}
             variant={variant}
             offer={offer}
@@ -186,10 +188,12 @@ function OfferForm({
   onSaved: () => void;
 }) {
   const router = useRouter();
+  const {revision,acknowledge}=useProductRevision();
+  const {bindForm:draftRef,onInput:saveDraft,clear:clearDraft,recovery:draftRecovery}=useAdminDraft("supplier:"+productId+":"+variant.id+":"+(offer?.id??"new"),revision);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   return (
-    <form
+    <form ref={draftRef} onInput={saveDraft}
       className="mt-4 grid gap-3 rounded-lg border p-3"
       onSubmit={(event) => {
         event.preventDefault();
@@ -201,8 +205,9 @@ function OfferForm({
             : Number(data.get(key));
         const checkedAt = String(data.get("checkedAt") ?? "");
         startTransition(async () => {
-          const result = await saveVariantSupplierCost({
+          try{const result = await saveVariantSupplierCost({
             productId,
+            expectedRevision:revision,
             variantId: variant.id,
             offerId: offer?.id,
             unitCostPyg: nullableNumber("cost"),
@@ -223,11 +228,14 @@ function OfferForm({
             setError(result.error);
             return;
           }
+          clearDraft();acknowledge(revision);
           onSaved();
           router.refresh();
+          }catch{setError("Se interrumpió la conexión. Conservá el borrador y comprobá el guardado antes de reintentar.");}
         });
       }}
     >
+      {draftRecovery}
       <fieldset
         disabled={!ready || pending}
         className="grid min-w-0 gap-3 sm:grid-cols-2"

@@ -79,7 +79,7 @@ describe("catalog import paste fallback", () => {
     expect(sessionStorage.getItem("catalog-import-v1")).toBe(stored);
     digest.mockRestore();
   });
-  it("reuses the pending import identity after reload and rejects changed options", async()=>{
+  it.each([/Pisar el stock/, /Reactivar productos/, /Preparar y publicar/])("reuses the pending import identity after reload and rejects changed option %s", async(option)=>{
     capabilities.catalogOnly = true;
     actions.apply.mockResolvedValueOnce({ok:false,errores:["Lost acknowledgement"]});
     render(<CatalogImportForm/>);
@@ -98,11 +98,34 @@ describe("catalog import paste fallback", () => {
     await screen.findByText("Retry fixture");
     cleanup();
     render(<CatalogImportForm/>);
-    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("checkbox",{name:option}));
     await pasteAndPreview();
     fireEvent.click(screen.getByRole("button",{name:"Confirmar e importar"}));
     await screen.findByText(/Hay otra importación pendiente/);
     expect(actions.apply).toHaveBeenCalledTimes(2);
+  });
+  it.each([false,true])("resumes a legacy stored identity with overwrite=%s without changing storage",async(overwrite)=>{
+    capabilities.catalogOnly=true;
+    const digest=await webcrypto.subtle.digest("SHA-256",new TextEncoder().encode(csv));
+    const rawHash=Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,"0")).join("");
+    const legacy={id:"11111111-1111-4111-8111-111111111111",fingerprint:rawHash+":"+String(overwrite)};
+    sessionStorage.setItem("catalog-import-v1",JSON.stringify(legacy));
+    actions.apply.mockResolvedValue({ok:false,errores:["Legacy retry"]});
+    render(<CatalogImportForm/>);
+    if(overwrite)fireEvent.click(screen.getByRole("checkbox",{name:/Pisar el stock/}));
+    await pasteAndPreview();
+    fireEvent.click(screen.getByRole("button",{name:"Confirmar e importar"}));
+    await screen.findByText("Legacy retry");
+    expect((actions.apply.mock.calls[0]![0] as FormData).get("importId")).toBe(legacy.id);
+    expect(sessionStorage.getItem("catalog-import-v1")).toBe(JSON.stringify(legacy));
+    cleanup();
+    render(<CatalogImportForm/>);
+    if(overwrite)fireEvent.click(screen.getByRole("checkbox",{name:/Pisar el stock/}));
+    fireEvent.click(screen.getByRole("checkbox",{name:/Preparar y publicar/}));
+    await pasteAndPreview();
+    fireEvent.click(screen.getByRole("button",{name:"Confirmar e importar"}));
+    await screen.findByText(/Hay otra importación pendiente/);
+    expect(actions.apply).toHaveBeenCalledOnce();
   });
   beforeEach(() => {
     vi.clearAllMocks();

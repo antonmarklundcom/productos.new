@@ -4,7 +4,8 @@ import { catalogOnly } from "@/config/catalog-capabilities";
 export const catalogCapabilities = {
   checkout: !catalogOnly,
   adjustStock: !catalogOnly,
-  bulkProducts: !catalogOnly,
+  bulkProducts: true,
+  bulkPrices: !catalogOnly,
 };
 
 export function effectiveSaleMode(mode?: "stock" | "enquiry" | "showcase") {

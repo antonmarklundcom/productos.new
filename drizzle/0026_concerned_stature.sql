@@ -1,0 +1,1 @@
+ALTER TABLE `products` ADD `featured_position` int DEFAULT 0 NOT NULL;
