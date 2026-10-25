@@ -30,6 +30,9 @@ export const CSV_BOM = "﻿";
 
 export type CsvValue = string | number | null | undefined;
 
+/** Teléfonos y números sueltos (+595 981 123456, -12.5, (021) 123-456): no pueden ser una fórmula. */
+const PLAIN_NUMBER = /^[+-]?[\d ().-]+$/;
+
 /**
  * Neutraliza una celda de texto para que la planilla no la ejecute como
  * fórmula (CSV injection, guía OWASP): si arranca con `=`, `+`, `-`, `@`, tab o
@@ -38,7 +41,7 @@ export type CsvValue = string | number | null | undefined;
  * siendo un número que la planilla puede sumar.
  */
 export function neutralizeFormula(value: CsvValue): CsvValue {
-  if (typeof value === "string" && /^[=+\-@\t\r]/.test(value)) return `'${value}`;
+  if (typeof value === "string" && /^[=+\-@\t\r]/.test(value) && !PLAIN_NUMBER.test(value)) return `'${value}`;
   return value;
 }
 

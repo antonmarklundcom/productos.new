@@ -43,7 +43,7 @@ describe('toCsv', () => {
   it('antepone una comilla simple al texto que Excel ejecutaría como fórmula', () => {
     // Un nombre que arranca con "=" es una fórmula para Excel, y ahí el
     // archivo pasa de ser data a ser algo que se ejecuta.
-    for (const value of ['=1+1', '+595981', '-x', '@algo', '-2+3', '@SUM(1)', '\tx', '\rx']) {
+    for (const value of ['=1+1', '+A1', '-x', '@algo', '-2+3', '@SUM(1)', '\tx', '\rx']) {
       expect(neutralizeFormula(value)).toBe(`'${value}`);
     }
     expect(toCsv(['x'], [['=1+1']])).toContain("\r\n'=1+1\r\n");
@@ -56,6 +56,14 @@ describe('toCsv', () => {
 
   it('no toca el texto normal ni los números que la app escribe como número', () => {
     expect(neutralizeFormula('Ana Pérez')).toBe('Ana Pérez');
+    // Teléfonos y números sueltos no se tocan.
+    for (const v of ['+595 981 123456', '+595981123456', '-12.5', '(021) 123-456']) {
+      expect(neutralizeFormula(v)).toBe(v);
+    }
+    // Lo que no es solo número sigue con prefijo.
+    for (const v of ["+cmd|' /C calc'!A0", '=1+1', '-2+3*SUM(A1)', '@SUM(1)', '+A1']) {
+      expect(neutralizeFormula(v)).toBe(`'${v}`);
+    }
     expect(neutralizeFormula('')).toBe('');
     expect(neutralizeFormula(-5)).toBe(-5);
     expect(toCsv(['n'], [[-5]])).toContain('\r\n-5\r\n');
