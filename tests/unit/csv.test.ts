@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { CSV_BOM, csvFilename, toCsv } from '../../src/lib/csv';
+import { CSV_BOM, csvFilename, neutralizeFormula, toCsv } from '../../src/lib/csv';
 
 /**
  * El CSV que baja el panel. Lo que se verifica es que el archivo se abra bien
@@ -40,12 +40,25 @@ describe('toCsv', () => {
     expect(csv.split('\r\n').filter((line) => line !== '')).toHaveLength(2);
   });
 
-  it('entrecomilla lo que Excel interpretaría como fórmula', () => {
+  it('antepone una comilla simple al texto que Excel ejecutaría como fórmula', () => {
     // Un nombre que arranca con "=" es una fórmula para Excel, y ahí el
     // archivo pasa de ser data a ser algo que se ejecuta.
-    for (const value of ['=1+1', '+595981', '-x', '@algo']) {
-      expect(toCsv(['x'], [[value]])).toContain(`"${value}"`);
+    for (const value of ['=1+1', '+595981', '-x', '@algo', '-2+3', '@SUM(1)', '\tx', '\rx']) {
+      expect(neutralizeFormula(value)).toBe(`'${value}`);
     }
+    expect(toCsv(['x'], [['=1+1']])).toContain("\r\n'=1+1\r\n");
+    expect(toCsv(['x'], [['@SUM(1)']])).toContain("\r\n'@SUM(1)\r\n");
+    // Con comillas adentro sigue el escape RFC 4180 sobre el texto ya prefijado.
+    expect(toCsv(['x'], [['=HYPERLINK("http://x","y")']])).toContain(
+      `"'=HYPERLINK(""http://x"",""y"")"`,
+    );
+  });
+
+  it('no toca el texto normal ni los números que la app escribe como número', () => {
+    expect(neutralizeFormula('Ana Pérez')).toBe('Ana Pérez');
+    expect(neutralizeFormula('')).toBe('');
+    expect(neutralizeFormula(-5)).toBe(-5);
+    expect(toCsv(['n'], [[-5]])).toContain('\r\n-5\r\n');
   });
 
   it('un null o un undefined salen como celda vacía y no como "null"', () => {

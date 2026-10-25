@@ -31,14 +31,27 @@ export const CSV_BOM = "﻿";
 export type CsvValue = string | number | null | undefined;
 
 /**
+ * Neutraliza una celda de texto para que la planilla no la ejecute como
+ * fórmula (CSV injection, guía OWASP): si arranca con `=`, `+`, `-`, `@`, tab o
+ * retorno de carro, se le antepone `'`. Solo aplica a texto: los números que la
+ * app escribe como número (montos, stock) pasan intactos, así un `-5` sigue
+ * siendo un número que la planilla puede sumar.
+ */
+export function neutralizeFormula(value: CsvValue): CsvValue {
+  if (typeof value === "string" && /^[=+\-@\t\r]/.test(value)) return `'${value}`;
+  return value;
+}
+
+/**
  * Escapa una celda.
  *
  * Se entrecomilla cuando hay separador, comillas o saltos de línea, y las
- * comillas de adentro se duplican, que es lo que dice el RFC 4180. Un `=` o un
- * `+` al principio también fuerzan comillas: sin eso, un nombre de cliente que
- * arranque con `=` lo interpreta Excel como fórmula.
+ * comillas de adentro se duplican, que es lo que dice el RFC 4180. Antes se
+ * neutraliza el texto que arranca como fórmula (ver `neutralizeFormula`): un
+ * nombre de cliente que arranque con `=` no se ejecuta en Excel.
  */
-function escapeCell(value: CsvValue): string {
+function escapeCell(raw: CsvValue): string {
+  const value = neutralizeFormula(raw);
   if (value === null || value === undefined) return "";
   const text = String(value);
   const needsQuotes =
@@ -46,7 +59,7 @@ function escapeCell(value: CsvValue): string {
     text.includes('"') ||
     text.includes("\n") ||
     text.includes("\r") ||
-    /^[=+\-@]/.test(text);
+    (typeof value === "string" && /^[=+\-@]/.test(text));
   if (!needsQuotes) return text;
   return `"${text.replace(/"/g, '""')}"`;
 }
