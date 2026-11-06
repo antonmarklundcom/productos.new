@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SupplierCostEditor } from "./supplier-cost-editor";
 const mocks = vi.hoisted(() => ({ save: vi.fn(), refresh: vi.fn() }));
@@ -28,6 +28,7 @@ describe("supplier comparison editor", () => {
   afterEach(cleanup);
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
     mocks.save.mockResolvedValue({ ok: true });
   });
   it("shows supplier alternatives, captured stock and the preferred margin without exposing inventory controls", () => {
@@ -64,6 +65,54 @@ describe("supplier comparison editor", () => {
       offer.productUrl
     );
   });
+  it("previews only valid changed Dropi capture values and keeps zero distinct from unknown", () => {
+    render(
+      <SupplierCostEditor
+        productId={3}
+        ready
+        variant={{ id: 2, sku: "SHARPENER", pricePyg: 69000, supplierOffers: [{ ...offer, supplierStock: null }] }}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Editar oferta" }));
+    const preview = () => screen.queryByRole("complementary", { name: "Cambios de captura" });
+    const cost = screen.getByRole("spinbutton", { name: /Costo por unidad/ });
+    const stock = screen.getByRole("spinbutton", { name: /Stock capturado del proveedor/ });
+    expect(preview()).toBeNull();
+
+    fireEvent.input(cost, { target: { value: "24500" } });
+    fireEvent.input(stock, { target: { value: "0" } });
+    expect(within(preview()!).getByText(/23\.000.*→.*24\.500/)).toBeInTheDocument();
+    expect(within(preview()!).getByText("Stock del proveedor: Desconocido → 0")).toBeInTheDocument();
+
+    fireEvent.input(cost, { target: { value: "-1" } });
+    expect(within(preview()!).queryByText(/Costo por unidad/)).toBeNull();
+    fireEvent.input(stock, { target: { value: "" } });
+    expect(preview()).toBeNull();
+
+    fireEvent.input(cost, { target: { value: "" } });
+    expect(within(preview()!).getByText(/23\.000.*→ Desconocido/)).toBeInTheDocument();
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
+
+  it("updates the capture preview when recovering an existing edit draft", async () => {
+    sessionStorage.setItem(
+      "admin-draft:isolated:supplier:3:2:1",
+      JSON.stringify({ values: [["cost", "24500"], ["supplierStock", "0"]] })
+    );
+    render(
+      <SupplierCostEditor
+        productId={3}
+        ready
+        variant={{ id: 2, sku: "SHARPENER", pricePyg: 69000, supplierOffers: [offer] }}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Editar oferta" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Recuperar borrador" }));
+    const summary = screen.getByRole("complementary", { name: "Cambios de captura" });
+    expect(within(summary).getByText(/23\.000.*→.*24\.500/)).toBeInTheDocument();
+    expect(within(summary).getByText("Stock del proveedor: 111 → 0")).toBeInTheDocument();
+  });
+
   it("adds an unknown-cost source as a pending offer, not a confirmed or preferred one", async () => {
     render(
       <SupplierCostEditor

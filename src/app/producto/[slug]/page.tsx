@@ -1,5 +1,4 @@
 import { effectiveSaleMode } from "@/lib/catalog-policy";
-import { catalogOnly } from "@/config/catalog-capabilities";
 import { productInquiryLinks } from "@/domain/product-inquiries";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -28,7 +27,7 @@ import { getStoreSettings } from "@/domain/store-settings";
 import { t, tPlural } from "@/i18n";
 import { analyticsActivo } from "@/lib/analytics";
 import { waLinkPublico, whatsappPublico } from "@/lib/comercio";
-import { CATALOG_OG_FALLBACK, OG_IMAGE_SIZE, productImageUrl } from "@/lib/images";
+import { OG_IMAGE_SIZE, productImageUrl, STORE_OG_FALLBACK } from "@/lib/images";
 import { jpegSizeFor, parseRef } from "@/lib/imagenes-r2";
 import { nombreTienda } from "@/lib/marca";
 import { markdownToText } from "@/lib/markdown";
@@ -92,7 +91,6 @@ export async function generateMetadata({
       : `Información del producto: ${product.name}. Consultá los detalles disponibles en la ficha.`);
 
   // La tarjeta usa la foto principal o la imagen de respaldo de la tienda.
-  // En Next.js el respaldo se hereda de app/opengraph-image.tsx.
   const ogImage = productImageUrl(product.images[0]?.cloudinaryId, "og");
   const firstRef = parseRef(product.images[0]?.cloudinaryId);
   const r2OgSize = firstRef ? jpegSizeFor(firstRef.width, firstRef.height) : null;
@@ -126,9 +124,7 @@ export async function generateMetadata({
               },
             ],
           }
-        : catalogOnly
-          ? { images: [{ ...CATALOG_OG_FALLBACK, alt: await nombreTienda() }] }
-          : {}),
+        : { images: [{ ...STORE_OG_FALLBACK, alt: await nombreTienda() }] }),
     },
   };
 }

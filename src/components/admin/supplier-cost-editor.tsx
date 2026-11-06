@@ -18,6 +18,12 @@ type Variant = {
 };
 const field = "border-input bg-background min-w-0 w-full rounded-md border p-2";
 
+function capturedNumber(input: HTMLInputElement): number | null | undefined {
+  if (!input.validity.valid) return undefined;
+  if (input.value === "") return null;
+  return Number.isSafeInteger(input.valueAsNumber) ? input.valueAsNumber : undefined;
+}
+
 export function SupplierCostEditor({
   productId,
   variant,
@@ -192,9 +198,24 @@ function OfferForm({
   const {revision,acknowledge}=useProductRevision();
   const {bindForm:draftRef,onInput:saveDraft,clear:clearDraft,recovery:draftRecovery}=useAdminDraft("supplier:"+productId+":"+variant.id+":"+(offer?.id??"new"),revision);
   const [error, setError] = useState<string | null>(null);
+  const [entered, setEntered] = useState<{ cost?: number | null; supplierStock?: number | null }>({});
   const [pending, startTransition] = useTransition();
+  const { cost, supplierStock } = entered;
+  const showCost = offer?.sourceType === "dropi" && cost !== undefined && cost !== offer.unitCostPyg;
+  const showStock = offer?.sourceType === "dropi" && supplierStock !== undefined && supplierStock !== offer.supplierStock;
+
   return (
-    <form ref={draftRef} onInput={saveDraft}
+    <form
+      ref={draftRef}
+      onInput={(event) => {
+        saveDraft();
+        const input = event.target;
+        if (offer?.sourceType !== "dropi" || !(input instanceof HTMLInputElement)) return;
+        const name = input.name;
+        if (name !== "cost" && name !== "supplierStock") return;
+        const value = capturedNumber(input);
+        setEntered((current) => ({ ...current, [name]: value }));
+      }}
       className="mt-4 grid gap-3 rounded-lg border p-3"
       onSubmit={(event) => {
         event.preventDefault();
@@ -350,6 +371,23 @@ function OfferForm({
           {t("panel.costos.elegir")}
         </label>
       </fieldset>
+      {showCost || showStock ? (
+        <aside aria-label="Cambios de captura" className="bg-muted rounded-md p-3 text-sm">
+          <p className="font-medium">Cambios de captura</p>
+          {showCost ? (
+            <p>
+              Costo por unidad: {offer.unitCostPyg === null ? "Desconocido" : formatGs(offer.unitCostPyg)}
+              {" → "}{cost === null ? "Desconocido" : formatGs(cost)}
+            </p>
+          ) : null}
+          {showStock ? (
+            <p>
+              Stock del proveedor: {offer.supplierStock ?? "Desconocido"}
+              {" → "}{supplierStock ?? "Desconocido"}
+            </p>
+          ) : null}
+        </aside>
+      ) : null}
       {error ? (
         <p role="alert" className="text-destructive text-sm">
           {error}
