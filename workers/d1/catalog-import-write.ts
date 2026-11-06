@@ -6,6 +6,23 @@ import { normalizeDropiUrl } from "../../src/domain/catalog-import";
 import { resolveCatalogCategory, type ImportCategory } from "./catalog-category-identity";
 import { slugify as slugifyCategory } from "../../src/lib/slug";
 import { parseRef } from "../../src/lib/imagenes-r2";
+import { hasActiveCatalogVariant, publicationError, publicationGuard } from "./catalog-publication.mjs";
+
+// Look at the prospective state of every product, including new SKUs created
+// active and existing hidden SKUs that only an explicit reactivation enables.
+const importPublicationBlocker = `
+  WITH incoming AS (
+    SELECT json_extract(item.value,'$.slug') AS slug,
+      json_extract(item.value,'$.mode') AS mode,
+      json_extract(item.value,'$.skus') AS skus
+    FROM json_each(?) item
+  )
+  SELECT p.slug FROM incoming n JOIN products p ON p.slug=n.slug
+  WHERE p.is_active=1 AND p.published_at IS NOT NULL
+    AND COALESCE(n.mode,p.sale_mode)<>'showcase' AND NOT ${hasActiveCatalogVariant}
+    AND NOT EXISTS (SELECT 1 FROM json_each(n.skus) sku
+      WHERE NOT EXISTS (SELECT 1 FROM variants existing WHERE existing.sku=sku.value))
+  LIMIT 1`;
 
 /** Each five-product D1 batch commits categories, catalog, costs and photos together. */
 export async function writeD1CatalogBatch(binding:D1Binding,items:readonly CatalogoProducto[],overwriteStock=false,expectedCategoryIds?:ReadonlyMap<string,number>, identity?:ImportIdentity, republish=false, options?:{maxBatchProducts?:number;guardStatements?:ReturnType<D1Binding["prepare"]>[];extraStatements?:ReturnType<D1Binding["prepare"]>[]} ){
@@ -26,12 +43,21 @@ export async function writeD1CatalogBatch(binding:D1Binding,items:readonly Catal
     statements.push(prepare("INSERT INTO counters(name,value) SELECT ?,-1 WHERE NOT EXISTS(SELECT 1 FROM catalog_import_runs WHERE id=? AND actor_id=? AND fingerprint=? AND next_offset=?)",[guard+"-checkpoint",identity.id,identity.actorId,identity.fingerprint,identity.offset]));
   }
   statements.push(...(options?.guardStatements??[]));
-  let variantsWritten=0;
-  for(const p of items){
-    const resolved=resolveCatalogCategory(p.categoryName,categoryRows),category=resolved.slug,dropi=normalizeDropiUrl(p.dropiUrl);
+  const normalized = items.map(p => {
+    const resolved = resolveCatalogCategory(p.categoryName, categoryRows);
     if(expectedCategoryIds && expectedCategoryIds.get(slugifyCategory(p.categoryName))!==resolved.id)throw new Error("Las categorías cambiaron; revisá la importación nuevamente.");
     if(p.saleMode==="stock")throw new Error("Este catálogo admite consulta o muestra; la compra con stock no está habilitada.");
-    if(!p.slug||!category||!p.variants.length||p.variants.length>50)throw new Error("Producto o variantes inválidos.");
+    if(!p.slug||!resolved.slug||!p.variants.length||p.variants.length>50)throw new Error("Producto o variantes inválidos.");
+    return {p, resolved, dropi: normalizeDropiUrl(p.dropiUrl)};
+  });
+  const publicationArgs = [JSON.stringify(items.map(p => ({
+    slug: p.slug, mode: p.saleMode, skus: p.variants.map(variant => variant.sku),
+  })))];
+  if (!republish) statements.push(publicationGuard(binding, "EXISTS (" + importPublicationBlocker + ")", publicationArgs));
+
+  let variantsWritten=0;
+  for(const {p, resolved, dropi} of normalized){
+    const category = resolved.slug;
     if(resolved.id===undefined){
       statements.push(prepare(`INSERT INTO categories(slug,name,position,is_active) VALUES(?,?,(SELECT COALESCE(MAX(position),-1)+1 FROM categories),1) ON CONFLICT(slug) DO NOTHING`,[category,p.categoryName]));
       if(identity)statements.push(prepare("INSERT INTO catalog_audit(id,actor_id,operation,record_type,record_id,revision,fields) SELECT ?,?,'import-category','category',id,1,? FROM categories WHERE slug=? AND changes()=1",[identity.id+":"+identity.offset+":category:"+category,identity.actorId,JSON.stringify(["name","slug","isActive"]),category]));
@@ -48,7 +74,17 @@ export async function writeD1CatalogBatch(binding:D1Binding,items:readonly Catal
       // A real CHECK within the batch aborts all writes if SKU ownership changed after preview.
       statements.push(prepare(`INSERT INTO counters(name,value) VALUES(?,CASE WHEN NOT EXISTS(SELECT 1 FROM variants v JOIN products p ON p.id=v.product_id WHERE v.sku=? AND p.slug<>?) THEN 0 ELSE -1 END) ON CONFLICT(name) DO UPDATE SET value=excluded.value`,[guard,v.sku,p.slug]));
       statements.push(prepare(`INSERT INTO variants(product_id,sku,label,price_pyg,compare_at_pyg,on_hand,position,is_active) VALUES((SELECT id FROM products WHERE slug=?),?,?,?,?,?,?,1) ON CONFLICT(sku) DO UPDATE SET label=excluded.label,price_pyg=excluded.price_pyg,compare_at_pyg=excluded.compare_at_pyg,position=excluded.position,${republish?"is_active=1,":""}on_hand=${overwriteStock?"excluded.on_hand":"variants.on_hand"}`,[p.slug,v.sku,v.label,v.pricePyg,v.compareAtPyg,v.onHand,position]));
-      if(v.unitCostPyg!==undefined)statements.push(prepare(`INSERT INTO supplier_offers(id,variant_id,unit_cost_pyg,source,source_type,product_url,is_confirmed,is_active,is_preferred) VALUES((SELECT s.id FROM supplier_offers s JOIN variants v ON v.id=s.variant_id WHERE v.sku=? AND s.is_preferred=1),(SELECT id FROM variants WHERE sku=?),?,?,?,?,1,1,1) ON CONFLICT(id) DO UPDATE SET unit_cost_pyg=excluded.unit_cost_pyg,source=excluded.source,source_type=${dropi===undefined?"supplier_offers.source_type":"excluded.source_type"},product_url=${dropi===undefined?"supplier_offers.product_url":"excluded.product_url"},updated_at=CURRENT_TIMESTAMP`,[v.sku,v.sku,v.unitCostPyg,v.costSource||null,dropi?"dropi":"other",dropi??null]));
+      if(v.unitCostPyg!==undefined) {
+        const sourceType = dropi===undefined ? "supplier_offers.source_type" : "excluded.source_type";
+        const productUrl = dropi===undefined ? "supplier_offers.product_url" : "excluded.product_url";
+        const sourceChanged = `supplier_offers.source IS NOT excluded.source OR
+          supplier_offers.source_type IS NOT ${sourceType} OR supplier_offers.product_url IS NOT ${productUrl}`;
+        statements.push(prepare(`INSERT INTO supplier_offers(id,variant_id,unit_cost_pyg,source,source_type,product_url,is_confirmed,is_active,is_preferred) VALUES((SELECT s.id FROM supplier_offers s JOIN variants v ON v.id=s.variant_id WHERE v.sku=? AND s.is_preferred=1),(SELECT id FROM variants WHERE sku=?),?,?,?,?,1,1,1)
+          ON CONFLICT(id) DO UPDATE SET unit_cost_pyg=excluded.unit_cost_pyg,source=excluded.source,source_type=${sourceType},product_url=${productUrl},
+          checked_at=CASE WHEN supplier_offers.unit_cost_pyg IS NOT excluded.unit_cost_pyg OR ${sourceChanged} THEN NULL ELSE supplier_offers.checked_at END,
+          supplier_stock=CASE WHEN ${sourceChanged} THEN NULL ELSE supplier_offers.supplier_stock END,updated_at=CURRENT_TIMESTAMP`,
+          [v.sku,v.sku,v.unitCostPyg,v.costSource||null,dropi?"dropi":"other",dropi??null]));
+      }
       variantsWritten++;
     }
     statements.push(prepare("UPDATE products SET revision=revision+1 WHERE slug=?",[p.slug]));
@@ -67,6 +103,10 @@ export async function writeD1CatalogBatch(binding:D1Binding,items:readonly Catal
   try{ result=await binding.batch(statements); }
   catch(error){
     if(identity){const receipt=await readBatchReceipt(binding,identity);if(receipt)return{variantsWritten:receipt.variants_written,photosWritten:receipt.photos_written,nextOffset:receipt.next_offset,replayed:true};}
+    const blocked = republish ? null : await prepare(importPublicationBlocker, publicationArgs).first<{slug:string}>();
+    if (blocked) throw publicationError(
+      `No se puede publicar «${blocked.slug}»; activá una variante o revisá la opción para reactivar productos y variantes antes de volver a intentar.`
+    );
     throw error;
   }
   if(result.some((row:{success:boolean})=>!row.success))throw new Error("D1_CATALOG_BATCH_FAILED");

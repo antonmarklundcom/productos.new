@@ -30,6 +30,26 @@ function robot(document) {
     .map((e) => e.content)
     .join(",");
 }
+test("home and a product without a photo share a fetchable branded PNG", async () => {
+  for (const route of ["/", "/producto/synthetic-visible"]) {
+    const page = await html(route);
+    expect(page.status).toBe(200);
+    const metadata = doc(page.text).querySelector('meta[property="og:image"]');
+    expect(metadata?.content, route + " must advertise its sharing image").toBeTruthy();
+    const imageURL = new URL(metadata.content);
+    expect(imageURL.origin).toBe(origin);
+    expect(imageURL.pathname).toBe("/assets/catalog-share.png");
+    const target = h.baseURL + imageURL.pathname + imageURL.search;
+    const response = await fetch(target, { redirect: "manual" });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toMatch(/^image\/png/);
+    const png = Buffer.from(await response.arrayBuffer());
+    expect(png.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
+    expect(png.readUInt32BE(16)).toBe(1200);
+    expect(png.readUInt32BE(20)).toBe(630);
+  }
+});
+
 test("fixture sitemap canonical 200s, hidden exclusion, noindex, JSON-LD and real HTTP error status", async () => {
   const sitemap = await html("/sitemap.xml");
   expect(sitemap.status).toBe(200);

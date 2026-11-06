@@ -89,7 +89,8 @@ function OfferCard({
   const margin = productMargin(variant.pricePyg, offer.unitCostPyg);
   return (
     <article
-      className={`min-w-0 rounded-lg border p-3 ${offer.isPreferred ? "border-primary bg-primary/5" : "border-border"}`}
+      id={`supplier-offer-${offer.id}`}
+      className={`min-w-0 scroll-mt-20 rounded-lg border p-3 ${offer.isPreferred ? "border-primary bg-primary/5" : "border-border"}`}
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <h4 className="font-medium break-words">{offer.source}</h4>

@@ -54,6 +54,28 @@ test('native search combines category/brand/budget, ranks stably and returns pub
   assert.doesNotMatch(JSON.stringify({facets,suggestions}),/Secret|PRIVATE|pricePyg|description/);
  }finally{sqlite.close();}
 });
+test('configured search aliases preserve literal relevance across results, counts, facets and suggestions',async()=>{
+ const {db,sqlite}=fixture();
+ try {
+  sqlite.exec(`
+    UPDATE products SET name='Freidora de aire', description='' WHERE id=1;
+    UPDATE products SET name='Accesorio', description='Para air fryer' WHERE id=2;
+    UPDATE products SET name='Freidora de aceite', description='Cuba de aceite' WHERE id=3;
+    UPDATE products SET name='Air Fryer privada' WHERE id=4;
+  `);
+  const english=await searchRead(db,'  AIR   FRYER  ');
+  assert.deepEqual(english.products.map(product=>product.id),[2,1]);
+  assert.equal(english.total,2);
+  assert.deepEqual((await searchRead(db,'freidora')).products.map(product=>product.id),[3,1,2]);
+  const typo=await searchRead(db,'fridora');
+  const suggestions=await suggestionsRead(db,'fridora');
+  assert.equal(typo.total,2);
+  assert.deepEqual(typo.products.map(product=>product.id),[3,1]);
+  assert.deepEqual(suggestions.map(product=>product.slug),typo.products.map(product=>product.slug));
+  assert.deepEqual((await searchFacetsRead(db,'air fryer')).categories.map(category=>category.total),[2]);
+  assert.equal((await searchRead(db,'air fryer profesional')).total,0);
+ } finally {sqlite.close();}
+});
 test('featured fallback diversifies categories, curated positions win and newest/related include untracked enquiry items',async()=>{
  const {db,sqlite}=fixture();try{
   const fallback=await featuredRead(db,2);assert.equal(new Set(fallback.map(p=>p.categorySlug)).size,2);

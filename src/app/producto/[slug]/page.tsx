@@ -1,4 +1,5 @@
 import { effectiveSaleMode } from "@/lib/catalog-policy";
+import { catalogOnly } from "@/config/catalog-capabilities";
 import { productInquiryLinks } from "@/domain/product-inquiries";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -9,6 +10,7 @@ import { AddToCart } from "@/components/add-to-cart";
 import { FunnelEvent } from "@/components/funnel-event";
 import { ProductDescription } from "@/components/product-description";
 import { ProductGallery } from "@/components/product-gallery";
+import { ProductInquiryView } from "@/components/product-inquiry-metrics";
 import {
   DemoProductIntro,
   DemoProductStory,
@@ -26,10 +28,12 @@ import { getStoreSettings } from "@/domain/store-settings";
 import { t, tPlural } from "@/i18n";
 import { analyticsActivo } from "@/lib/analytics";
 import { waLinkPublico, whatsappPublico } from "@/lib/comercio";
-import { OG_IMAGE_SIZE, productImageUrl } from "@/lib/images";
+import { CATALOG_OG_FALLBACK, OG_IMAGE_SIZE, productImageUrl } from "@/lib/images";
 import { jpegSizeFor, parseRef } from "@/lib/imagenes-r2";
+import { nombreTienda } from "@/lib/marca";
 import { markdownToText } from "@/lib/markdown";
 import { formatGs } from "@/lib/money";
+import { productInquiryMetricsEnabled } from "@/lib/product-inquiry-metrics-config";
 import { formatDatePY } from "@/lib/py";
 import { breadcrumbJsonLd, jsonLdScript, productJsonLd } from "@/lib/seo";
 import { siteOrigin } from "@/lib/site-url";
@@ -87,10 +91,8 @@ export async function generateMetadata({
         })
       : `Información del producto: ${product.name}. Consultá los detalles disponibles en la ficha.`);
 
-  // La foto principal, recortada a la caja que espera WhatsApp. Si el
-  // producto todavía no tiene fotos (o falta el cloud de Cloudinary), se
-  // omite `images` y Next hereda la del sitio (`app/opengraph-image.tsx`):
-  // el link se comparte con la marca en vez de con un rectángulo gris.
+  // La tarjeta usa la foto principal o la imagen de respaldo de la tienda.
+  // En Next.js el respaldo se hereda de app/opengraph-image.tsx.
   const ogImage = productImageUrl(product.images[0]?.cloudinaryId, "og");
   const firstRef = parseRef(product.images[0]?.cloudinaryId);
   const r2OgSize = firstRef ? jpegSizeFor(firstRef.width, firstRef.height) : null;
@@ -124,7 +126,9 @@ export async function generateMetadata({
               },
             ],
           }
-        : {}),
+        : catalogOnly
+          ? { images: [{ ...CATALOG_OG_FALLBACK, alt: await nombreTienda() }] }
+          : {}),
     },
   };
 }
@@ -171,21 +175,14 @@ export default async function ProductPage({ params }: { params: Params }) {
     getStoreSettings(),
   ]);
 
-  // Al WhatsApp **público** (`/admin/ajustes`, o `WHATSAPP_NUMBER`).
-  const waHref =
-    product.saleMode === "showcase"
-      ? null
-      : await waLinkPublico(
-          t("producto.consultaWhatsApp", { nombre: product.name })
-        );
-
-  // Para el link de consulta por variante (`variant-inquiry-link.tsx`, cliente):
-  // el teléfono sale de los ajustes o de una variable sin `NEXT_PUBLIC_`, así
-  // que se resuelve acá, en el servidor, y se pasa ya normalizado — el
-  // componente cliente nunca lee `process.env` ni la base.
-  const whatsappPhone =
-    product.saleMode === "showcase" ? null : await whatsappPublico();
+  const saleMode = effectiveSaleMode(product.saleMode);
+  const waHref = saleMode === "stock"
+    ? await waLinkPublico(t("producto.consultaWhatsApp", { nombre: product.name }))
+    : null;
+  const whatsappPhone = saleMode === "stock" ? await whatsappPublico() : null;
   const inquiryLinks = await productInquiryLinks(product);
+  const inquiryMetricsEnabled =
+    !localDemo && Object.keys(inquiryLinks).length > 0 && productInquiryMetricsEnabled();
   const origin = siteOrigin();
   const productUrl = origin
     ? `${origin.origin}/producto/${product.slug}`
@@ -234,6 +231,7 @@ export default async function ProductPage({ params }: { params: Params }) {
 
   return (
     <main className="store-width product-page">
+      {inquiryMetricsEnabled ? <ProductInquiryView productId={product.id} /> : null}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLdScript(jsonLd) }}
@@ -301,6 +299,7 @@ export default async function ProductPage({ params }: { params: Params }) {
               <AddToCart
                 product={product}
                 inquiryLinks={inquiryLinks}
+                inquiryMetricsEnabled={inquiryMetricsEnabled}
                 stockAlertsEnabled={stockAlertsEnabled()}
                 whatsappPhone={whatsappPhone}
                 productUrl={productUrl}
@@ -335,11 +334,36 @@ export default async function ProductPage({ params }: { params: Params }) {
               {t("producto.dudaWhatsApp")}
             </a>
           ) : null}
-          <div className="product-service-links">
-            <Link href="/envios">Envíos y entregas</Link>
-            <Link href="/devoluciones">Cambios y devoluciones</Link>
-            <Link href="/contacto">Consultas</Link>
-          </div>
+          {saleMode === "enquiry" ? (
+            <section className="border-border mt-5 space-y-3 rounded-xl border p-4 text-sm">
+              <h2 className="font-semibold">{t("producto.condiciones.titulo")}</h2>
+              <dl className="text-muted-foreground space-y-3">
+                <div>
+                  <dt className="text-foreground font-medium">{t("producto.condiciones.entrega")}</dt>
+                  <dd>{ajustes.envioDevolucion.resumenEntrega ?? t("producto.condiciones.entregaDefecto")}</dd>
+                </div>
+                <div>
+                  <dt className="text-foreground font-medium">{t("producto.condiciones.devolucion")}</dt>
+                  <dd>{ajustes.envioDevolucion.resumenDevolucion ?? t("producto.condiciones.devolucionDefecto")}</dd>
+                </div>
+              </dl>
+              <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs underline underline-offset-4">
+                {ajustes.paginas.envios.activo || ajustes.paginas.envios.cuerpo === null ? (
+                  <Link href="/envios">Envíos y entregas</Link>
+                ) : null}
+                {ajustes.paginas.devoluciones.activo || ajustes.paginas.devoluciones.cuerpo === null ? (
+                  <Link href="/devoluciones">Cambios y devoluciones</Link>
+                ) : null}
+                <Link href="/contacto">Contacto</Link>
+              </div>
+            </section>
+          ) : (
+            <div className="product-service-links">
+              <Link href="/envios">Envíos y entregas</Link>
+              <Link href="/devoluciones">Cambios y devoluciones</Link>
+              <Link href="/contacto">Consultas</Link>
+            </div>
+          )}
 
           {product.description ? (
             <div className="border-border mt-8 border-t pt-6">

@@ -26,14 +26,15 @@ test("the storefront renders real HTML, styles, scripts and useful help pages", 
     { path: "/envios", title: "Envíos y entregas", content: /opciones de entrega o retiro/i },
     { path: "/devoluciones", title: "Cambios y devoluciones", content: /consultá con el comercio/i },
     { path: "/preguntas-frecuentes", title: "Preguntas frecuentes", content: /c[oó]mo compro/i },
-    { path: "/privacidad", title: "Privacidad", content: /qu[eé] datos utiliza/i },
+    { path: "/privacidad", title: "Privacidad", content: /los datos que ingresás al comprar/i },
+    { path: "/terminos", title: "Términos y condiciones", content: /antes de confirmar un pedido/i },
   ];
   for (const item of helpPages) {
     await page.goto(item.path);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(item.title);
     await expect(page.locator("main")).toContainText(item.content);
-    await expect(page.locator("main")).not.toContainText(/DEMO|preparación|preparando/i);
-    await expect(page.locator('a[href="/contacto"]').first()).toBeAttached();
+    await expect(page.locator("main")).not.toContainText(/DEMO|preparación|preparando|debe completar/i);
+    await expect(page.locator('main a[href="/contacto"]')).toBeVisible();
     await expect(page.locator("main")).not.toContainText(/\[[^\]]+\]\([^)]+\)/);
   }
   await page.goto("/contacto");

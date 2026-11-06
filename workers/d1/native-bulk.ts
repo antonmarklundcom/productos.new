@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { D1Binding } from "./database";
 import { mutationId } from "./gallery-mutations";
 import { productAuditStatements, revisionGuard } from "./catalog-durability";
+import { catalogProductHasOffer, publicationError, publicationGuard } from "./catalog-publication.mjs";
 
 type Input = { operationId:string; productIds:number[]; expectedRevisions:Record<string,number>; isActive?:boolean; categoryId?:number };
 type Result = { afectados:number; conflictos:number[]; productId?:number };
@@ -25,6 +26,11 @@ export async function mutateBulkCatalog(db:D1Binding,actor:number,raw:unknown,ki
  const conflictos=input.productIds.filter(id=>!Number.isSafeInteger(input.expectedRevisions?.[id])||versions.get(id)!==input.expectedRevisions[id]);
  const accepted=input.productIds.filter(id=>!conflictos.includes(id)),result={afectados:accepted.length,conflictos};
  const statements:ReturnType<D1Binding["prepare"]>[]=[];
+ const publicationViolation = `EXISTS (SELECT 1 FROM products p
+  WHERE p.id IN (SELECT value FROM json_each(?)) AND NOT ${catalogProductHasOffer})`;
+ const publicationArgs = [JSON.stringify(accepted)];
+ const checkPublication = kind === "active" && input.isActive === true;
+ if (checkPublication) statements.push(publicationGuard(db, publicationViolation, publicationArgs));
  if(kind==="category")statements.push(db.prepare("INSERT INTO counters(name,value) SELECT ?,-1 WHERE NOT EXISTS(SELECT 1 FROM categories WHERE id=? AND is_active=1)").bind(input.operationId+"-category",input.categoryId!));
  for(const id of accepted){
   statements.push(revisionGuard(db,id,input.expectedRevisions[id]!));
@@ -33,7 +39,13 @@ export async function mutateBulkCatalog(db:D1Binding,actor:number,raw:unknown,ki
  }
  statements.push(saveReceipt(db,input.operationId,actor,"bulk-"+kind,fingerprint,result));
  try{const rows=await db.batch(statements);if(rows.some((row:{success:boolean})=>!row.success))throw new Error("No se guardó el lote.");}
- catch(error){const saved=await receipt(db,input.operationId,actor,fingerprint);if(saved)return saved;throw error;}
+ catch (error) {
+  const saved = await receipt(db,input.operationId,actor,fingerprint);
+  if (saved) return saved;
+  if (checkPublication && await db.prepare("SELECT 1 WHERE " + publicationViolation).bind(...publicationArgs).first())
+   throw publicationError("Revisá la selección: cada producto que quieras mostrar necesita una variante activa, salvo las fichas en modo muestra.");
+  throw error;
+ }
  return result;
 }
 export async function duplicateCatalogProduct(db:D1Binding,actor:number,raw:unknown):Promise<Result>{

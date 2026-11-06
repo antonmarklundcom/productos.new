@@ -2,9 +2,10 @@ const publicPaths = new Set(["/", "/contacto", "/envios", "/preguntas-frecuentes
 export function d1StagingRoute(request) {
   const path = new URL(request.url).pathname;
   const admin = /^\/admin(?:\/(?:login|recuperar|restablecer|estado|ajustes|productos(?:\/(?:nuevo|\d+|exportar))?|categorias))?\/?$/.test(path);
+  const supplierQueue = /^\/admin\/productos\/proveedores\/?$/.test(path);
   const publicPage = publicPaths.has(path) || /^\/(?:producto|categoria)\/[a-z0-9-]+\/?$/.test(path);
   const asset = /^\/assets\//.test(path) || /^\/(?:icon\.svg|favicon\.ico|robots\.txt)$/.test(path);
-  if (!(admin || publicPage || asset)) return new Response("Feature not available in this isolated D1 catalog pilot.", {status:404});
+  if (!(admin || supplierQueue || publicPage || asset)) return new Response("Feature not available in this isolated D1 catalog pilot.", {status:404});
   if (!["GET", "HEAD"].includes(request.method) && !(request.method === "POST" && admin))
     return new Response("Method not available in this staging pilot.", {status:405, headers:{allow: admin?"GET, HEAD, POST":"GET, HEAD"}});
   if (request.method === "POST") {

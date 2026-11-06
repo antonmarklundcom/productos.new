@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { CART_STORAGE_KEY } from "@/lib/cart-store";
+import { catalogOnly } from "@/config/catalog-capabilities";
 import { t } from "@/i18n/client";
 import { categoryPlaceholderSrc, productImageUrl } from "@/lib/images";
 import { formatGs } from "@/lib/money";
@@ -158,6 +159,7 @@ export function RecentlyViewed({ current }: { current: { slug: string } }) {
                 {item.pricePyg !== null ? (
                   <p className="text-muted-foreground mt-auto pt-2 text-sm tabular-nums">
                     {formatGs(item.pricePyg)}
+                    {catalogOnly ? <span className="block text-xs">{t("producto.precioOrientativo")}</span> : null}
                   </p>
                 ) : null}
               </div>

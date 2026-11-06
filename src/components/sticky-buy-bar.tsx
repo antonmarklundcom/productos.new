@@ -25,31 +25,39 @@ export function StickyBuyBar({
   targetId,
   name,
   price,
+  inquiry,
 }: {
   /** El `id` del bloque de agregar al carrito de la ficha. */
   targetId: string;
   name: string;
   /** Ya formateado (`₲ 185.000`) por el servidor. */
   price: string | null;
+  inquiry?: { href: string; variantLabel?: string; onClick: () => void };
 }) {
   const [visible, setVisible] = useState(false);
+  const isInquiry = inquiry !== undefined;
 
   useEffect(() => {
     const target = document.getElementById(targetId);
     if (!target || typeof IntersectionObserver === "undefined") return;
 
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry) setVisible(!entry.isIntersecting);
-    });
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry) {
+          setVisible(isInquiry ? entry.intersectionRatio < 0.99 : !entry.isIntersecting);
+        }
+      },
+      { threshold: isInquiry ? 0.99 : 0 }
+    );
     observer.observe(target);
     return () => observer.disconnect();
-  }, [targetId]);
+  }, [targetId, isInquiry]);
 
   useEffect(() => {
-    if (!visible) return;
+    if (!visible || isInquiry) return;
     document.body.setAttribute("data-barra-compra", "");
     return () => document.body.removeAttribute("data-barra-compra");
-  }, [visible]);
+  }, [visible, isInquiry]);
 
   if (!visible) return null;
 
@@ -66,21 +74,35 @@ export function StickyBuyBar({
   return (
     <div
       role="region"
-      aria-label={t("producto.barraCompra.label")}
+      aria-label={t(inquiry ? "producto.consultarWhatsApp" : "producto.barraCompra.label")}
+      data-sticky-product-inquiry={inquiry ? "" : undefined}
       className="border-border bg-background/95 fixed inset-x-0 bottom-0 z-30 border-t px-4 py-3 backdrop-blur md:hidden"
     >
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{name}</p>
-          {price ? (
-            <p className="text-muted-foreground text-xs tabular-nums">
-              {price}
+          {inquiry?.variantLabel || price ? (
+            <p className="text-muted-foreground truncate text-xs tabular-nums">
+              {inquiry?.variantLabel ?? price}
             </p>
           ) : null}
         </div>
-        <Button type="button" onClick={irAlBloque}>
-          {t("producto.barraCompra.boton")}
-        </Button>
+        {inquiry ? (
+          <Button asChild className="min-h-11">
+            <a
+              href={inquiry.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={inquiry.onClick}
+            >
+              {t("producto.consultarWhatsApp")}
+            </a>
+          </Button>
+        ) : (
+          <Button type="button" onClick={irAlBloque}>
+            {t("producto.barraCompra.boton")}
+          </Button>
+        )}
       </div>
     </div>
   );

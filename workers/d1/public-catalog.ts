@@ -8,6 +8,7 @@ import { cachedPublicRead } from "./public-data-cache.mjs";
 import { searchRead, searchFacetsRead, suggestionsRead, normalizeSearchTerm } from "./catalog-search-sql.mjs";
 import { diagnosticBinding } from "./catalog-diagnostics.mjs";
 import { catalogRead, categoryRead, featuredRead, latestRead, productRead, readBatch, relatedRead } from "./public-catalog-sql.mjs";
+import { publishedCatalogProduct } from "./catalog-publication.mjs";
 export { isCatalogSort, CATALOG_SORTS } from "../../src/db/queries";
 
 export function publicRead<T>(key: string, load: () => Promise<T>): Promise<T> {
@@ -57,11 +58,23 @@ export async function getFeaturedProducts(limit = 8): Promise<CatalogProduct[]> 
 export async function getCategoryProducts(query: CategoryQuery): Promise<PagedProducts> {
   return publicRead("category:v1:" + JSON.stringify(query), () => categoryRead(binding(), query));
 }
+export async function getSitemapEntries(): Promise<{
+  categories: {slug: string}[];
+  products: {slug: string; updatedAt: Date | null}[];
+}> {
+  const categories = (await getCategories()).map(({slug}) => ({slug}));
+  const [rows] = await readBatch(binding(), [{sql: `SELECT p.slug, p.updated_at AS updatedAt
+    FROM products p JOIN categories c ON c.id = p.category_id
+    WHERE ${publishedCatalogProduct} ORDER BY p.slug`}]);
+  const products = (rows as {slug: string; updatedAt: string | null}[])
+    .map(({slug, updatedAt}) => ({slug, updatedAt: updatedAt ? utc(updatedAt) : null}));
+  return {categories, products};
+}
 export async function getBrands(categorySlug: string): Promise<{brand: string; total: number}[]> {
   return publicRead("brands:" + categorySlug, async () => {
     const [rows] = await readBatch(binding(), [{sql: `SELECT p.brand, COUNT(p.id) AS total
       FROM products p JOIN categories c ON c.id = p.category_id
-      WHERE p.is_active = 1 AND p.published_at IS NOT NULL AND c.is_active = 1 AND c.slug = ?
+      WHERE ${publishedCatalogProduct} AND c.slug = ?
       AND p.brand IS NOT NULL AND p.brand != '' GROUP BY p.brand ORDER BY p.brand`, args: [categorySlug]}]);
     return rows;
   });

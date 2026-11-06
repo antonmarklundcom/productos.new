@@ -176,6 +176,19 @@ describe("SECTION_INPUT: escritura", () => {
     ).toBe(false);
   });
 
+  it("guarda resúmenes de entrega y devolución solo cuando hay texto", () => {
+    const values = SECTION_INPUT.envioDevolucion.parse({
+      resumenEntrega: "  Consultá por retiro.  ",
+      resumenDevolucion: " ",
+    });
+    expect(values.resumenEntrega).toBe("Consultá por retiro.");
+    expect(values.resumenDevolucion).toBeNull();
+    expect(parseStoreSettings({ envioDevolucion: values }).envioDevolucion).toEqual(values);
+    expect(
+      SECTION_INPUT.envioDevolucion.safeParse({ resumenEntrega: "a".repeat(301) }).success
+    ).toBe(false);
+  });
+
   it("las líneas del checkout: vacías se van, sin ninguna vuelven las de siempre", () => {
     expect(
       SECTION_INPUT.checkout.parse({ confianzaLineas: ["Uno", "", " Dos "] })

@@ -1,6 +1,8 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const readers = vi.hoisted(() => ({ category: vi.fn(), search: vi.fn(), facets: vi.fn() }));
+const capabilities = vi.hoisted(() => ({ catalogOnly: false }));
+vi.mock("@/config/catalog-capabilities", () => capabilities);
 vi.mock("@/db/queries", () => ({
  getCategoryBySlug: async () => ({ id: 1, slug: "tools", name: "Tools", description: null, imageCloudinaryId: null }),
  getCategoryProducts: readers.category, searchProductsPage: readers.search,
@@ -13,7 +15,7 @@ vi.mock("next/navigation", () => ({ notFound: () => { throw new Error("NOT_FOUND
 import CategoryPage from "./categoria/[slug]/page";
 import SearchPage from "./buscar/page";
 beforeEach(() => {readers.category.mockReset();readers.search.mockReset();readers.facets.mockReset().mockResolvedValue({brands:[],categories:[]});});
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); capabilities.catalogOnly = false; });
 const categoryProps = (query: Record<string, string> = {}) => ({ params: Promise.resolve({slug: "tools"}), searchParams: Promise.resolve(query) });
 it("renders a retryable outage separately from a genuinely empty category", async () => {
  const diagnostic = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -28,6 +30,16 @@ it("renders a retryable outage separately from a genuinely empty category", asyn
  render(await CategoryPage(categoryProps()));
  expect(screen.getByRole("status")).toHaveTextContent("0 productos");
  expect(screen.queryByRole("link", {name: "Reintentar"})).toBeNull();
+});
+it("omits the IVA assurance for native enquiry category results", async () => {
+ capabilities.catalogOnly = true;
+ readers.category.mockResolvedValueOnce({
+   products: [{ id: 1, name: "Cable", saleMode: "stock" }],
+   total: 1, page: 1, perPage: 12, totalPages: 1,
+ });
+ render(await CategoryPage(categoryProps()));
+ expect(screen.getByRole("status")).toHaveTextContent("1 producto");
+ expect(screen.getByRole("status")).not.toHaveTextContent("IVA incluido");
 });
 it("rejects impossible render pages with the same filtered boundary as metadata", async () => {
  readers.category.mockResolvedValueOnce({products: [], total: 1, page: 2, perPage: 12, totalPages: 1});

@@ -13,6 +13,7 @@ import { publicReadContext } from "./d1/public-data-cache.mjs";
 import { canonicalDomainResponse } from "./catalog-domain.mjs";
 import { handleAdminRecovery } from "./d1/admin-recovery.mjs";
 import { handleCatalogApi } from "./d1/public-endpoints.mjs";
+import { handleInquiryMetrics } from "./d1/inquiry-metrics.mjs";
 export * from "vinext/server/fetch-handler";
 
 const previewWorker = {
@@ -20,6 +21,8 @@ const previewWorker = {
     const canonical = canonicalDomainResponse(request, env);
     if (canonical) return canonical;
     if (env.WORKERS_D1_STAGING === "true") {
+      const inquiryMetrics = await handleInquiryMetrics(request, env);
+      if (inquiryMetrics) return inquiryMetrics;
       const blocked = d1StagingRoute(request);
       if (blocked) return protectStagingResponse(blocked);
       const bounded = await boundedAdminRequest(request);

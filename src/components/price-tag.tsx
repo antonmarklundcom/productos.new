@@ -2,28 +2,28 @@ import { t } from "@/i18n/client";
 import { formatGs } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
-/**
- * Precio en guaraníes. Siempre con la nota de IVA incluido cuando hay lugar:
- * en PY el precio de góndola ya lo trae, y decirlo evita el "¿me sumás el
- * IVA?" en cada conversación de WhatsApp.
- */
+/** Precio en guaraníes con el contexto de compra o consulta. */
 export function PriceTag({
   pricePyg,
   compareAtPyg,
   size = "md",
   showIvaNote = false,
+  indicative = false,
   className,
 }: {
   pricePyg: number;
   compareAtPyg?: number | null;
   size?: "sm" | "md" | "lg";
   showIvaNote?: boolean;
+  indicative?: boolean;
   className?: string;
 }) {
   const hasDiscount = compareAtPyg != null && compareAtPyg > pricePyg;
   const discount = hasDiscount
     ? Math.round(((compareAtPyg - pricePyg) / compareAtPyg) * 100)
     : 0;
+
+  const note = indicative ? t("producto.precioOrientativo") : showIvaNote ? t("precio.ivaIncluido") : null;
 
   return (
     <div className={cn("flex flex-col gap-0.5", className)}>
@@ -49,11 +49,7 @@ export function PriceTag({
           </>
         ) : null}
       </div>
-      {showIvaNote ? (
-        <span className="text-muted-foreground text-xs">
-          {t("precio.ivaIncluido")}
-        </span>
-      ) : null}
+      {note ? <span className="text-muted-foreground text-xs">{note}</span> : null}
     </div>
   );
 }

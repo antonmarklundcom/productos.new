@@ -1,12 +1,11 @@
-# Productos — tienda para Paraguay
+# Productos — catálogo para Paraguay
 
-Tienda en español, precios en guaraníes enteros y seis categorías para un catálogo amplio. La implementación se entrega en un PR hacia `main`, listo para revisión y sin merge, según la última indicación. **Una vez aprobado y fusionado el PR**, desplegá `main` en Hostinger Node.js 22 con `pnpm install --frozen-lockfile`, `pnpm build` y `pnpm start`.
+[productos.com.py](https://productos.com.py) publica un catálogo de consultas por WhatsApp en Cloudflare Workers con D1 y R2. El código conserva una distribución Next.js standalone para tiendas que usan MySQL y habilitan el flujo transaccional.
 
-La producción arranca con un catálogo en preparación y sin productos vendibles. La vista previa local contiene **un solo producto demo**, con dos imágenes y un precio ilustrativo, sin stock ni posibilidad de compra.
-
-- [Configuración de Hostinger y apertura](docs/HOSTINGER-STORE.md)
-- [Validación, resultados y tareas pendientes](docs/VALIDATION.md)
-- [.env.example](.env.example): sólo cinco variables; el archivo privado `.env.hostinger` queda ignorado por Git para completar la base de datos en hPanel.
+- [Catálogo en Workers: reutilización, medición y recuperación](docs/operations/productos-batch-01-20261106.md)
+- [Validación del catálogo en Workers](docs/operations/workers-browser-acceptance.md)
+- [Configuración de Hostinger para la distribución Next.js](docs/HOSTINGER-STORE.md)
+- [Variables de entorno opcionales](docs/ENV-OPCIONAL.md)
 
 ## Base reutilizable
 

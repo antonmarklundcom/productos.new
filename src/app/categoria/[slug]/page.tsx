@@ -14,6 +14,7 @@ import { storeCategories } from "@/components/store-categories";
 import { getStoreSettings } from "@/domain/store-settings";
 import { t, tPlural } from "@/i18n";
 import { productImageUrl } from "@/lib/images";
+import { effectiveSaleMode } from "@/lib/catalog-policy";
 import { markdownToText } from "@/lib/markdown";
 import { parseBudget } from "@/lib/price-ranges";
 import { breadcrumbJsonLd, itemListJsonLd, jsonLdScript } from "@/lib/seo";
@@ -211,8 +212,11 @@ export default async function CategoryPage({
         </h1>
       </div>
       {!unavailable ? <p data-catalog-result-count role="status" aria-live="polite" aria-atomic="true" className="text-muted-foreground mt-1 text-sm">
-        {tPlural("catalogo.productos", result.total)} ·{" "}
-        {t("catalogo.ivaIncluidoNota")}
+        {tPlural("catalogo.productos", result.total)}
+        {result.products.length > 0 &&
+        result.products.every(product => effectiveSaleMode(product.saleMode) === "stock")
+          ? ` · ${t("catalogo.ivaIncluidoNota")}`
+          : null}
       </p> : null}
 
       {/* Sin foto ni descripción cargadas (O7, `/admin/categorias`), esta

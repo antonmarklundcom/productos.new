@@ -39,7 +39,7 @@ export function d1StagingPlugin(root) {
       // Vite's earlier @ alias resolver can consume importer-specific aliases.
       // Rewrite only reviewed public import sites before resolution instead.
       const publicModule=JSON.stringify(path.resolve(root,"workers/d1/public-catalog.ts").replaceAll("\\","/"));
-      const publicPage=["/app/page.tsx","/app/producto/[slug]/page.tsx","/app/categoria/[slug]/page.tsx","/app/buscar/page.tsx"].some(suffix=>file.endsWith(suffix));
+      const publicPage=["/app/page.tsx","/app/producto/[slug]/page.tsx","/app/categoria/[slug]/page.tsx","/app/buscar/page.tsx","/app/sitemap.ts"].some(suffix=>file.endsWith(suffix));
       if(publicPage)code=replaceRequired(code,/(["'])@\/db\/queries\1/g,publicModule,"public reader import");
       if(file.endsWith("/app/producto/[slug]/page.tsx"))code=replaceRequired(code,/(["'])@\/domain\/reviews\1/g,publicModule,"public review import");
       code=code.replace(/(["'])@\/components\/store-categories\1/g,publicModule);

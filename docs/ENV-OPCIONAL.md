@@ -499,3 +499,11 @@ See [dated preparation](operations/workers-production-prep-2026-10-09.md). Exist
 ## Workers native admin password recovery
 
 Worker-only runtime configuration: ADMIN_PASSWORD_RESET_ENABLED=true and ADMIN_PASSWORD_RESET_FROM=<verified sender>, plus a native EMAIL send_email binding restricted with allowed_sender_addresses. No email API key or SMTP password is needed. Sender onboarding and an actual delivery test are required. Absent configuration disables the flow explicitly. Do not add these to Hostinger's .env.example. See [recovery runbook](operations/workers-admin-recovery-2026-10-09.md).
+
+## Catálogo nativo de Cloudflare Workers
+
+`WORKERS_INQUIRY_METRICS_ENABLED=true` habilita el conteo de vistas de fichas y
+clics de consulta por WhatsApp en Workers Logs. Vacía o ausente lo deja apagado.
+Es una variable de ejecución del Worker, no de Hostinger. Revisá privacidad,
+retención y el procedimiento del embudo antes de habilitarla en una tienda.
+[Procedimiento de medición](operations/productos-batch-01-20261106.md#inquiry-measurement)

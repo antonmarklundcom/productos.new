@@ -5,9 +5,13 @@ import {normalizedSearchBackfill, normalizedSearchTriggers} from "../../workers/
 import {searchPlan} from "../../workers/d1/catalog-search-sql.mjs";
 export function searchFixture(size=70) {
  const db=new DatabaseSync(":memory:");
- db.exec("CREATE TABLE categories(id INTEGER PRIMARY KEY,is_active INTEGER); CREATE TABLE products(id INTEGER PRIMARY KEY,slug TEXT,name TEXT,brand TEXT,description TEXT,category_id INTEGER,is_active INTEGER,published_at TEXT); INSERT INTO categories VALUES(1,1),(2,0)");
- const insert=db.prepare("INSERT INTO products VALUES(?,?,?,?,?,?,?,?)");
- const put=(id,name,brand="",description="",category=1,active=1,published="2026-10-23")=>insert.run(id,"fixture-"+id,name,brand,description,category,active,published);
+ db.exec("CREATE TABLE categories(id INTEGER PRIMARY KEY,is_active INTEGER); CREATE TABLE products(id INTEGER PRIMARY KEY,slug TEXT,name TEXT,brand TEXT,description TEXT,category_id INTEGER,is_active INTEGER,published_at TEXT,sale_mode TEXT NOT NULL DEFAULT 'enquiry'); CREATE TABLE variants(product_id INTEGER,is_active INTEGER); INSERT INTO categories VALUES(1,1),(2,0)");
+ const insert=db.prepare("INSERT INTO products(id,slug,name,brand,description,category_id,is_active,published_at) VALUES(?,?,?,?,?,?,?,?)");
+ const insertVariant=db.prepare("INSERT INTO variants VALUES(?,1)");
+ const put=(id,name,brand="",description="",category=1,active=1,published="2026-10-23")=>{
+  insert.run(id,"fixture-"+id,name,brand,description,category,active,published);
+  insertVariant.run(id);
+ };
  put(1,"Café eléctrico","Ñandutí","Taza térmica");
  put(2,"Kit de café eléctrico");
  put(3,"Accesorio","Marca","Café eléctrico");
@@ -58,6 +62,16 @@ test('precomputed fields retain exact predicate/ranking/count parity with repeat
  }}finally{db.close();}
 });
 
+test("variantless enquiry products stay out of search while showcase products can appear",()=>{
+ const db=searchFixture(0);
+ try {
+  db.exec("UPDATE variants SET is_active=0 WHERE product_id=1; DELETE FROM variants WHERE product_id=2; UPDATE products SET sale_mode='showcase' WHERE id=2");
+  const [rows,count]=run(db,"cafe electrico");
+  assert.deepEqual(rows.map(row=>row.id),[2,3]);
+  assert.equal(count[0].total,2);
+ } finally {db.close();}
+});
+
 test("normalization triggers update search projections on insert and edit",()=>{
  const db=searchFixture(0);
  try {
@@ -65,6 +79,7 @@ test("normalization triggers update search projections on insert and edit",()=>{
   assert.deepEqual(run(db,"camara ñandu termica")[0].map(r=>r.id),[1]);
   assert.equal(run(db,"cafe electrico")[1][0].total,2);
   db.exec("INSERT INTO products(id,slug,name,brand,description,category_id,is_active,published_at) VALUES(99,'insert','CÁMARA','ÑANDÚ','TÉRMICA',1,1,'2026-10-24')");
+  db.exec("INSERT INTO variants VALUES(99,1)");
   assert.deepEqual(run(db,"camara ñandu termica")[0].map(r=>r.id),[99,1]);
  } finally {db.close();}
 });

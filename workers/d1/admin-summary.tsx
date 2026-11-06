@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { requireCapabilityPage } from "../../src/lib/admin-guard";
 import { can } from "../../src/lib/permissions";
 import { getNativeDb } from "./database";
+import { publishedCatalogProduct } from "./catalog-publication.mjs";
 
 /** Native catalog dashboard: no unported order/shipping claims or queries. */
 export default async function D1CatalogSummary() {
@@ -14,7 +15,8 @@ export default async function D1CatalogSummary() {
     images: number;
   }>(sql`
     SELECT (SELECT COUNT(*) FROM products) AS products,
-      (SELECT COUNT(*) FROM products WHERE is_active = 1 AND published_at IS NOT NULL) AS published,
+      (SELECT COUNT(*) FROM products p JOIN categories c ON c.id = p.category_id
+        WHERE ${sql.raw(publishedCatalogProduct)}) AS published,
       (SELECT COUNT(*) FROM categories) AS categories,
       (SELECT COUNT(*) FROM product_images) AS images`);
   if (!counts) throw new Error("D1_CATALOG_SUMMARY_MISSING_RESULT");
@@ -24,7 +26,7 @@ export default async function D1CatalogSummary() {
       <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
           ["Productos", counts.products],
-          ["Publicados", counts.published],
+          ["Visibles en el catálogo", counts.published],
           ["Categorías", counts.categories],
           ["Fotos de galería", counts.images],
         ].map(([label, value]) => (

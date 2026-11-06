@@ -52,6 +52,12 @@ export type ImageSize = "thumb" | "card" | "detail" | "og" | "hero" | "qr" | "lo
  */
 export const OG_IMAGE_SIZE = { width: 1200, height: 630 } as const;
 
+export const CATALOG_OG_FALLBACK = {
+  url: "/assets/catalog-share.png",
+  ...OG_IMAGE_SIZE,
+  type: "image/png",
+} as const;
+
 const SIZE_TRANSFORMS: Record<ImageSize, string> = {
   thumb: "c_fill,w_160,h_160",
   card: "c_fill,w_600,h_600",

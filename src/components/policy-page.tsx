@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { ProductDescription } from "@/components/product-description";
@@ -46,6 +47,9 @@ export async function PolicyPage({ slug }: { slug: PaginaSlug }) {
         markdown={cuerpo}
         className="mt-6 text-sm leading-relaxed"
       />
+      <Link href="/contacto" className="mt-6 inline-block text-sm underline underline-offset-4">
+        Contacto
+      </Link>
     </main>
   );
 }
@@ -55,14 +59,15 @@ export async function policyMetadata(slug: PaginaSlug): Promise<Metadata> {
   const pagina = paginaEfectiva(await getStoreSettings(), slug);
   if (!pagina.activo && !pagina.cuerpoPorDefecto) return {};
 
+  const publica = pagina.activo ? pagina : PAGINAS_DEFAULT[slug];
   const valores = await valoresDePlaceholders();
   const description = markdownToText(
-    reemplazarPlaceholders(pagina.cuerpo, valores)
+    reemplazarPlaceholders(publica.cuerpo, valores)
   ).slice(0, 160);
   const origin = siteOrigin();
 
   return {
-    title: pagina.titulo,
+    title: publica.titulo,
     description,
     ...(origin
       ? { alternates: { canonical: new URL(`/${slug}`, origin).toString() } }

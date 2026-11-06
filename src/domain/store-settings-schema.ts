@@ -116,6 +116,8 @@ export const StoreSettingsSchema = z.object({
     tiktok: texto,
   }),
   envioDevolucion: seccion({
+    resumenEntrega: texto,
+    resumenDevolucion: texto,
     handlingDaysMin: entero,
     handlingDaysMax: entero,
     transitDaysMin: entero,
@@ -286,6 +288,7 @@ const PaginaInput = z
   .strict();
 
 const DIAS = 90;
+export const MAX_RESUMEN_CONDICIONES = 300;
 
 /** `#1a2b3c`. Sin `#abc` corto ni nombres: un solo formato para guardar. */
 export const COLOR_HEX = /^#[0-9a-f]{6}$/;
@@ -373,6 +376,8 @@ export const SECTION_INPUT = {
     .strict(),
   envioDevolucion: z
     .object({
+      resumenEntrega: textoHasta(MAX_RESUMEN_CONDICIONES, t("panel.ajustes.envio.resumenEntrega")),
+      resumenDevolucion: textoHasta(MAX_RESUMEN_CONDICIONES, t("panel.ajustes.envio.resumenDevolucion")),
       handlingDaysMin: enteroEntre(
         0,
         DIAS,

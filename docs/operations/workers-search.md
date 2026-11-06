@@ -10,6 +10,16 @@ All distinct whitespace-separated tokens must appear as substrings somewhere in 
 
 Ranking prioritizes exact folded name, then folded name prefix of the whole phrase, exact brand of the whole phrase, all tokens in name, then other matches. Folded name and product ID resolve ties. Queries under 2 characters, above 160 characters or above 12 distinct tokens return no matches. Page size defaults to40 and is clamped1–60. This local fixture contract is not an owner relevance study.
 
+## Curated whole-query aliases
+
+`workers/d1/search-aliases.mjs` contains a small code-reviewed list. The native
+storefront also matches `freidora` plus `aire` for the query `air fryer`. The
+broader query `freidora` can also find English listings, and the fixture typo
+`fridora` expands to `freidora`. Only a complete normalized query triggers an alias. Literal matches outrank expansion-only matches in relevance order.
+Results, totals, facets and suggestions use the same visibility and matching
+rules. Search length and token limits still apply. Add an alias with a concrete
+catalog example and regression case. This seed list is not visitor research.
+
 ## Repeatable local measurement
 
 Run `node scripts/profile-workers-search.mjs [output.json]`. It creates only synthetic in-memory SQLite databases at262,1000 and10000 products. No provider binding, catalogue export, credential or installation is used. Five fixed terms exercise accents, reordered words, ñ, literal wildcard punctuation and a normal match. Two warmups and seven measured rounds alternate old/new/repeated-folding order. The JSON records counts, first IDs, per-round wall times, medians and EXPLAIN QUERY PLAN for selection/count. It does not import test files or register tests.

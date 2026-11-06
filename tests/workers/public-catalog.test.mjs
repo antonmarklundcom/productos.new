@@ -62,9 +62,9 @@ test("public batch preserves publication, price masking, images, held stock and 
    assert.doesNotMatch(JSON.stringify(result), /SECRET|PRIVATE|unit.cost|costSource|dropi|orderId/);
    const masked = (await productRead(db,"masked")).product;
    assert.equal(masked.variants[0].pricePyg,0);assert.equal(masked.variants[0].compareAtPyg,null);
-   for (const slug of ["unpublished","disabled","hidden-category","missing","first' OR 1=1 --"])
+   for (const slug of ["unpublished","disabled","hidden-category","empty","missing","first' OR 1=1 --"])
      assert.deepEqual(await productRead(db, slug), {product:null,reviews:[]});
-   assert.deepEqual((await catalogRead(db)).map(product => product.slug), ["empty","first","held","masked"]);
+   assert.deepEqual((await catalogRead(db)).map(product => product.slug), ["first","held","masked"]);
  } finally {sqlite.close();}
 });
 test("category filters/count/pagination and sort retain hidden-price/null-last behavior in one batch", async () => {
@@ -79,13 +79,26 @@ test("category filters/count/pagination and sort retain hidden-price/null-last b
    assert.deepEqual((await categoryRead(db,{categorySlug:"tools",page:9})).products,[]);
    assert.equal((await categoryRead(db,{categorySlug:"hidden"})).total,0);
    assert.equal((await categoryRead(db,{categorySlug:"tools",brand:"A' OR 1=1 --"})).total,0);
-   assert.deepEqual((await featuredRead(db)).map(product=>product.slug),["held","empty","masked","first"]);
+   assert.deepEqual((await featuredRead(db)).map(product=>product.slug),["held","masked","first"]);
    sqlite.exec("UPDATE products SET is_featured=1 WHERE id=2");
    assert.deepEqual((await featuredRead(db)).map(product=>product.slug),["masked"]);
    assert.deepEqual((await relatedRead(db,{productId:1,categorySlug:"tools",brand:"A"})).map(product=>product.slug),["held","masked"]);
    assert.deepEqual((await latestRead(db,["hidden","tools"])).map(row=>row.products[0].slug),["held","masked","first"]);
  } finally {sqlite.close();}
 });
+test("only intentional showcase products are visible without an active variant", async () => {
+ const {db, sqlite} = fixture();
+ try {
+   sqlite.exec("UPDATE products SET sale_mode='showcase' WHERE slug='empty'");
+   assert.deepEqual((await productRead(db,"empty")).product.variants, []);
+   assert.ok((await catalogRead(db)).some(p => p.slug === "empty"));
+   assert.ok((await categoryRead(db,{categorySlug:"tools"})).products.some(p => p.slug === "empty"));
+   assert.ok((await latestRead(db)).some(({products}) => products[0].slug === "empty"));
+   assert.ok((await relatedRead(db,{productId:1,categorySlug:"tools",brand:"A"})).some(p => p.slug === "empty"));
+   assert.ok(!(await categoryRead(db,{categorySlug:"tools",minPricePyg:1})).products.some(p => p.slug === "empty"));
+ } finally { sqlite.close(); }
+});
+
 function memoryCache() {
  const stores = new Map();
  return {open: async name => {
@@ -139,7 +152,7 @@ test("HTML cannot add a second TTL to old cached data, including expiry during s
 test("Workers public import adapters include search and preserve legacy shared readers", () => {
  const root=path.resolve(import.meta.dirname,"../.."), plugin=d1StagingPlugin(root);
  const native=path.resolve(root,"workers/d1/public-catalog.ts").replaceAll("\\","/");
- for(const relative of ["src/app/page.tsx","src/app/producto/[slug]/page.tsx","src/app/categoria/[slug]/page.tsx","src/app/buscar/page.tsx","src/components/site-header.tsx","src/components/site-footer.tsx"]) {
+ for(const relative of ["src/app/page.tsx","src/app/producto/[slug]/page.tsx","src/app/categoria/[slug]/page.tsx","src/app/buscar/page.tsx","src/app/sitemap.ts","src/components/site-header.tsx","src/components/site-footer.tsx"]) {
    const file=path.join(root,relative),original=readFileSync(file,"utf8"),code=plugin.transform(original,file)?.code ?? original;
    assert.ok(code.includes(native),relative+" must import the native public adapter");
    if(relative.includes("src/app"))assert.doesNotMatch(code,/from ["']@\/db\/queries["']/);

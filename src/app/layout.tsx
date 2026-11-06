@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type React from "react";
 
 import { TIENDA } from "@/config/tienda";
+import { catalogOnly } from "@/config/catalog-capabilities";
 import { AnnouncementBar } from "@/components/announcement-bar";
 import { Analytics } from "@/components/analytics";
 import { CartSheet } from "@/components/cart-sheet";
@@ -12,6 +13,7 @@ import { WhatsAppFab } from "@/components/whatsapp-fab";
 import { Toaster } from "@/components/ui/sonner";
 import { getStoreSettings } from "@/domain/store-settings";
 import { linkSeguro } from "@/domain/store-settings-schema";
+import { CATALOG_OG_FALLBACK } from "@/lib/images";
 import { idiomaActivo } from "@/i18n";
 import { siteOrigin } from "@/lib/site-url";
 import "./globals.css";
@@ -46,14 +48,16 @@ export async function generateMetadata(): Promise<Metadata> {
       type: "website",
       locale: TIENDA.ogLocale,
       siteName: identidad.nombre,
+      ...(catalogOnly ? {
+        images: [{ ...CATALOG_OG_FALLBACK, alt: identidad.nombre }],
+      } : {}),
     },
     // El favicon subido en /admin/ajustes → Identidad. Sin él, queda
     // `src/app/favicon.ico` (el de la tienda o el del template).
     ...(identidad.faviconUrl
       ? { icons: { icon: identidad.faviconUrl, apple: identidad.faviconUrl } }
       : {}),
-    // La imagen sale de `opengraph-image.tsx` (o de la del producto, que la
-    // pisa); acá sólo se pide que se muestre grande y no como miniatura.
+    // La tarjeta puede usar la imagen del sitio o la del producto.
     twitter: { card: "summary_large_image" },
   };
 }
