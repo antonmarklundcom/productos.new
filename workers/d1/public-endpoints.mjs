@@ -1,4 +1,5 @@
 import {catalogRead} from './public-catalog-sql.mjs';
+import {publishedCatalogProduct} from './catalog-publication.mjs';
 import {suggestionsRead,normalizeSearchTerm} from './catalog-search-sql.mjs';
 import {publicReadContext,cachedPublicRead} from './public-data-cache.mjs';
 import {protectStagingResponse} from './policy.mjs';
@@ -26,7 +27,7 @@ export async function handleCatalogApi(request,db,env={},ctx={waitUntil(){}}) {
   }else{
    const slugs=[...new Set((url.searchParams.get('slugs')||'').split(',').filter(Boolean))];
    if(!slugs.length || slugs.length>8 || slugs.some(s=>s.length>200||! /^[a-z0-9-]+$/.test(s)))return json({products:[],error:'Identificadores inválidos.'},400);
-   const rows=(await db.prepare(`SELECT p.id FROM products p JOIN categories c ON c.id=p.category_id WHERE p.is_active=1 AND p.published_at IS NOT NULL AND c.is_active=1 AND p.show_price=1 AND p.slug IN (${slugs.map(()=>'?').join(',')})`).bind(...slugs).all()).results;
+   const rows=(await db.prepare(`SELECT p.id FROM products p JOIN categories c ON c.id=p.category_id WHERE ${publishedCatalogProduct} AND p.show_price=1 AND p.slug IN (${slugs.map(()=>'?').join(',')})`).bind(...slugs).all()).results;
    const products=rows.length?await catalogRead(db,{productIds:rows.map(r=>r.id),limit:8}):[];
    response=json({products:slugs.flatMap(slug=>{const p=products.find(item=>item.slug===slug);return p&&p.showPrice!==false?[p]:[];}).map(p=>({slug:p.slug,name:p.name,pricePyg:p.variants.length?Math.min(...p.variants.map(v=>v.pricePyg)):null,imageCloudinaryId:p.image?.cloudinaryId??null,imageAlt:p.image?.alt??null}))});
   }

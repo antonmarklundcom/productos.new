@@ -5,6 +5,7 @@ import { catalogAudit, products } from "./schema";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { getNativeDb, type NativeDatabase } from "./database";
+import { normalizeDropiUrl } from "../../src/domain/catalog-import";
 import { supplierOffers, variants } from "./schema";
 export type SupplierOffer = typeof supplierOffers.$inferSelect;
 export type SupplierOfferWrite = Omit<typeof supplierOffers.$inferInsert, "id" | "variantId" | "updatedAt">;
@@ -20,6 +21,69 @@ export async function readSupplierOffers(variantIds: number[]) {
 }
 export async function readSupplierCosts(variantIds: number[]) {
   return new Map((await readSupplierOffers(variantIds)).filter((offer) => offer.isActive && offer.isConfirmed && offer.isPreferred).map((offer) => [offer.variantId, offer]));
+}
+
+export const dropiReviewDays = 30;
+const dropiQueuePageSize = 25;
+
+type DropiFreshnessRow = {
+  offerId: number;
+  productId: number;
+  productName: string;
+  variantLabel: string;
+  sku: string;
+  variantActive: number;
+  supplierName: string | null;
+  productUrl: string | null;
+  confirmed: number;
+  retailPyg: number;
+  costPyg: number | null;
+  supplierStock: number | null;
+  checkedAt: string | null;
+  freshness: "unknown" | "stale" | "fresh";
+};
+
+export async function readDropiFreshness(
+  db: Pick<NativeDatabase, "all">,
+  page: number,
+  now = new Date(),
+) {
+  const cutoff = new Date(now.getTime() - dropiReviewDays * 86_400_000);
+  const rows = await db.all<DropiFreshnessRow>(sql`
+    SELECT s.id AS offerId, p.id AS productId, p.name AS productName,
+      v.label AS variantLabel, v.sku, v.is_active AS variantActive,
+      s.source AS supplierName, s.product_url AS productUrl, s.is_confirmed AS confirmed,
+      v.price_pyg AS retailPyg, s.unit_cost_pyg AS costPyg, s.supplier_stock AS supplierStock,
+      strftime('%Y-%m-%dT%H:%M:%SZ',s.checked_at) AS checkedAt,
+      CASE
+        WHEN julianday(s.checked_at) IS NULL OR julianday(s.checked_at) > julianday(${now.toISOString()}) THEN 'unknown'
+        WHEN julianday(s.checked_at) <= julianday(${cutoff.toISOString()}) THEN 'stale'
+        ELSE 'fresh'
+      END AS freshness
+    FROM supplier_offers s
+    JOIN variants v ON v.id=s.variant_id JOIN products p ON p.id=v.product_id
+    WHERE s.source_type='dropi' AND s.is_active=1
+    ORDER BY CASE freshness WHEN 'unknown' THEN 0 WHEN 'stale' THEN 1 ELSE 2 END,
+      s.is_confirmed, julianday(s.checked_at), s.id
+    LIMIT ${dropiQueuePageSize + 1} OFFSET ${(page - 1) * dropiQueuePageSize}
+  `);
+
+  return {
+    hasNext: rows.length > dropiQueuePageSize,
+    rows: rows.slice(0, dropiQueuePageSize).map(row => {
+      let productUrl: string | null = null;
+      try {
+        productUrl = normalizeDropiUrl(row.productUrl) ?? null;
+      } catch {
+        // Keep a legacy invalid link reviewable without exposing it as a link.
+      }
+      return {
+        ...row,
+        productUrl,
+        dropiId: productUrl?.match(/\/product-details\/(\d+)\//)?.[1] ?? null,
+      };
+    }),
+  };
 }
 
 /** Native D1 batch makes switching the preferred offer atomic. */

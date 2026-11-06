@@ -29,6 +29,7 @@ export function ProductCard({
   showRating?: boolean;
 }) {
   const shown = displayedVariant(product);
+  const saleMode = effectiveSaleMode(product.saleMode);
 
   const totalAvailable = product.variants.reduce(
     (total, variant) => total + variant.available,
@@ -95,18 +96,17 @@ export function ProductCard({
             <PriceTag
               pricePyg={shown.pricePyg}
               compareAtPyg={shown.compareAtPyg}
+              indicative={saleMode !== "stock"}
               size="sm"
             />
           ) : null}
           <div className="mt-2 flex items-center gap-2">
-            {effectiveSaleMode(product.saleMode) === "stock" ? (
+            {saleMode === "stock" ? (
               <StockBadge available={totalAvailable} />
             ) : (
               <span className="text-xs">
                 {t(
-                  effectiveSaleMode(product.saleMode) === "enquiry"
-                    ? "producto.soloConsulta"
-                    : "producto.muestra"
+                  saleMode === "enquiry" ? "producto.soloConsulta" : "producto.muestra"
                 )}
               </span>
             )}

@@ -107,16 +107,25 @@ describe('la ficha de producto comparte con foto', () => {
     expect(page).toContain('OG_IMAGE_SIZE.height');
   });
 
-  it('el respaldo del sitio existe y sale del nombre efectivo, no de un nombre escrito a mano', async () => {
-    // Un `og-image.png` commiteado es el archivo que cada tienda nueva se
-    // olvida de reemplazar, y publicar el nombre de otro comercio es peor que
-    // no tener imagen. El nombre sale de `nombreTienda()`: el de
-    // /admin/ajustes → Identidad, o `TIENDA.nombre` si no hay.
-    const fallback = await readCode(path.join('src', 'app', 'opengraph-image.tsx'));
-    const marca = await readCode(path.join('src', 'lib', 'marca.ts'));
+  it('la ruta Next renderiza el respaldo de la tienda como PNG', async () => {
+    const nombreTienda = vi.fn(async () => 'Marca de prueba');
+    vi.doMock('@/lib/marca', () => ({ nombreTienda }));
+    vi.doMock('@/domain/store-settings', () => ({
+      getStoreSettings: vi.fn(async () => ({ marca: { tagline: 'Catálogo de prueba' } })),
+    }));
 
-    expect(fallback).toContain('nombreTienda()');
-    expect(marca).toContain('TIENDA.nombre');
-    expect(fallback).toContain('OG_IMAGE_SIZE');
+    try {
+      const { GET } = await import('../../src/app/opengraph-image/route');
+      const response = await GET();
+      const png = Buffer.from(await response.arrayBuffer());
+
+      expect(nombreTienda).toHaveBeenCalledOnce();
+      expect(response.headers.get('content-type')).toMatch(/^image\/png/);
+      expect(png.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+      expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([1200, 630]);
+    } finally {
+      vi.doUnmock('@/lib/marca');
+      vi.doUnmock('@/domain/store-settings');
+    }
   });
 });

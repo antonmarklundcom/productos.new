@@ -20,6 +20,7 @@ export async function createHarness({
   diagnostics = false,
   cacheSeconds = 0,
   secureTransport = false,
+  inquiryMetrics = false,
   sessionSecret = "synthetic-browser-session-key-" + randomUUID(),
 } = {}) {
   await access(path.join(root, "dist/server/index.js"));
@@ -58,6 +59,7 @@ export async function createHarness({
             CF_VERSION_METADATA: { id: randomUUID() },
             SESSION_SECRET: sessionSecret,
             WORKERS_D1_STAGING: "true",
+            ...(inquiryMetrics ? { WORKERS_INQUIRY_METRICS_ENABLED: "true", WHATSAPP_NUMBER: "595991000001" } : {}),
             WORKERS_PRODUCTION_READY: "true",
             WORKERS_PUBLIC_CACHE_SECONDS: String(cacheSeconds),
             WORKERS_PUBLIC_DIAGNOSTICS: String(diagnostics),
@@ -81,7 +83,9 @@ export async function createHarness({
                         ? "text/css"
                         : target.endsWith(".svg")
                           ? "image/svg+xml"
-                          : "application/octet-stream",
+                          : target.endsWith(".png")
+                            ? "image/png"
+                            : "application/octet-stream",
                   },
                 });
               } catch {

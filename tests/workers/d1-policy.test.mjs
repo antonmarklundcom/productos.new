@@ -5,14 +5,17 @@ import {d1StagingPlugin} from '../../workers/d1/build-plugin.mjs';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
 test('D1 exposes only catalog, login and supported admin routes',()=>{
- for(const route of ['/','/contacto','/categoria/autos-y-motos','/producto/cepillo','/admin','/admin/login','/admin/productos','/admin/productos/1','/admin/categorias','/admin/ajustes','/admin/estado?seccion=ajustes'])assert.equal(d1StagingRoute(new Request('https://stage.invalid'+route)),null);
- for(const route of ['/checkout','/api/setup/init','/admin/usuarios','/admin/integraciones','/api/cron/vencer-pedidos','/__catalog-demo/private.html'])assert.equal(d1StagingRoute(new Request('https://stage.invalid'+route)).status,404);
+ for(const route of ['/','/contacto','/categoria/autos-y-motos','/producto/cepillo','/admin','/admin/login','/admin/productos','/admin/productos/1','/admin/productos/proveedores','/assets/catalog-share.png','/admin/categorias','/admin/ajustes','/admin/estado?seccion=ajustes'])assert.equal(d1StagingRoute(new Request('https://stage.invalid'+route)),null);
+ for(const route of ['/checkout','/opengraph-image','/opengraph-image/other','/admin/productos/proveedores/other','/api/setup/init','/admin/usuarios','/admin/integraciones','/api/cron/vencer-pedidos','/__catalog-demo/private.html'])assert.equal(d1StagingRoute(new Request('https://stage.invalid'+route)).status,404);
 });
 test('D1 mutations require a same-origin POST to an admin route',()=>{
  assert.equal(d1StagingRoute(new Request('https://stage.invalid/admin/productos',{method:'POST',headers:{origin:'https://stage.invalid'}})),null);
  for(const origin of ['https://attacker.invalid','null',''])assert.equal(d1StagingRoute(new Request('https://stage.invalid/admin/productos',{method:'POST',headers:{origin}})).status,403);
  for(const method of ['PUT','PATCH','DELETE'])assert.equal(d1StagingRoute(new Request('https://stage.invalid/admin/productos',{method})).status,405);
- assert.equal(d1StagingRoute(new Request('https://stage.invalid/',{method:'POST',headers:{origin:'https://stage.invalid'}})).status,405);
+ for(const route of ['/','/assets/catalog-share.png','/admin/productos/proveedores']){
+  assert.equal(d1StagingRoute(new Request('https://stage.invalid'+route,{method:'HEAD'})),null);
+  assert.equal(d1StagingRoute(new Request('https://stage.invalid'+route,{method:'POST',headers:{origin:'https://stage.invalid'}})).status,405);
+ }
  assert.equal(d1StagingRoute(new Request('https://stage.invalid/admin/productos',{method:'POST',headers:{origin:'https://stage.invalid','content-length':'1048577'}})).status,413);
 });
 test('D1 responses retain auth cookie/CSP and prohibit shared caching/indexing',()=>{
@@ -102,6 +105,6 @@ test('D1 dashboard uses guarded catalog counts rather than unported orders',()=>
  assert.match(result,/workers\/d1\/admin-summary.tsx/);
  const native=readFileSync(path.join(root,'workers/d1/admin-summary.tsx'),'utf8');
  assert.match(native,/requireCapabilityPage\("dashboard"\)/);
- assert.match(native,/published_at IS NOT NULL/);
+ assert.match(native,/sql\.raw\(publishedCatalogProduct\)/);
  assert.doesNotMatch(native,/listOrders|salesTrend|shipping_zones|job_runs/);
 });

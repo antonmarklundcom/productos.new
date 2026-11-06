@@ -5,25 +5,11 @@ import { getStoreSettings } from "@/domain/store-settings";
 import { OG_IMAGE_SIZE } from "@/lib/images";
 import { nombreTienda } from "@/lib/marca";
 
-/**
- * Imagen de Open Graph del sitio — el respaldo de toda la tienda.
- *
- * Next la aplica a cualquier ruta que no declare la suya, así que un producto
- * sin foto cargada igual se comparte con algo mirable en vez de con el
- * rectángulo gris de WhatsApp.
- *
- * Se dibuja en vez de commitear un PNG a propósito: es el archivo que cada
- * tienda nueva se olvidaría de reemplazar, y un `og-image.png` con el nombre
- * de otro comercio es peor que no tener ninguno. El nombre y la bajada salen
- * de `/admin/ajustes` (Identidad y Marca), o de `src/config/tienda.ts` si el
- * dueño no los cargó; se regenera cada hora para seguir al panel.
- */
+// El nombre y la bajada salen de Identidad y Marca. El sitio Next
+// anuncia esta ruta explícitamente como su imagen de respaldo.
 export const revalidate = 3600;
-export const alt = TIENDA.titulo;
-export const size = OG_IMAGE_SIZE;
-export const contentType = "image/png";
 
-export default async function OpenGraphImage() {
+export async function GET() {
   const [nombre, { marca }] = await Promise.all([nombreTienda(), getStoreSettings()]);
   return new ImageResponse(
     (
@@ -49,6 +35,6 @@ export default async function OpenGraphImage() {
         </div>
       </div>
     ),
-    size
+    OG_IMAGE_SIZE
   );
 }

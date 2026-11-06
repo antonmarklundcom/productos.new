@@ -30,7 +30,7 @@ export async function getOrCreateCatalogPlan(db:D1Binding,id:string,actor:number
  if(existingRun&&existingRun.total_products!==plan.productos.length)throw new Error("La importación guardada no coincide con esta planilla.");
  if(plan.advertencias?.length&&review!==JSON.stringify(plan.advertencias))throw new Error("Revisá los posibles duplicados antes de confirmar.");
  if(staged&&(plan.productos.length>50||plan.productos.reduce((n,p)=>n+p.variants.length,0)>250))throw new Error("La publicación completa admite hasta 50 productos y 250 variantes. Dividí la planilla o usá la importación por lotes.");
- const statementBound=6+plan.productos.reduce((n,p)=>n+7+p.variants.reduce((m,v)=>m+2+(v.unitCostPyg!==undefined?1:0),0),0);
+ const statementBound=7+plan.productos.reduce((n,p)=>n+7+p.variants.reduce((m,v)=>m+2+(v.unitCostPyg!==undefined?1:0),0),0);
  if(staged&&statementBound>900)throw new Error("Esta planilla excede el límite de publicación atómica por sus variantes, costos o fotos. Dividila en archivos más pequeños.");
  const rows:{id:number;slug:string;revision:number}[]=(await db.prepare("SELECT id,slug,revision FROM products WHERE slug IN (SELECT value FROM json_each(?))").bind(JSON.stringify(plan.productos.map(p=>p.slug))).all<{id:number;slug:string;revision:number}>()).results;
  const stored:Stored={...plan,categoryIds:[...plan.categoriaIdPorSlug],baseline:plan.productos.map(p=>{const row=rows.find(r=>r.slug===p.slug);return{slug:p.slug,id:row?.id??null,revision:row?.revision??null};}),overwrite,republish};

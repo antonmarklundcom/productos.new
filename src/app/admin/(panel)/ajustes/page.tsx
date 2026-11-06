@@ -17,6 +17,7 @@ import { TIENDA } from "@/config/tienda";
 import { DEFAULT_REORDER_POINT } from "@/domain/admin-products";
 import { readStoreSettings } from "@/domain/store-settings";
 import {
+  MAX_RESUMEN_CONDICIONES,
   PAGINAS,
   heroEfectivo,
   lineasDeConfianza,
@@ -421,6 +422,8 @@ function ContactoSection({
 function EnvioDevolucionSection({ settings }: { settings: StoreSettings }) {
   const e = settings.envioDevolucion;
   const campos: Record<string, TipoCampo> = {
+    resumenEntrega: "texto",
+    resumenDevolucion: "texto",
     handlingDaysMin: "texto",
     handlingDaysMax: "texto",
     transitDaysMin: "texto",
@@ -434,6 +437,26 @@ function EnvioDevolucionSection({ settings }: { settings: StoreSettings }) {
   return (
     <Tarjeta id="envio" titulo={t("panel.ajustes.envio.titulo")} bajada={t("panel.ajustes.envio.bajada")}>
       <SettingsSectionForm expectedSettings={settings} seccion="envioDevolucion" campos={campos}>
+        <p className="text-muted-foreground text-xs">{t("panel.ajustes.envio.resumenAyuda")}</p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <CampoArea
+            nombre="resumenEntrega"
+            etiqueta={t("panel.ajustes.envio.resumenEntrega")}
+            valor={e.resumenEntrega}
+            porDefecto={t("producto.condiciones.entregaDefecto")}
+            max={MAX_RESUMEN_CONDICIONES}
+            filas={3}
+          />
+          <CampoArea
+            nombre="resumenDevolucion"
+            etiqueta={t("panel.ajustes.envio.resumenDevolucion")}
+            valor={e.resumenDevolucion}
+            porDefecto={t("producto.condiciones.devolucionDefecto")}
+            max={MAX_RESUMEN_CONDICIONES}
+            filas={3}
+          />
+        </div>
+
         <div className="grid gap-3 sm:grid-cols-2">
           <CampoNumero nombre="handlingDaysMin" etiqueta={t("panel.ajustes.envio.preparacionMin")} valor={e.handlingDaysMin} />
           <CampoNumero nombre="handlingDaysMax" etiqueta={t("panel.ajustes.envio.preparacionMax")} valor={e.handlingDaysMax} />

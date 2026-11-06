@@ -14,7 +14,7 @@ export type ImagesBucket = {
   put(key:string,value:Uint8Array,options:{httpMetadata:{contentType:string;cacheControl:string}}):Promise<unknown>;
   delete(keys:string[]):Promise<void>;
 };
-type D1RuntimeBindings = {IMAGES?:ImagesBucket; PUBLIC_CATALOG?: ReturnType<typeof publicReadContext>};
+type D1RuntimeBindings = {IMAGES?:ImagesBucket; WORKERS_INQUIRY_METRICS_ENABLED?:string; PUBLIC_CATALOG?: ReturnType<typeof publicReadContext>};
 const bindingsScope=new AsyncLocalStorage<D1RuntimeBindings>();
 export function getD1Bindings(){return bindingsScope.getStore()??{};}
 const secretScope = new AsyncLocalStorage<string | undefined>();

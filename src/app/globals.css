@@ -85,6 +85,18 @@
   body[data-barra-compra] [data-whatsapp-fab] {
     bottom: 5.5rem;
   }
+
+  body:has([data-product-inquiry]) [data-whatsapp-fab] {
+    display: none;
+  }
+
+  [data-sticky-product-inquiry] {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+
+  html:has([data-sticky-product-inquiry]) {
+    scroll-padding-bottom: calc(4.75rem + env(safe-area-inset-bottom));
+  }
 }
 
 /* == S9 ==

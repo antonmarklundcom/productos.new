@@ -1,6 +1,6 @@
 import { displayedPriceSql } from "./display-price-sql.mjs";
+import { publishedCatalogProduct as published } from "./catalog-publication.mjs";
 /** Public projection hydrated inside SQLite, avoiding dependent network reads. */
-const published = "p.is_active = 1 AND p.published_at IS NOT NULL AND c.is_active = 1";
 const minPrice = displayedPriceSql();
 const columns = `p.id, p.slug, p.name, p.description, p.brand, p.iva_rate AS ivaRate,
  p.sale_mode AS saleMode, p.show_price AS showPrice, c.name AS categoryName, c.slug AS categorySlug,
@@ -82,12 +82,11 @@ export async function productRead(db, slug) {
 }
 export async function categoryRead(db, query) {
  const page = Math.max(1, query.page ?? 1), perPage = Math.min(60, Math.max(1, query.perPage ?? 12));
- const args = [query.categorySlug], where = [published, "c.slug = ?"], having = [];
+ const args = [query.categorySlug], where = [published, "c.slug = ?"];
  if (query.brand) { where.push("p.brand = ?"); args.push(query.brand); }
- if (query.minPricePyg !== undefined) { having.push(`${minPrice} >= ?`); args.push(query.minPricePyg); }
- if (query.maxPricePyg !== undefined) { having.push(`${minPrice} <= ?`); args.push(query.maxPricePyg); }
- const from = `${joins} JOIN variants v ON v.product_id = p.id AND v.is_active = 1
-   WHERE ${where.join(" AND ")} GROUP BY p.id${having.length ? " HAVING " + having.join(" AND ") : ""}`;
+ if (query.minPricePyg !== undefined) { where.push(`${minPrice} >= ?`); args.push(query.minPricePyg); }
+ if (query.maxPricePyg !== undefined) { where.push(`${minPrice} <= ?`); args.push(query.maxPricePyg); }
+ const from = `${joins} WHERE ${where.join(" AND ")}`;
  const order = query.sort === "precio-asc" ? "minPrice IS NULL, minPrice ASC" :
    query.sort === "precio-desc" ? "minPrice IS NULL, minPrice DESC" :
    query.sort === "nuevos" ? "p.published_at DESC" : "p.name ASC";
@@ -109,15 +108,14 @@ export async function relatedRead(db, input, limit = 4) {
  args.push(input.categorySlug, input.productId, limit * 3);
  const [rows] = await readBatch(db, [projected(`SELECT ${columns}, ${minPrice} AS minPrice,
   CASE WHEN p.brand IS ? THEN 0 ELSE 1 END AS brandRank, ${proximity} AS priceDistance ${joins}
-  JOIN variants v ON v.product_id = p.id AND v.is_active = 1
-  WHERE ${published} AND c.slug = ? AND p.id != ? GROUP BY p.id
+  WHERE ${published} AND c.slug = ? AND p.id != ?
   ORDER BY brandRank, priceDistance, p.name ASC, p.id ASC LIMIT ?`, args, "brandRank, priceDistance, name ASC, id ASC")]);
  return rows.map(row => hydrate(row)).slice(0, limit);
 }
 export async function latestRead(db, _slugs = [], limit = 4) {
  void _slugs; // Retained call signature; selection is globally chronological.
  const [rows] = await readBatch(db, [projected(`SELECT ${columns} ${joins} WHERE ${published}
-  AND EXISTS (SELECT 1 FROM variants v WHERE v.product_id = p.id AND v.is_active = 1)
+
   ORDER BY p.published_at DESC, p.id DESC LIMIT ?`, [Math.min(60, Math.max(1, limit))], "publishedAt DESC, id DESC")]);
  return rows.map(row => ({products: [hydrate(row)]}));
 }

@@ -58,27 +58,31 @@ Usá la opción de seguimiento disponible en el sitio o escribí por los canales
     cuerpo: catalogOnly
       ? `**Catálogo para consultas**
 
-Este sitio presenta información de productos para facilitar consultas al comercio. La ficha no confirma por sí sola disponibilidad ni las condiciones de una operación. Confirmá precio, disponibilidad, entrega y demás detalles directamente con el comercio antes de coordinar una compra.
+Este sitio muestra productos y permite consultarlos a través de los canales publicados. La ficha y el envío de una consulta no confirman un pedido ni reservan stock. El sitio no cobra pagos.
 
-Los datos de identificación del comercio y cualquier condición particular deben ser publicados por su responsable en esta página.`
+Antes de coordinar una compra con el comercio, confirmá la disponibilidad, el precio final, la forma de pago, la entrega o el retiro y las condiciones de cambios y devoluciones.`
       : `**Información sobre compras**
 
-Antes de confirmar un pedido, revisá el producto, el precio, las opciones disponibles y el resumen que presenta el proceso de compra. Las condiciones específicas del comercio deben completarse y mantenerse actualizadas en esta página.
+Antes de confirmar un pedido, revisá el producto, el precio, las opciones disponibles y el resumen que presenta el proceso de compra.
 
 Si necesitás aclarar algún dato antes de comprar, consultá por los canales publicados en la página Contacto.`,
   },
   privacidad: {
     titulo: "Privacidad",
     cuerpo: catalogOnly
-      ? `**Información sobre el uso de datos**
+      ? `**Datos del catálogo en tu navegador**
 
-Al usar el catálogo y enviar una consulta, pueden tratarse los datos que ingreses y los necesarios para que funcione el sitio. El comercio debe completar aquí quién es responsable, qué datos utiliza, con qué finalidad, cuánto tiempo los conserva y cómo recibir consultas sobre privacidad.
+El sitio guarda en el navegador los productos que viste y las variantes que elegiste para recordarlos en próximas visitas. Para mostrar fichas actualizadas de los productos vistos, el navegador solicita al catálogo sus identificadores. Podés borrar estos datos desde los ajustes de tu navegador.
 
-Para comunicarte con el comercio, visitá la página Contacto para encontrar los canales publicados.`
-      : `**Información sobre el uso de datos**
+**Consultas por WhatsApp**
 
-Al navegar, comprar o usar las funciones disponibles, pueden tratarse los datos necesarios para prestar esos servicios. El comercio debe completar aquí quién es responsable, qué datos utiliza, con qué finalidad, cuánto tiempo los conserva, qué servicios intervienen y cómo recibir consultas sobre privacidad.
+Si usás un enlace a WhatsApp, se abre ese servicio con un texto sugerido que puede incluir el producto y la variante. Podés revisar el texto y elegir qué datos compartir antes de enviar el mensaje.
 
-Para comunicarte con el comercio, visitá la página Contacto para encontrar los canales publicados.`,
+Para consultas sobre privacidad, usá los canales publicados en Contacto.`
+      : `**Datos de tu pedido**
+
+El sitio utiliza los datos que ingresás al comprar para registrar el pedido, coordinar la entrega y permitirte consultar su estado. El navegador también puede guardar los productos que agregaste al carrito y tus preferencias del catálogo.
+
+Para consultas sobre privacidad, usá los canales publicados en Contacto.`,
   },
 };

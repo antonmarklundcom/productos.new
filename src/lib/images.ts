@@ -8,6 +8,7 @@
  */
 
 
+import { catalogOnly } from "@/config/catalog-capabilities";
 import {
   boxesFor,
   jpegKeyFor,
@@ -51,6 +52,12 @@ export type ImageSize = "thumb" | "card" | "detail" | "og" | "hero" | "qr" | "lo
  * como un error del comercio.
  */
 export const OG_IMAGE_SIZE = { width: 1200, height: 630 } as const;
+
+export const STORE_OG_FALLBACK = {
+  url: catalogOnly ? "/assets/catalog-share.png" : "/opengraph-image",
+  ...OG_IMAGE_SIZE,
+  type: "image/png",
+} as const;
 
 const SIZE_TRANSFORMS: Record<ImageSize, string> = {
   thumb: "c_fill,w_160,h_160",

@@ -8,6 +8,7 @@ import {SQLiteAsyncDialect} from 'drizzle-orm/sqlite-core';
 import {sql} from 'drizzle-orm';
 import {d1StagingPlugin} from '../../workers/d1/build-plugin.mjs';
 import {MAX_LOGIN_WINDOW_MS,LOGIN_CLEANUP_BATCH,pruneLoginLimits} from '../../workers/d1/login-limit-policy.mjs';
+import {publishedCatalogProduct} from '../../workers/d1/catalog-publication.mjs';
 import path from 'node:path';
 const root=path.resolve(import.meta.dirname,'../..');
 const stripImports=source=>source.replace(/^import[\s\S]*?;\r?\n/gm,'').replace(/^export \{[^}]*\} from [^;]*;\r?\n/gm,'');
@@ -57,7 +58,7 @@ test('D1 unauthorized dashboard falls back to authenticated availability without
  const guardSource=d1StagingPlugin(root).transform(readFileSync(guardPath,'utf8'),guardPath).code;
  const guards=load(guardSource,{validateAdminSession:async()=>({id:1,role}),getSession:async()=>({}),can,redirect:url=>{throw new Error('REDIRECT:'+url);},t:()=>'',safeError:x=>x,UnauthorizedError:class extends Error{},ForbiddenError:class extends Error{},actorLabel:()=>'',assertCanTransitionTo:()=>{},requireOwner:()=>{},requireStaff:()=>{}});
  const jsx=(type,props)=>({type,props});
- const summary=load(readFileSync(path.join(root,'workers/d1/admin-summary.tsx'),'utf8'),{requireCapabilityPage:guards.requireCapabilityPage,can,sql,getNativeDb:()=>({get:async()=>{reads++;return{products:1,published:1,categories:1,images:1};}}),Link:()=>{},require:()=>({jsx,jsxs:jsx})}).default;
+ const summary=load(readFileSync(path.join(root,'workers/d1/admin-summary.tsx'),'utf8'),{requireCapabilityPage:guards.requireCapabilityPage,can,sql,publishedCatalogProduct,getNativeDb:()=>({get:async()=>{reads++;return{products:1,published:1,categories:1,images:1};}}),Link:()=>{},require:()=>({jsx,jsxs:jsx})}).default;
  await assert.rejects(summary(),/REDIRECT:\/admin\/estado\?seccion=pedidos/);assert.equal(reads,0);
  for(role of ['owner','staff']){await summary();}assert.equal(reads,2);
  const pageSource=readFileSync(path.join(root,'src/app/admin/(panel)/estado/page.tsx'),'utf8');

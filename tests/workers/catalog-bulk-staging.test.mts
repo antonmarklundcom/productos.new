@@ -7,8 +7,9 @@ import {mutateBulkCatalog,duplicateCatalogProduct} from "../../workers/d1/native
 import {applyStoredCatalogPlan,loadCatalogPlan,catalogPlanFingerprint,getOrCreateCatalogPlan} from "../../workers/d1/catalog-staging";
 import {importFingerprint} from "../../workers/d1/catalog-durability";
 import {writeD1CatalogBatch} from "../../workers/d1/catalog-import-write";
-import {parseCatalogo} from "../../src/domain/catalog-import";
+import {parseCatalogo, type CatalogoProducto} from "../../src/domain/catalog-import";
 import {withD1Database} from "../../workers/d1/database";
+import {productRead} from "../../workers/d1/public-catalog-sql.mjs";
 
 test("bulk and staged receipts survive lost ACKs, reject stale/foreign writes, and resume legacy partial imports",{timeout:120000},async()=>{
  const platform=await getPlatformProxy<{DB:AnyD1Database}>({configPath:"workers/d1/local-settings-test.wrangler.jsonc",persist:false});
@@ -24,6 +25,11 @@ test("bulk and staged receipts survive lost ACKs, reject stale/foreign writes, a
  assert.deepEqual(await mutateBulkCatalog(db,1,input,"active"),{afectados:1,conflictos:[2]});
  assert.equal(await db.prepare("SELECT revision FROM products WHERE id=1").first("revision"),2);
  await assert.rejects(mutateBulkCatalog(db,2,input,"active"),/otro usuario/);
+ const rejectedActivation={operationId:crypto.randomUUID(),productIds:[1,2],expectedRevisions:{"1":2,"2":2},isActive:true};
+ await assert.rejects(mutateBulkCatalog(db,1,rejectedActivation,"active"), {name:"AdminInputError",message:/variante activa/});
+ assert.equal(await db.prepare("SELECT revision FROM products WHERE id=1").first("revision"),2);
+ assert.equal(await db.prepare("SELECT is_active FROM products WHERE id=1").first("is_active"),0);
+ assert.equal(await db.prepare("SELECT COUNT(*) n FROM admin_mutation_receipts WHERE id=?").bind(rejectedActivation.operationId).first("n"),0);
  const copyInput={operationId:crypto.randomUUID(),productId:1,expectedRevision:2};
  const copy=await duplicateCatalogProduct(lost,1,copyInput);
  assert.equal((await duplicateCatalogProduct(db,1,copyInput)).productId,copy.productId);
@@ -31,7 +37,19 @@ test("bulk and staged receipts survive lost ACKs, reject stale/foreign writes, a
  assert.equal(draft?.is_active,0);assert.equal(draft?.published_at,null);
  assert.equal(await db.prepare("SELECT on_hand FROM variants WHERE product_id=?").bind(copy.productId!).first("on_hand"),0);
  const id=crypto.randomUUID(),fingerprint=catalogPlanFingerprint(new Uint8Array([1]),false,false,true);
- const product={slug:"nuevo",name:"Nuevo",categoryName:"Prueba",description:null,brand:null,ivaRate:10,saleMode:"enquiry",showPrice:false,fotos:[],variants:[{sku:"NUEVO",label:"Unica",pricePyg:1000,compareAtPyg:null,onHand:0}]};
+ const product:CatalogoProducto={slug:"nuevo",name:"Nuevo",categoryName:"Prueba",description:null,brand:null,ivaRate:10,saleMode:"enquiry",showPrice:false,fotos:[],variants:[{sku:"NUEVO",label:"Unica",pricePyg:1000,compareAtPyg:null,onHand:0}]};
+ await db.prepare("INSERT INTO categories(id,slug,name,is_active) VALUES (2,'oculta','Oculta',0)").run();
+ const hiddenProduct={...product,slug:"oculto",categoryName:"Oculta",variants:[{...product.variants[0]!,sku:"OCULTO"}]};
+ await writeD1CatalogBatch(db,[hiddenProduct]);
+ assert.equal(await db.prepare("SELECT category_id FROM products WHERE slug='oculto'").first("category_id"),2);
+ assert.deepEqual(await productRead(db,"oculto"),{product:null,reviews:[]});
+ await db.prepare("UPDATE products SET is_active=1,published_at=CURRENT_TIMESTAMP WHERE id=1").run();
+ await db.prepare("UPDATE variants SET is_active=0 WHERE sku='UNO'").run();
+ const invalidLegacy={...product,slug:"uno",variants:[{...product.variants[0]!,sku:"UNO"}]};
+ await assert.rejects(writeD1CatalogBatch(db,[product,invalidLegacy]),{name:"AdminInputError",message:/uno.*activá una variante/});
+ assert.equal(await db.prepare("SELECT COUNT(*) n FROM products WHERE slug='nuevo'").first("n"),0);
+ await writeD1CatalogBatch(db,[invalidLegacy],false,undefined,undefined,true);
+ assert.equal(await db.prepare("SELECT is_active FROM variants WHERE sku='UNO'").first("is_active"),1);
  const plan={productos:[product],errores:[],productosNuevos:1,productosActualizar:0,variantesNuevas:1,variantesActualizar:0,fotosNuevas:0,categoriasNuevas:[],categoryIds:[["prueba",1]],baseline:[{slug:"nuevo",id:null,revision:null}],overwrite:false,republish:false};
  await db.prepare("INSERT INTO catalog_import_plans(import_id,actor_id,fingerprint,plan_json,mode) VALUES(?,1,?,?,'staged')").bind(id,fingerprint,JSON.stringify(plan)).run();
  await db.prepare("INSERT INTO catalog_import_runs(id,actor_id,fingerprint,total_products,summary_json) VALUES(?,1,?,1,?)").bind(id,fingerprint,JSON.stringify(plan)).run();

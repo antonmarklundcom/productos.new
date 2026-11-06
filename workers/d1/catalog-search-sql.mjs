@@ -1,5 +1,7 @@
 import {readBatch, catalogRead} from "./public-catalog-sql.mjs";
 import {displayedPriceSql} from "./display-price-sql.mjs";
+import {publishedCatalogProduct} from "./catalog-publication.mjs";
+import {catalogSearchAliases} from "./search-aliases.mjs";
 import {normalizedSearchSqlExpression, foldSearchTerm, normalizeSearchTerm} from "./search-normalization.mjs";
 export {foldSearchTerm, normalizeSearchTerm};
 const literalLike = value => value.replace(/[!%_]/g, value => "!" + value);
@@ -10,9 +12,16 @@ export function searchPlan(term, options = {}, precomputed = true) {
  const empty = {products:[],total:0,page,perPage,totalPages:1};
  if (cleaned.length < 2 || cleaned.length > 160 || tokens.length > 12) return {empty};
  const fields = precomputed ? ["p.search_name","p.search_brand","p.search_description"] : ["p.name","p.brand","p.description"].map(normalizedSearchSqlExpression);
- const where = ["p.is_active = 1 AND p.published_at IS NOT NULL AND c.is_active = 1",
-   ...tokens.map(() => "(" + fields.map(field => field + " LIKE ? ESCAPE '!'").join(" OR ") + ")")];
- const args = tokens.flatMap(token => fields.map(() => "%" + literalLike(token) + "%"));
+ const aliases = catalogSearchAliases.get(cleaned) ?? [];
+ const tokenPredicate = "(" + fields.map(field => field + " LIKE ? ESCAPE '!'").join(" OR ") + ")";
+ const matcher = words => ({
+  sql: words.map(() => tokenPredicate).join(" AND "),
+  args: words.flatMap(word => fields.map(() => "%" + literalLike(word) + "%")),
+ });
+ const literal = matcher(tokens);
+ const matches = [literal, ...aliases.map(alias => matcher(alias.split(" ")))];
+ const where = [publishedCatalogProduct, "(" + matches.map(match => "(" + match.sql + ")").join(" OR ") + ")"];
+ const args = matches.flatMap(match => match.args);
  const baseFrom = "FROM products p JOIN categories c ON c.id = p.category_id WHERE " + where.join(" AND ");
  const baseArgs = [...args];
  if (options.categorySlug) {where.push("c.slug = ?"); args.push(options.categorySlug);}
@@ -25,8 +34,9 @@ export function searchPlan(term, options = {}, precomputed = true) {
   }
  }
  const name = fields[0], brand = fields[1];
- const ranking = `CASE WHEN ${name} = ? THEN 0 WHEN ${name} LIKE ? ESCAPE '!' THEN 1 WHEN ${brand} = ? THEN 2 WHEN ${tokens.map(() => name+" LIKE ? ESCAPE '!'").join(" AND ")} THEN 3 ELSE 4 END`;
- const rankArgs = [cleaned,literalLike(cleaned)+"%",cleaned,...tokens.map(token => "%"+literalLike(token)+"%")];
+ const aliasRank = aliases.length ? ` WHEN ${literal.sql} THEN 4 ELSE 5` : " ELSE 4";
+ const ranking = `CASE WHEN ${name} = ? THEN 0 WHEN ${name} LIKE ? ESCAPE '!' THEN 1 WHEN ${brand} = ? THEN 2 WHEN ${tokens.map(() => name+" LIKE ? ESCAPE '!'").join(" AND ")} THEN 3${aliasRank} END`;
+ const rankArgs = [cleaned,literalLike(cleaned)+"%",cleaned,...tokens.map(token => "%"+literalLike(token)+"%"),...(aliases.length ? literal.args : [])];
  const from = "FROM products p JOIN categories c ON c.id = p.category_id WHERE " + where.join(" AND ");
  const order = options.sort === "precio-asc" ? `${price} IS NULL, ${price} ASC, ${name}, p.id` :
    options.sort === "precio-desc" ? `${price} IS NULL, ${price} DESC, ${name}, p.id` :

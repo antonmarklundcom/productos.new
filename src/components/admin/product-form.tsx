@@ -246,6 +246,9 @@ export function ProductForm({
         </label>
         <p className="text-muted-foreground text-xs">
           {t("panel.producto.publicadoAyuda")}
+          {!catalogCapabilities.checkout && (
+            <> Para publicar un producto de consulta, agregá al menos una variante activa. El modo muestra admite una ficha sin variantes. Podés guardar como borrador y agregar las variantes después.</>
+          )}
         </p>
 
         {/* == S17 == `isFeatured` ya lo acepta `saveProduct` (O14); esto es

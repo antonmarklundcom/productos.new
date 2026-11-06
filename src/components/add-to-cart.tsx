@@ -7,6 +7,8 @@ import { toast } from "sonner";
 import { QuantityStepper } from "@/components/quantity-stepper";
 import { StockAlertForm } from "@/components/stock-alert-form";
 import { StockBadge } from "@/components/stock-badge";
+import { StickyBuyBar } from "@/components/sticky-buy-bar";
+import { reportProductInquiryClick } from "@/components/product-inquiry-metrics";
 import { PriceTag } from "@/components/price-tag";
 import { Button } from "@/components/ui/button";
 import { VariantInquiryLink } from "@/components/variant-inquiry-link";
@@ -32,18 +34,22 @@ import { t } from "@/i18n/client";
  * segunda es `WHATSAPP_NUMBER` ya normalizado; sin ella no hay link de
  * consulta por variante.
  */
+const PRODUCT_INQUIRY_ID = "consultar-producto";
+
 export function AddToCart({
   product,
   stockAlertsEnabled = false,
   whatsappPhone = null,
   productUrl = null,
   inquiryLinks = {},
+  inquiryMetricsEnabled = false,
 }: {
   product: CatalogProductDetail;
   stockAlertsEnabled?: boolean;
   whatsappPhone?: string | null;
   productUrl?: string | null;
   inquiryLinks?: Record<number, string>;
+  inquiryMetricsEnabled?: boolean;
 }) {
   const saleMode = effectiveSaleMode(product.saleMode);
   const purchasable =
@@ -81,6 +87,12 @@ export function AddToCart({
   const selected = product.variants.find((variant) => variant.id === variantId);
   const max = Math.max(1, Math.min(99, selected?.available ?? 0));
   const canAdd = Boolean(purchasable && selected && selected.available > 0);
+  const inquiryHref = selected && saleMode === "enquiry"
+    ? inquiryLinks[selected.id]
+    : undefined;
+  const reportInquiry = (placement: "inline" | "sticky") => {
+    if (inquiryMetricsEnabled) reportProductInquiryClick(product.id, placement);
+  };
 
   return (
     <div className="space-y-4">
@@ -128,6 +140,7 @@ export function AddToCart({
               compareAtPyg={selected.compareAtPyg}
               size="lg"
               showIvaNote={purchasable}
+              indicative={!purchasable}
             />
           ) : null}
           {purchasable ? (
@@ -141,9 +154,6 @@ export function AddToCart({
               )}
             </span>
           )}
-          {!purchasable && product.showPrice !== false ? (
-            <p className="text-sm">{t("producto.precioOrientativo")}</p>
-          ) : null}
         </div>
       ) : null}
 
@@ -194,18 +204,32 @@ export function AddToCart({
             />
           ) : null}
         </div>
-      ) : selected &&
-        saleMode === "enquiry" &&
-        inquiryLinks[selected.id] ? (
-        <a
-          href={inquiryLinks[selected.id]}
-          target="_blank"
-          rel="noopener noreferrer"
-          data-testid={TESTIDS.variantInquiryLink}
-          className="inline-flex rounded-lg border px-4 py-3"
-        >
-          {t("producto.consultarWhatsApp")}
-        </a>
+      ) : inquiryHref ? (
+        <>
+          <Button asChild size="lg" className="min-h-11">
+            <a
+              id={PRODUCT_INQUIRY_ID}
+              href={inquiryHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-product-inquiry=""
+              data-testid={TESTIDS.variantInquiryLink}
+              onClick={() => reportInquiry("inline")}
+            >
+              {t("producto.consultarWhatsApp")}
+            </a>
+          </Button>
+          <StickyBuyBar
+            targetId={PRODUCT_INQUIRY_ID}
+            name={product.name}
+            price={null}
+            inquiry={{
+              href: inquiryHref,
+              variantLabel: product.variants.length > 1 ? selected?.label : undefined,
+              onClick: () => reportInquiry("sticky"),
+            }}
+          />
+        </>
       ) : null}
 
       {/* Sólo cuando la variante elegida no tiene disponibilidad y la page

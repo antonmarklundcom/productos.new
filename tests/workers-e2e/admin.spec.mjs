@@ -504,3 +504,25 @@ test("restored private synthetic owner fixture authenticates through built Worke
     await target.close();
   }
 });
+
+test("Dropi queue is private and links staff to the exact variant offer", async ({ page }) => {
+  await h.db.prepare("INSERT INTO supplier_offers(id,variant_id,source_type,source,is_active,unit_cost_pyg,supplier_stock) VALUES(21,1,'dropi','Synthetic private supplier',1,12500,0)").run();
+  const queue = "/admin/productos/proveedores";
+  const anon = await fetch(h.baseURL + queue, { redirect: "manual" });
+  expect(anon.status).toBe(307);
+  expect(anon.headers.get("cache-control")).toContain("no-store");
+  expect(await anon.text()).not.toContain("Synthetic private supplier");
+  const publicProduct = await fetch(h.baseURL + "/producto/synthetic-visible");
+  expect(await publicProduct.text()).not.toContain("Synthetic private supplier");
+
+  await login(page, "staff");
+  await page.goto(h.baseURL + "/admin/productos");
+  await page.getByRole("link", { name: "Revisar ofertas Dropi" }).click();
+  await expect(page.getByRole("heading", { name: "Revisión de proveedores Dropi" })).toBeVisible();
+  await expect(page.getByText("Synthetic · SKU SYNTH-1 · Oferta #21", { exact: true })).toBeVisible();
+  await expect(page.getByText("Fecha sin confirmar", { exact: true })).toBeVisible();
+  const review = page.getByRole("link", { name: "Revisar esta oferta" });
+  await expect(review).toHaveAttribute("href", "/admin/productos/1#supplier-offer-21");
+  await review.click();
+  await expect(page.locator("#supplier-offer-21")).toBeVisible();
+});

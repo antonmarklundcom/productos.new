@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { catalogOnly } from "@/config/catalog-capabilities";
 
 import { CatalogImportForm } from "@/components/admin/catalog-import";
 import { CsvDownloadButton } from "@/components/admin/csv-download";
@@ -110,12 +111,19 @@ export default async function AdminProductsPage({
         <h1 className="text-xl font-semibold tracking-tight">
           {t("panel.productos.titulo")}
         </h1>
-        <Link
-          href="/admin/productos/nuevo"
-          className="bg-primary text-primary-foreground rounded-lg px-4 py-2 text-sm font-medium"
-        >
-          {t("panel.productos.nuevo")}
-        </Link>
+        <div className="flex flex-wrap items-center gap-3">
+          {catalogOnly && (
+            <Link href="/admin/productos/proveedores" className="rounded-lg border px-4 py-2 text-sm font-medium">
+              Revisar ofertas Dropi
+            </Link>
+          )}
+          <Link
+            href="/admin/productos/nuevo"
+            className="bg-primary text-primary-foreground rounded-lg px-4 py-2 text-sm font-medium"
+          >
+            {t("panel.productos.nuevo")}
+          </Link>
+        </div>
       </div>
 
       <form className="mt-4 flex gap-2" action="/admin/productos">
