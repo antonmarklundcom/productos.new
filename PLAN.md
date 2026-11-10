@@ -10,8 +10,7 @@ con las seis fases O14–S19 de este último mergeadas en dos ventanas.
 la auditoría del template, `fable/TEMPLATE-REVIEW.md` (2026-09-19). La próxima
 arranca desde `fable/PROMPT.md`.
 
-**Stack (locked):** Next.js 16 + Drizzle + **Hostinger MySQL** + **Hostinger Node.js slot** + Cloudinary.
-No Supabase, no Vercel, no Cloudflare. Deploy mechanics live in `DEPLOY.md` and the `nextjs-deploy-hostinger` skill.
+**Stack (desde 2026-10-10):** el sitio en vivo lo sirve un Cloudflare Worker (`productos`, build vinext) con D1 (`productos-workers-staging`) y R2 (`productos-images`); ver `docs/STATUS-2026-11.md`. La distribución Next.js + Drizzle + Hostinger MySQL/Node.js queda en el repo sólo como rollback. Deploy de Hostinger: `DEPLOY.md`; deploy en vivo: `docs/operations/`.
 
 **Estado:** la **FASE 2 está terminada y mergeada** — PR A a U, con CI verde completo en cada uno. El plan original (PR #1–#5: schema, vidriera, checkout, admin, Pagopar) y los PRs de endurecimiento #6–#12 ya estaban antes; el historial completo vive en `TASKS.md`. Lo que queda abierto no es código de este repo: son las cuentas y los datos de terceros que lista `TASKS.md` §"Bloqueado por terceros". Este archivo queda como el registro de qué se construyó en la FASE 2 —cuentas de cliente opcionales, roles de verdad, cupones, los ABMs que faltaban del panel, UX de la vidriera, i18n por tienda y el arranque automatizado de una tienda nueva— y de por qué cada decisión salió como salió.
 
