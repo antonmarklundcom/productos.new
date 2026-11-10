@@ -28,7 +28,9 @@ leé:
   tiendas (`.github/workflows/distribuir.yml` + `tiendas.json`): NEW-STORE.md §4f y
   § "La distribución automática del template". Cron consolidado (las tres entradas,
   hora Asunción y UTC): DEPLOY.md §5.
-- **DEPLOY.md** — el runbook de Hostinger.
+- **DEPLOY.md** — el runbook de Hostinger **del template**. No describe el sitio vivo: productos.com.py
+  corre en un Cloudflare Worker + D1 + R2 desde 2026-10-10 (`wrangler.jsonc`,
+  `docs/operations/workers-domain-cutover-2026-10-10.md`). Estado real: `docs/STATUS-2026-11.md`.
 
 ## La regla que más importa: maquinaria vs. piel
 

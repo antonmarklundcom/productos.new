@@ -10,8 +10,13 @@ con las seis fases O14–S19 de este último mergeadas en dos ventanas.
 la auditoría del template, `fable/TEMPLATE-REVIEW.md` (2026-09-19). La próxima
 arranca desde `fable/PROMPT.md`.
 
-**Stack (locked):** Next.js 16 + Drizzle + **Hostinger MySQL** + **Hostinger Node.js slot** + Cloudinary.
-No Supabase, no Vercel, no Cloudflare. Deploy mechanics live in `DEPLOY.md` and the `nextjs-deploy-hostinger` skill.
+**Stack del template (histórico):** Next.js 16 + Drizzle + Hostinger MySQL + Hostinger Node.js slot + Cloudinary.
+Eso describe el template, no lo que sirve productos.com.py hoy. **Desde el 2026-10-10 productos.com.py lo sirve un
+Cloudflare Worker** (`productos` en `wrangler.jsonc:3`) con la base D1 `productos-workers-staging`
+(`wrangler.jsonc:40`) y las imágenes en el bucket R2 `productos-images` (`wrangler.jsonc:36`); ver
+`docs/operations/workers-domain-cutover-2026-10-10.md:21-25`. Es un catálogo de consultas sin checkout
+(`docs/operations/workers-domain-cutover-2026-10-10.md:33`). Estado actual: `docs/STATUS-2026-11.md`.
+Las menciones a Hostinger, MySQL y Cloudinary más abajo son historia de la FASE 2.
 
 **Estado:** la **FASE 2 está terminada y mergeada** — PR A a U, con CI verde completo en cada uno. El plan original (PR #1–#5: schema, vidriera, checkout, admin, Pagopar) y los PRs de endurecimiento #6–#12 ya estaban antes; el historial completo vive en `TASKS.md`. Lo que queda abierto no es código de este repo: son las cuentas y los datos de terceros que lista `TASKS.md` §"Bloqueado por terceros". Este archivo queda como el registro de qué se construyó en la FASE 2 —cuentas de cliente opcionales, roles de verdad, cupones, los ABMs que faltaban del panel, UX de la vidriera, i18n por tienda y el arranque automatizado de una tienda nueva— y de por qué cada decisión salió como salió.
 

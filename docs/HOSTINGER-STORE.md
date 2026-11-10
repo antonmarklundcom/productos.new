@@ -1,8 +1,10 @@
 # Productos: deploy and opening checklist
 
+> **Histórico:** esta guía es para la distribución Next.js en Hostinger. productos.com.py dejó Hostinger el 2026-10-10 y hoy lo sirve un Cloudflare Worker (`wrangler.jsonc`, `docs/operations/workers-domain-cutover-2026-10-10.md:21-25`). Ver `docs/STATUS-2026-11.md`.
+
 Repository: `https://github.com/antonmarklundcom/productos.new` · Branch: `main` · Domain: `https://productos.com.py`.
 
-The destination was inspected at its initial commit `9f04114b018f48dfc40bc009508c160b53bba7fa` (only `.gitignore`). The documented `bootstrap:repo` copied template commit `c5422e3c9184f0c4e4575da3db2774329d063214`. `.template-baseline` records that full SHA; the destination's Git history/origin was preserved and `template` points to `antonmarklundcom/ecom`. The old Productos repository is not involved.
+The destination was inspected at its initial commit `9f04114b018f48dfc40bc009508c160b53bba7fa` (only `.gitignore`). The documented `bootstrap:repo` copied template commit `c5422e3c9184f0c4e4575da3db2774329d063214`. `.template-baseline` records that full SHA; the destination's Git history/origin was preserved. No `template` remote exists in this checkout (`git remote -v` lists only `origin`); to compare with the template add it by hand (`git remote add template https://github.com/antonmarklundcom/ecom.git`). The old Productos repository is not involved.
 
 ## Hostinger settings
 

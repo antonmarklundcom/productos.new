@@ -15,7 +15,9 @@ base y productos — ver **[NEW-STORE.md](./NEW-STORE.md)**.
 
 Guaraníes enteros, español (voseo), WhatsApp-first, mobile-first.
 
-**Stack:** Next.js 16 (App Router, TS) · Drizzle ORM · Hostinger MySQL · Hostinger Node.js · Cloudinary · Tailwind + shadcn/ui · Zustand · Zod
+**Stack de la distribución Next.js (template):** Next.js 16 (App Router, TS) · Drizzle ORM · MySQL · Node.js · Tailwind + shadcn/ui · Zustand · Zod.
+**Lo que sirve productos.com.py hoy** (desde 2026-10-10): Cloudflare Worker `productos` + D1 + R2, catálogo sin checkout
+(`wrangler.jsonc:3,36,40`; `docs/operations/workers-domain-cutover-2026-10-10.md:21-33`). Ver [docs/STATUS-2026-11.md](docs/STATUS-2026-11.md).
 
 ## Documentos
 
@@ -247,7 +249,7 @@ y si tiene el largo mínimo.
 
 ## Decisiones tomadas
 
-- **Hosting:** Hostinger (cuenta LATAM), slot Node.js + MySQL propio. No Supabase, no Vercel.
+- **Hosting:** productos.com.py corre en Cloudflare Workers + D1 + R2 desde 2026-10-10 (`wrangler.jsonc`; `docs/operations/workers-domain-cutover-2026-10-10.md:21-25`). Hostinger (slot Node.js + MySQL) fue el hosting anterior y quedó como camino de vuelta (`docs/STATUS-2026-11.md`). Un checkout real requiere reconstruir la tienda desde el template.
 - **Pagos MVP:** transferencia SPI/QR manual + contra entrega. Pagopar es el PR #5, post-lanzamiento.
 - **Cuentas de compradores opcionales y apagadas por defecto** (`TIENDA.cuentasClientes`): el camino principal sigue siendo el link con token vía WhatsApp + búsqueda por nro. de pedido y teléfono. El checkout de invitado no cambia nunca — ver NEW-STORE.md §4b.
 - **Sin facturación legal en el MVP.** El schema queda listo para conectar FacturaPY después (contrato en `ARCH.md` §7).
