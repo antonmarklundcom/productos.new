@@ -2,7 +2,7 @@
 
 Repository: `https://github.com/antonmarklundcom/productos.new` · Branch: `main` · Domain: `https://productos.com.py`.
 
-The destination was inspected at its initial commit `9f04114b018f48dfc40bc009508c160b53bba7fa` (only `.gitignore`). The documented `bootstrap:repo` copied template commit `c5422e3c9184f0c4e4575da3db2774329d063214`. `.template-baseline` records that full SHA; the destination's Git history/origin was preserved and `template` points to `antonmarklundcom/ecom`. The old Productos repository is not involved.
+The destination was inspected at its initial commit `9f04114b018f48dfc40bc009508c160b53bba7fa` (only `.gitignore`). The documented `bootstrap:repo` copied template commit `c5422e3c9184f0c4e4575da3db2774329d063214`. `.template-baseline` records that full SHA; the destination's Git history/origin was preserved. This checkout has only `origin`; there is no `template` remote. Add it by hand (`git remote add template https://github.com/antonmarklundcom/ecom.git`) before `pnpm template:diff` / `pnpm template:sync` can run. The old Productos repository is not involved.
 
 ## Hostinger settings
 

@@ -15,7 +15,7 @@ base y productos — ver **[NEW-STORE.md](./NEW-STORE.md)**.
 
 Guaraníes enteros, español (voseo), WhatsApp-first, mobile-first.
 
-**Stack:** Next.js 16 (App Router, TS) · Drizzle ORM · Hostinger MySQL · Hostinger Node.js · Cloudinary · Tailwind + shadcn/ui · Zustand · Zod
+**Stack (en vivo desde 2026-10-10):** Cloudflare Worker `productos` (vinext) · D1 `productos-workers-staging` · R2 `productos-images`. Build Next.js 16 (App Router, TS) · Drizzle ORM · Hostinger MySQL/Node.js conservado sólo como rollback · Tailwind + shadcn/ui · Zustand · Zod. Ver [docs/STATUS-2026-11.md](docs/STATUS-2026-11.md).
 
 ## Documentos
 
@@ -247,7 +247,7 @@ y si tiene el largo mínimo.
 
 ## Decisiones tomadas
 
-- **Hosting:** Hostinger (cuenta LATAM), slot Node.js + MySQL propio. No Supabase, no Vercel.
+- **Hosting:** Cloudflare Workers + D1 + R2 desde 2026-10-10 (catálogo sin checkout); la distribución Hostinger (cuenta LATAM, Node.js + MySQL) queda sólo como rollback. No Supabase, no Vercel.
 - **Pagos MVP:** transferencia SPI/QR manual + contra entrega. Pagopar es el PR #5, post-lanzamiento.
 - **Cuentas de compradores opcionales y apagadas por defecto** (`TIENDA.cuentasClientes`): el camino principal sigue siendo el link con token vía WhatsApp + búsqueda por nro. de pedido y teléfono. El checkout de invitado no cambia nunca — ver NEW-STORE.md §4b.
 - **Sin facturación legal en el MVP.** El schema queda listo para conectar FacturaPY después (contrato en `ARCH.md` §7).

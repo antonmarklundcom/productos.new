@@ -28,7 +28,7 @@ leé:
   tiendas (`.github/workflows/distribuir.yml` + `tiendas.json`): NEW-STORE.md §4f y
   § "La distribución automática del template". Cron consolidado (las tres entradas,
   hora Asunción y UTC): DEPLOY.md §5.
-- **DEPLOY.md** — el runbook de Hostinger.
+- **DEPLOY.md** — el runbook de Hostinger (rollback / flujo transaccional), no el del sitio en vivo. Para productos.com.py (Workers + D1 + R2) ver `docs/operations/workers-main-production-2026-10-11.md` y `docs/STATUS-2026-11.md`.
 
 ## La regla que más importa: maquinaria vs. piel
 
