@@ -172,5 +172,6 @@ test("robots.txt is a constant response (no DB, no render), production origin on
   assert.equal(prod(new Request("https://productos.com.py/robots.txt", {method: "POST"})), null);
   assert.equal(prod(new Request("https://productos.com.py/other")), null);
   assert.equal(prod(new Request("https://stage.workers.dev/robots.txt")), null, "non-production keeps the Disallow-all path");
+  assert.doesNotMatch(ROBOTS_TXT, /Cloudflare Managed/);
   assert.match(ROBOTS_TXT, /Sitemap: https:\/\/productos\.com\.py\/sitemap\.xml\n$/);
 });
