@@ -13,6 +13,7 @@ import { publicReadContext } from "./d1/public-data-cache.mjs";
 import { canonicalDomainResponse } from "./catalog-domain.mjs";
 import { handleAdminRecovery } from "./d1/admin-recovery.mjs";
 import { handleCatalogApi } from "./d1/public-endpoints.mjs";
+import { robotsResponse } from "./d1/robots-response.mjs";
 import { handleInquiryMetrics } from "./d1/inquiry-metrics.mjs";
 export * from "vinext/server/fetch-handler";
 
@@ -20,6 +21,8 @@ const previewWorker = {
   async fetch(request, env, ctx) {
     const canonical = canonicalDomainResponse(request, env);
     if (canonical) return canonical;
+    const robots = robotsResponse(request, env);
+    if (robots) return robots;
     if (env.WORKERS_D1_STAGING === "true") {
       const inquiryMetrics = await handleInquiryMetrics(request, env);
       if (inquiryMetrics) return inquiryMetrics;

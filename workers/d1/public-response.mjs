@@ -43,15 +43,40 @@ export function cacheableCatalogResponse(response) {
     (response.headers.get("content-type") || "").includes("text/html") &&
     vary.every(v => !v || [...representationHeaders, "accept-encoding"].includes(v));
 }
-function publicResponse(response, request, env, state, ttl, expiresAt) {
+// Anonymous home page: long-lived entries guarded by a catalogue fingerprint.
+// A kill switch (WORKERS_HOME_CACHE="0") restores the plain short-TTL behaviour.
+export const HOME_TRUST_SECONDS = 30;   // served without any D1 check
+export const HOME_MAX_SECONDS = 600;    // hard ceiling, even if fingerprint is unchanged
+export const homeCacheEnabled = (env) => env.WORKERS_HOME_CACHE !== "0";
+const homePath = (request) => new URL(request.url).pathname === "/";
+// One tiny D1 read (~270 rows). Every catalogue write bumps products.revision/updated_at
+// (productAuditStatements, imports, gallery, category image); categories and the
+// store settings row (hero/branding) are covered explicitly. Returns null on any failure.
+const FINGERPRINT_SQL = `SELECT
+ (SELECT COUNT(*)||':'||COALESCE(SUM(revision),0)||':'||COALESCE(MAX(updated_at),'') FROM products) AS p,
+ (SELECT COALESCE(group_concat(id||'/'||slug||'/'||name||'/'||position||'/'||is_active||'/'||COALESCE(image_cloudinary_id,'')||'/'||COALESCE(image_alt,''),'|'),'') FROM (SELECT * FROM categories ORDER BY id)) AS c,
+ (SELECT COALESCE(updated_at,'') FROM store_settings WHERE id=1) AS s`;
+export async function catalogFingerprint(db) {
+  try {
+    const row = await db.prepare(FINGERPRINT_SQL).first();
+    if (!row) return null;
+    const bytes = new TextEncoder().encode(`${row.p}
+${row.c}
+${row.s ?? ""}`);
+    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+    return [...digest.slice(0, 12)].map(b => b.toString(16).padStart(2, "0")).join("");
+  } catch { return null; }
+}
+function publicResponse(response, request, env, state, ttl, expiresAt, sharedMax = Infinity) {
   const headers = new Headers(response.headers);
-  headers.set("cache-control", `public, max-age=0, s-maxage=${ttl}`);
+  headers.set("cache-control", `public, max-age=0, s-maxage=${Math.min(ttl, sharedMax)}`);
   headers.set("x-catalog-cache", state);
   headers.set("x-catalog-expires-at", String(expiresAt));
   headers.set("date", new Date().toUTCString());
   // A HIT replays the stored render: its x-request-id belongs to the first
   // visitor and would point log correlation at the wrong request.
   if (state === "HIT") headers.delete("x-request-id");
+  headers.delete("x-home-fingerprint"); headers.delete("x-home-stored-at");
   if (productionPublicRequest(request, env)) headers.delete("x-robots-tag");
   else headers.set("x-robots-tag", "noindex, nofollow, noarchive");
   return new Response(response.body, {status:response.status,statusText:response.statusText,headers});
@@ -63,15 +88,38 @@ export async function catalogResponse(request, env, ctx, render, cacheStorage = 
   // payment and checkout actions remain blocked; displayed prices may be at
   // most TTL seconds old. Private/cookie/RSC requests never share this cache.
   const eligible = ttl > 0 && version && anonymousCatalogRequest(request) && cacheStorage;
-  let cache;
+  const home = homePath(request);
+  const homeMode = Boolean(eligible && home && env.DB && homeCacheEnabled(env));
+  const tag = (response, state) => { if (home) response.headers.set("x-home-cache", state); return response; };
+  let cache, fingerprint = null;
   if (eligible) {
     try {
-      cache = await cacheStorage.open(`catalog-html-${version}`);
+      cache = await cacheStorage.open(homeMode ? `catalog-html-home-${version}` : `catalog-html-${version}`);
       const hit = await cache.match(request);
       const expiresAt = Number(hit?.headers.get("x-catalog-expires-at") || 0);
       const remaining = Math.floor((expiresAt - Date.now()) / 1000);
-      if (hit && remaining >= 1) {recordCacheMetric("html_hit");return publicResponse(hit, request, env, "HIT", remaining, expiresAt);}
+      if (hit && remaining >= 1) {
+        let fresh = true;
+        if (homeMode) {
+          const age = (Date.now() - Number(hit.headers.get("x-home-stored-at") || 0)) / 1000;
+          if (!(age >= 0 && age <= HOME_TRUST_SECONDS)) {
+            fingerprint = await catalogFingerprint(env.DB);
+            fresh = fingerprint !== null && fingerprint === hit.headers.get("x-home-fingerprint");
+          } else recordCacheMetric("home_trusted");
+        }
+        if (fresh) {recordCacheMetric("html_hit");return tag(publicResponse(hit, request, env, "HIT", remaining, expiresAt, homeMode ? HOME_TRUST_SECONDS : Infinity), "HIT");}
+        recordCacheMetric("home_stale");
+      }
     } catch { recordCacheMetric("html_read_error");cache = undefined; }
+  }
+  // Fingerprint is read BEFORE rendering: a catalogue write racing the render makes
+  // the stored fingerprint older than the data, so the next check re-renders.
+  // Render with the short data cache off so the entry cannot freeze stale rows.
+  const homeStoreTtl = homeMode && cache ? HOME_MAX_SECONDS : ttl;
+  if (homeMode && cache) {
+    fingerprint = fingerprint ?? await catalogFingerprint(env.DB);
+    if (fingerprint === null) cache = undefined;
+    else if (dataContext) dataContext.enabled = false;
   }
   // Framework ISR remains disabled. The reviewed anonymous catalog render
   // opts in at middleware; explicit private/no-store response policies still win.
@@ -84,13 +132,21 @@ export async function catalogResponse(request, env, ctx, render, cacheStorage = 
     // RSC keeps streaming and never enters this response cache.
     const body = await response.arrayBuffer();
     response = new Response(body, {status:response.status,statusText:response.statusText,headers:response.headers});
-    const expiresAt = Math.min(Date.now() + ttl * 1000, dataContext?.expiresAt ?? Infinity);
+    const expiresAt = Math.min(Date.now() + homeStoreTtl * 1000, dataContext?.expiresAt ?? Infinity);
     const remaining = Math.floor((expiresAt - Date.now()) / 1000);
     if (remaining >= 1 && !dataContext?.failed && cacheableCatalogResponse(response)) {
-      const result = publicResponse(response, request, env, "MISS", remaining, expiresAt);
+      const result = publicResponse(response, request, env, "MISS", remaining, expiresAt, homeMode ? HOME_TRUST_SECONDS : Infinity);
       recordCacheMetric("html_miss");
-      ctx.waitUntil(cache.put(request, result.clone()).catch(() => recordCacheMetric("html_write_error")));
-      return result;
+      const stored = result.clone();
+      if (homeMode) {
+        // Internal bookkeeping stays on the stored copy only. The Cache API
+        // lifetime follows this header, so it must carry the long TTL.
+        stored.headers.set("cache-control", `public, max-age=${remaining}`);
+        stored.headers.set("x-home-fingerprint", fingerprint);
+        stored.headers.set("x-home-stored-at", String(Date.now()));
+      }
+      ctx.waitUntil(cache.put(request, stored).catch(() => recordCacheMetric("html_write_error")));
+      return tag(result, "MISS");
     }
   }
   // Streamed readers may fail after headers were initially accepted. Never store
@@ -102,6 +158,7 @@ export async function catalogResponse(request, env, ctx, render, cacheStorage = 
   recordCacheMetric("html_bypass");
   const result = protectStagingResponse(response);
   result.headers.set("x-catalog-cache", "BYPASS");
+  tag(result, "BYPASS");
   if (productionPublicRequest(request, env) && ["GET", "HEAD"].includes(request.method) &&
       !/^\/(?:admin|api|checkout|pedido|cuenta|favoritos|setup|dev)(?:\/|$)/.test(new URL(request.url).pathname) &&
       !request.headers.has("cookie") && !request.headers.has("authorization") &&
