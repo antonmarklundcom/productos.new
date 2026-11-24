@@ -29,6 +29,8 @@ export type AdminCategoryCard = {
   id: number;
   slug: string;
   name: string;
+  /** La categoría principal; `null` si ésta es principal. */
+  parentId: number | null;
   isActive: boolean;
   productos: number;
   publicados: number;
@@ -49,7 +51,7 @@ export function CategoriesManager({ categories }: { categories: AdminCategoryCar
   return (
     <div className="grid gap-6">
       {editing === "nueva" ? (
-        <CategoryForm onDone={() => setEditing(null)} />
+        <CategoryForm categories={categories} onDone={() => setEditing(null)} />
       ) : (
         <div>
           <Button type="button" onClick={() => setEditing("nueva")}>
@@ -67,12 +69,13 @@ export function CategoriesManager({ categories }: { categories: AdminCategoryCar
           {categories.map((category) =>
             editing === category.id ? (
               <li key={category.id}>
-                <CategoryForm category={category} onDone={() => setEditing(null)} />
+                <CategoryForm category={category} categories={categories} onDone={() => setEditing(null)} />
               </li>
             ) : (
               <CategoryRow
                 key={category.id}
                 category={category}
+                parentName={categories.find((other) => other.id === category.parentId)?.name ?? null}
                 onEdit={() => setEditing(category.id)}
               />
             ),
@@ -85,9 +88,11 @@ export function CategoriesManager({ categories }: { categories: AdminCategoryCar
 
 function CategoryRow({
   category,
+  parentName,
   onEdit,
 }: {
   category: AdminCategoryCard;
+  parentName: string | null;
   onEdit: () => void;
 }) {
   const router = useRouter();
@@ -113,7 +118,12 @@ function CategoryRow({
   };
 
   return (
-    <li className="border-border rounded-xl border p-4">
+    <li className={`border-border rounded-xl border p-4${parentName ? " sm:ml-8" : ""}`}>
+      {parentName ? (
+        <p className="text-muted-foreground mb-1 text-xs">
+          {t("panel.categoria.subDe", { nombre: parentName })}
+        </p>
+      ) : null}
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <span className="font-medium">
           {category.name}
@@ -247,9 +257,11 @@ function CategoryRow({
 
 function CategoryForm({
   category,
+  categories,
   onDone,
 }: {
   category?: AdminCategoryCard;
+  categories: AdminCategoryCard[];
   onDone: () => void;
 }) {
   const router = useRouter();
@@ -270,6 +282,13 @@ function CategoryForm({
   // no hace falta — desde acá "guardar" siempre manda la descripción tal
   // como quedó en pantalla.
   const [description, setDescription] = useState(category?.description ?? "");
+  const [parentId, setParentId] = useState<number | null>(category?.parentId ?? null);
+  // Un solo nivel: sólo una principal puede ser madre, y una categoría que ya
+  // tiene hijas no puede pasar a ser hija.
+  const tieneHijas = category !== undefined && categories.some((other) => other.parentId === category.id);
+  const opcionesPadre = categories.filter(
+    (other) => other.parentId === null && other.id !== category?.id,
+  );
 
   const [baseline,setBaseline]=useState(()=>category?categorySnapshot(category):"");
   const {bindForm:draftRef,onInput:saveDraft,clear:clearDraft,recovery:draftRecovery}=useAdminDraft("category:"+(category?.id??"new"),category?categorySnapshot(category):null);
@@ -287,6 +306,7 @@ function CategoryForm({
         const payload = {
           name,
           slug,
+          parentId,
           description: description.trim() === "" ? null : description.trim(),
         };
 
@@ -359,6 +379,29 @@ function CategoryForm({
           </p>
         </div>
       </div>
+
+      {tieneHijas ? null : (
+        <div className="grid gap-1.5">
+          <Label htmlFor="categoria-parent">{t("panel.categoria.padre")}</Label>
+          <select
+            id="categoria-parent"
+            name="parentId"
+            value={parentId ?? ""}
+            onChange={(event) =>
+              setParentId(event.target.value === "" ? null : Number(event.target.value))
+            }
+            className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+          >
+            <option value="">{t("panel.categoria.padre.ninguna")}</option>
+            {opcionesPadre.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.name}
+              </option>
+            ))}
+          </select>
+          <p className="text-muted-foreground text-xs">{t("panel.categoria.padre.ayuda")}</p>
+        </div>
+      )}
 
       <div className="grid gap-1.5">
         <Label htmlFor="categoria-description">{t("panel.categoria.descripcion")}</Label>

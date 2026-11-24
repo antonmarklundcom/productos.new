@@ -7,7 +7,7 @@ import { getD1Bindings, getNativeDb } from "./database";
 import { cachedPublicRead } from "./public-data-cache.mjs";
 import { searchRead, searchFacetsRead, suggestionsRead, normalizeSearchTerm } from "./catalog-search-sql.mjs";
 import { diagnosticBinding } from "./catalog-diagnostics.mjs";
-import { catalogRead, categoryRead, featuredRead, latestRead, productRead, readBatch, relatedRead } from "./public-catalog-sql.mjs";
+import { catalogRead, categoryRead, featuredRead, inCategory, latestRead, productRead, readBatch, relatedRead } from "./public-catalog-sql.mjs";
 import { publishedCatalogProduct } from "./catalog-publication.mjs";
 export { isCatalogSort, CATALOG_SORTS } from "../../src/db/queries";
 
@@ -74,8 +74,8 @@ export async function getBrands(categorySlug: string): Promise<{brand: string; t
   return publicRead("brands:" + categorySlug, async () => {
     const [rows] = await readBatch(binding(), [{sql: `SELECT p.brand, COUNT(p.id) AS total
       FROM products p JOIN categories c ON c.id = p.category_id
-      WHERE ${publishedCatalogProduct} AND c.slug = ?
-      AND p.brand IS NOT NULL AND p.brand != '' GROUP BY p.brand ORDER BY p.brand`, args: [categorySlug]}]);
+      WHERE ${publishedCatalogProduct} AND ${inCategory}
+      AND p.brand IS NOT NULL AND p.brand != '' GROUP BY p.brand ORDER BY p.brand`, args: [categorySlug, categorySlug]}]);
     return rows;
   });
 }

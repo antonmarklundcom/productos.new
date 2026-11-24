@@ -712,6 +712,13 @@ export const esPY = {
     'Ya hay otra categoría con la URL "{slug}".',
   "adminError.categoria.noPude": "No pude crear la categoría.",
   "adminError.categoria.noExiste": "Esa categoría no existe.",
+  "adminError.categoria.padreNoExiste": "Esa categoría principal no existe.",
+  "adminError.categoria.padreEsSubcategoria":
+    "La categoría principal no puede ser una subcategoría: hay un solo nivel.",
+  "adminError.categoria.padreEsElla":
+    "Una categoría no puede ser su propia categoría principal.",
+  "adminError.categoria.tieneSubcategorias":
+    "Esta categoría tiene subcategorías, así que no puede pasar a ser una subcategoría.",
 
   "adminError.envio.nombreCorto": "El nombre necesita al menos 2 caracteres.",
   "adminError.envio.nombreLargo":
@@ -1293,6 +1300,11 @@ export const esPY = {
   "panel.categoria.nombre": "Nombre",
   "panel.categoria.nombreAyuda": "Lo que se lee en el menú de la tienda.",
   "panel.categoria.url": "URL",
+  "panel.categoria.padre": "Categoría principal",
+  "panel.categoria.padre.ninguna": "Ninguna: es una categoría principal",
+  "panel.categoria.padre.ayuda":
+    "Elegí una para que esta sea una subcategoría. El menú y la página de la principal la muestran adentro.",
+  "panel.categoria.subDe": "Subcategoría de {nombre}",
   "panel.categoria.urlPreview": "Queda /categoria/{slug}",
   "panel.categoria.avisoUrl":
     "Estás cambiando la URL. La anterior (/categoria/{slug}) va a dar 404: los links compartidos por WhatsApp y lo que Google tenga indexado dejan de funcionar. El nombre se puede cambiar sin tocar la URL — para eso son dos campos.",

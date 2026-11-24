@@ -90,6 +90,14 @@ const PUBLISHED = () =>
     eq(categories.isActive, true)
   );
 
+/**
+ * La categoría pedida o cualquiera de sus subcategorías: la página de una
+ * categoría principal lista también los productos de sus hijas. Usa el mismo
+ * `innerJoin(categories)` que `PUBLISHED()`.
+ */
+const IN_CATEGORY = (slug: string) =>
+  sql`(${categories.slug} = ${slug} OR ${categories.parentId} = (SELECT parent_category.id FROM categories parent_category WHERE parent_category.slug = ${slug}))`;
+
 export type CatalogSort =
   "relevancia" | "precio-asc" | "precio-desc" | "nuevos";
 
@@ -249,7 +257,7 @@ export async function getCatalog(
       and(
         PUBLISHED(),
         options.categorySlug
-          ? eq(categories.slug, options.categorySlug)
+          ? IN_CATEGORY(options.categorySlug)
           : undefined,
         options.featured ? eq(products.isFeatured, true) : undefined,
         options.productIds ? inArray(products.id, options.productIds) : undefined
@@ -329,7 +337,7 @@ export async function getCategoryProducts(
   // unselected product columns in the count-only projection.
   const filters = and(
     PUBLISHED(),
-    eq(categories.slug, query.categorySlug),
+    IN_CATEGORY(query.categorySlug),
     query.brand ? eq(products.brand, query.brand) : undefined,
     query.minPricePyg !== undefined ? gte(minPriceSql, query.minPricePyg) : undefined,
     query.maxPricePyg !== undefined ? lte(minPriceSql, query.maxPricePyg) : undefined
@@ -454,7 +462,7 @@ export async function searchProductsPage(
   const like = `%${cleaned}%`;
   const fallback = sql`(${products.name} LIKE ${like} OR ${products.brand} LIKE ${like})`;
   const withFilters = (match: typeof fulltext) => and(PUBLISHED(), match,
-    options.categorySlug ? eq(categories.slug, options.categorySlug) : undefined,
+    options.categorySlug ? IN_CATEGORY(options.categorySlug) : undefined,
     options.brand ? eq(products.brand, options.brand) : undefined,
     options.minPricePyg !== undefined ? gte(minPriceSql, options.minPricePyg) : undefined,
     options.maxPricePyg !== undefined ? lte(minPriceSql, options.maxPricePyg) : undefined);
@@ -611,7 +619,7 @@ export async function getBrands(
     .where(
       and(
         PUBLISHED(),
-        eq(categories.slug, categorySlug),
+        IN_CATEGORY(categorySlug),
         isNotNull(products.brand)
       )
     )

@@ -1,4 +1,4 @@
-import {readBatch, catalogRead} from "./public-catalog-sql.mjs";
+import {readBatch, catalogRead, inCategory} from "./public-catalog-sql.mjs";
 import {displayedPriceSql} from "./display-price-sql.mjs";
 import {publishedCatalogProduct} from "./catalog-publication.mjs";
 import {catalogSearchAliases} from "./search-aliases.mjs";
@@ -24,7 +24,7 @@ export function searchPlan(term, options = {}, precomputed = true) {
  const args = matches.flatMap(match => match.args);
  const baseFrom = "FROM products p JOIN categories c ON c.id = p.category_id WHERE " + where.join(" AND ");
  const baseArgs = [...args];
- if (options.categorySlug) {where.push("c.slug = ?"); args.push(options.categorySlug);}
+ if (options.categorySlug) {where.push(inCategory); args.push(options.categorySlug, options.categorySlug);}
  if (options.brand) {where.push("p.brand = ?"); args.push(options.brand);}
  const price = displayedPriceSql();
  for (const [key, op] of [["minPricePyg", ">="],["maxPricePyg", "<="]]) {

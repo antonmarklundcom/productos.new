@@ -3,6 +3,7 @@ import { catalogOnly } from "@/config/catalog-capabilities";
 import Image from "next/image";
 import { TIENDA } from "@/config/tienda";
 import { storeCategories } from "@/components/store-categories";
+import { topLevelCategories } from "@/lib/category-tree";
 import { getStoreSettings } from "@/domain/store-settings";
 import { contactoPublico } from "@/lib/comercio";
 import { marcaEfectiva } from "@/lib/marca";
@@ -58,7 +59,7 @@ export async function SiteFooter() {
         <div>
           <h2>{t("footer.categorias")}</h2>
           <ul>
-            {categories.map((category) => (
+            {topLevelCategories(categories).map((category) => (
               <li key={category.slug}>
                 <Link href={`/categoria/${category.slug}`}>
                   {category.name}

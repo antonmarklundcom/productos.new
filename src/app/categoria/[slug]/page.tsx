@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { CATEGORIAS_INICIALES } from "@/config/tienda";
 import { CategoryIcon } from "@/components/category-icon";
 import { storeCategories } from "@/components/store-categories";
+import { childCategories, parentCategory } from "@/lib/category-tree";
 import { getStoreSettings } from "@/domain/store-settings";
 import { t, tPlural } from "@/i18n";
 import { productImageUrl } from "@/lib/images";
@@ -149,9 +150,12 @@ export default async function CategoryPage({
   const categoryImageUrl = productImageUrl(category.imageCloudinaryId, "hero");
 
   const { vidriera } = await getStoreSettings();
-  const [{ result, unavailable }, brands] = await Promise.all([
+  const [{ result, unavailable }, brands, allCategories] = await Promise.all([
     loadProducts(slug, JSON.stringify(query)), getBrands(slug).catch(() => []),
+    storeCategories().catch(() => []),
   ]);
+  const parent = parentCategory(allCategories, category);
+  const children = childCategories(allCategories, category);
   if (!unavailable && result.page > result.totalPages) notFound();
 
   const buildPageHref = (target: number) => {
@@ -173,6 +177,7 @@ export default async function CategoryPage({
   const jsonLd = [
     breadcrumbJsonLd(origin, [
       { name: t("nav.inicio"), path: "/" },
+      ...(parent ? [{ name: parent.name, path: `/categoria/${parent.slug}` }] : []),
       { name: category.name, path: `/categoria/${slug}` },
     ]),
     itemListJsonLd(origin, result.products, {
@@ -193,15 +198,23 @@ export default async function CategoryPage({
           {t("nav.inicio")}
         </Link>
         <span aria-hidden> / </span>
+        {parent ? (
+          <>
+            <Link href={`/categoria/${parent.slug}`} className="hover:text-foreground">
+              {parent.name}
+            </Link>
+            <span aria-hidden> / </span>
+          </>
+        ) : null}
         <span className="text-foreground">{category.name}</span>
       </nav>
 
       <div
-        className={`mt-5 mb-5 flex items-center gap-4 rounded-2xl p-6 tone-${CATEGORIAS_INICIALES.find((item) => item.slug === slug)?.tone ?? "sage"}`}
+        className={`mt-5 mb-5 flex items-center gap-4 rounded-2xl p-6 tone-${CATEGORIAS_INICIALES.find((item) => item.slug === slug || item.slug === parent?.slug)?.tone ?? "sage"}`}
       >
         <CategoryIcon
           name={
-            CATEGORIAS_INICIALES.find((item) => item.slug === slug)?.icon ??
+            CATEGORIAS_INICIALES.find((item) => item.slug === slug || item.slug === parent?.slug)?.icon ??
             "home"
           }
           size={40}
@@ -243,6 +256,23 @@ export default async function CategoryPage({
             />
           ) : null}
         </div>
+      ) : null}
+
+      {children.length ? (
+        <nav aria-label={`Subcategorías de ${category.name}`} className="mt-5">
+          <ul className="flex flex-wrap gap-2">
+            {children.map((child) => (
+              <li key={child.slug}>
+                <Link
+                  href={`/categoria/${child.slug}`}
+                  className="border-border hover:bg-muted inline-flex min-h-10 items-center rounded-full border px-4 text-sm font-medium"
+                >
+                  {child.name}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </nav>
       ) : null}
 
       <div className="mt-5">
