@@ -6,6 +6,7 @@ import { and, asc, count, eq, isNotNull, sql } from "drizzle-orm";
 import { getNativeDb } from "./database";
 import { categories, products } from "./schema";
 import { slugify } from "../../src/lib/slug";
+import { parentProblem } from "../../src/lib/category-tree";
 import { DomainError } from "../../src/domain/errors";
 import type { MessageKey, Params } from "../../src/i18n";
 export class AdminCategoryError extends DomainError {
@@ -22,6 +23,13 @@ function normalizar(input:{name:string;slug?:string|null}) {
   if(slug.length>120)throw new AdminCategoryError("adminError.categoria.slugLargo");
   return {name,slug};
 }
+async function validParent(selfId:number|undefined,parentId:number|null|undefined){
+  if(parentId===undefined)return {};
+  const rows=await getNativeDb().select({id:categories.id,parentId:categories.parentId}).from(categories);
+  const problem=parentProblem({selfId,parentId},rows);
+  if(problem)throw new AdminCategoryError(problem);
+  return {parentId};
+}
 function presentation(input:CategoryPresentation) {
   return Object.fromEntries(Object.entries(input).filter(([key,value])=>["description","imageCloudinaryId","imageAlt"].includes(key)&&value!==undefined).map(([key,value])=>[key,(value as string|null)?.trim()||null]));
 }
@@ -30,24 +38,26 @@ export async function listAdminCategories():Promise<AdminCategoryRow[]> {
   const rows=await db.select({category:categories,productos:count(products.id),publicados:sql<number>`SUM(CASE WHEN ${products.isActive}=1 AND ${products.publishedAt} IS NOT NULL THEN 1 ELSE 0 END)`}).from(categories).leftJoin(products,eq(products.categoryId,categories.id)).groupBy(categories.id).orderBy(asc(categories.position),asc(categories.id));
   return rows.map(({category,productos,publicados})=>({...category,productos:Number(productos||0),publicados:Number(publicados||0)}));
 }
-export async function createCategory(input:{name:string;slug?:string|null}&CategoryPresentation):Promise<AdminCategoryRow> {
+export async function createCategory(input:{name:string;slug?:string|null;parentId?:number|null}&CategoryPresentation):Promise<AdminCategoryRow> {
   const actor=await requireOwnerSession();
   const {name,slug}=normalizar(input);
+  const parent=await validParent(undefined,input.parentId);
   const db=getNativeDb();
   const [existing]=await db.select({id:categories.id}).from(categories).where(eq(categories.slug,slug));
   if(existing)throw new AdminCategoryError("adminError.categoria.urlRepetida",{slug});
   // One INSERT statement computes the end position atomically. Slug uniqueness
   // remains a database constraint, including concurrent creations.
-  const [created]=await db.batch([db.insert(categories).values({name,slug,position:sql`(SELECT COALESCE(MAX(position),-1)+1 FROM categories)`,...presentation(input)}).returning(),db.insert(catalogAudit).values({id:randomUUID(),actorId:actor.userId,operation:"create-category",recordType:"category",recordId:sql`(SELECT id FROM categories WHERE slug=${slug})`,revision:1,fields:JSON.stringify(["name","slug","description","images"])} )]);
+  const [created]=await db.batch([db.insert(categories).values({name,slug,...parent,position:sql`(SELECT COALESCE(MAX(position),-1)+1 FROM categories)`,...presentation(input)}).returning(),db.insert(catalogAudit).values({id:randomUUID(),actorId:actor.userId,operation:"create-category",recordType:"category",recordId:sql`(SELECT id FROM categories WHERE slug=${slug})`,revision:1,fields:JSON.stringify(["name","slug","description","images"])} )]);
   const row=created[0];
   if(!row)throw new AdminCategoryError("adminError.categoria.noPude");
   return {...row,productos:0,publicados:0};
 }
-export async function updateCategory(input:{expectedSnapshot?:string;categoryId:number;name:string;slug?:string|null}&CategoryPresentation) {
+export async function updateCategory(input:{expectedSnapshot?:string;categoryId:number;name:string;slug?:string|null;parentId?:number|null}&CategoryPresentation) {
   const actor=await requireOwnerSession();
   const {name,slug}=normalizar(input);
+  const parent=await validParent(input.categoryId,input.parentId);
   const db=getNativeDb();
-  const [_,changed]=await guardedCategoryBatch(db,input.categoryId,input.expectedSnapshot,[categoryGuard(db,input.categoryId,input.expectedSnapshot),db.update(categories).set({name,slug,...presentation(input)}).where(eq(categories.id,input.categoryId)).returning({id:categories.id}),...categoryEffects(db,actor.userId,input.categoryId,"save-category",["name","slug","description","images"])]);
+  const [_,changed]=await guardedCategoryBatch(db,input.categoryId,input.expectedSnapshot,[categoryGuard(db,input.categoryId,input.expectedSnapshot),db.update(categories).set({name,slug,...parent,...presentation(input)}).where(eq(categories.id,input.categoryId)).returning({id:categories.id}),...categoryEffects(db,actor.userId,input.categoryId,"save-category",["name","slug","description","images"])]);
   void _;const updated=changed.results[0];
   if(!updated)throw new AdminCategoryError("adminError.categoria.noExiste");
 }
@@ -71,7 +81,13 @@ export async function moveCategory(input:{expectedSnapshot?:string;categoryId:nu
     ELSE ranked.rank END FROM ranked WHERE ranked.id=categories.id)`),...categoryEffects(db,actor.userId,input.categoryId,"move-category",["position"])]);
 }
 export async function categoriesForProductForm() {
-  return getNativeDb().select({id:categories.id,name:categories.name,isActive:categories.isActive}).from(categories).orderBy(asc(categories.position),asc(categories.id));
+  // Subcategories read "Principal › Sub" so two "Accesorios" never look alike.
+  const rows=await getNativeDb().select({id:categories.id,name:categories.name,isActive:categories.isActive,parentId:categories.parentId,position:categories.position}).from(categories).orderBy(asc(categories.position),asc(categories.id));
+  const byId=new Map(rows.map(row=>[row.id,row]));
+  const label=(row:typeof rows[number])=>{const parent=row.parentId===null?undefined:byId.get(row.parentId);return parent?parent.name+" › "+row.name:row.name;};
+  const groupKey=(row:typeof rows[number])=>{const parent=row.parentId===null?undefined:byId.get(row.parentId);return parent?[parent.position,parent.id,1,row.position,row.id]:[row.position,row.id,0,0,0];};
+  const compare=(a:number[],b:number[])=>{for(let i=0;i<a.length;i++){if(a[i]!==b[i])return a[i]!-b[i]!;}return 0;};
+  return rows.slice().sort((a,b)=>compare(groupKey(a),groupKey(b))).map(row=>({id:row.id,name:label(row),isActive:row.isActive}));
 }
 export async function publishedCountForCategory(categoryId:number) {
   const [row]=await getNativeDb().select({n:count()}).from(products).where(and(eq(products.categoryId,categoryId),eq(products.isActive,true),isNotNull(products.publishedAt)));

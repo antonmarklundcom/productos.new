@@ -7,8 +7,13 @@ import { ChevronDown, ChevronRight, Menu, X } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { TESTIDS } from "@/lib/testids";
 import { t } from "@/i18n/client";
+import {
+  childCategories,
+  topLevelCategories,
+  type TreeCategory,
+} from "@/lib/category-tree";
 
-type Category = { slug: string; name: string };
+type Category = TreeCategory;
 export type NavigationLink = { href: string; label: string };
 type NavigationProps = {
   categories: readonly Category[];
@@ -22,19 +27,41 @@ function CategoryLinks({
   categories: readonly Category[];
   onNavigate?: () => void;
 }) {
-  return categories.map((category) => (
-    <Link
-      key={category.slug}
-      href={`/categoria/${category.slug}`}
-      data-testid={TESTIDS.headerCategoryLink}
-      data-slug={category.slug}
-      onClick={onNavigate}
-      className="hover:bg-muted focus-visible:ring-ring flex min-h-12 min-w-0 items-center justify-between gap-3 rounded-lg px-3 py-3 text-sm leading-snug break-words focus-visible:ring-2 focus-visible:outline-none"
-    >
-      <span>{category.name}</span>
-      <ChevronRight size={16} className="shrink-0 opacity-50" aria-hidden />
-    </Link>
-  ));
+  return topLevelCategories(categories).map((category) => {
+    const children = childCategories(categories, category);
+    return (
+      <div key={category.slug} className="min-w-0">
+        <Link
+          href={`/categoria/${category.slug}`}
+          data-testid={TESTIDS.headerCategoryLink}
+          data-slug={category.slug}
+          onClick={onNavigate}
+          className="hover:bg-muted focus-visible:ring-ring flex min-h-12 min-w-0 items-center justify-between gap-3 rounded-lg px-3 py-3 text-sm leading-snug break-words focus-visible:ring-2 focus-visible:outline-none"
+        >
+          <span className={children.length ? "font-semibold" : undefined}>
+            {category.name}
+          </span>
+          <ChevronRight size={16} className="shrink-0 opacity-50" aria-hidden />
+        </Link>
+        {children.length ? (
+          <ul className="mb-2 ml-3 border-l pl-2">
+            {children.map((child) => (
+              <li key={child.slug}>
+                <Link
+                  href={`/categoria/${child.slug}`}
+                  data-slug={child.slug}
+                  onClick={onNavigate}
+                  className="hover:bg-muted text-muted-foreground hover:text-foreground focus-visible:ring-ring flex min-h-10 min-w-0 items-center rounded-lg px-3 py-2 text-sm leading-snug break-words focus-visible:ring-2 focus-visible:outline-none"
+                >
+                  {child.name}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+    );
+  });
 }
 
 export function DesktopStoreNavigation({ categories, links }: NavigationProps) {
@@ -78,7 +105,7 @@ export function DesktopStoreNavigation({ categories, links }: NavigationProps) {
               aria-hidden
             />
           </summary>
-          <div className="bg-background border-border absolute top-full left-0 mt-2 grid w-[min(42rem,calc(100vw-3rem))] grid-cols-2 gap-1 rounded-xl border p-3 shadow-xl xl:grid-cols-3">
+          <div className="bg-background border-border absolute top-full left-0 mt-2 grid max-h-[min(36rem,calc(100dvh-10rem))] w-[min(56rem,calc(100vw-3rem))] grid-cols-2 content-start gap-1 overflow-y-auto rounded-xl border p-3 shadow-xl xl:grid-cols-3">
             <CategoryLinks
               categories={categories}
               onNavigate={() => {

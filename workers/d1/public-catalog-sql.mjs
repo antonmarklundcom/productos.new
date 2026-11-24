@@ -6,6 +6,8 @@ const columns = `p.id, p.slug, p.name, p.description, p.brand, p.iva_rate AS iva
  p.sale_mode AS saleMode, p.show_price AS showPrice, c.name AS categoryName, c.slug AS categorySlug,
  p.published_at AS publishedAt, c.position AS categoryPosition`;
 const joins = "FROM products p JOIN categories c ON c.id = p.category_id";
+/** The requested category or one of its sub-categories; binds the slug twice. */
+export const inCategory = "(c.slug = ? OR c.parent_id = (SELECT parent_category.id FROM categories parent_category WHERE parent_category.slug = ?))";
 const projection = `SELECT s.*,
  (SELECT json_group_array(json_object(
    'id', v.id, 'sku', v.sku, 'label', v.label,
@@ -46,7 +48,7 @@ function projected(sql, args, order = "id ASC") {
 export async function catalogRead(db, options = {}) {
  if (options.productIds?.length === 0) return [];
  const conditions = [published], args = [];
- if (options.categorySlug) { conditions.push("c.slug = ?"); args.push(options.categorySlug); }
+ if (options.categorySlug) { conditions.push(inCategory); args.push(options.categorySlug, options.categorySlug); }
  if (options.featured) conditions.push("p.is_featured = 1");
  if (options.productIds) { conditions.push(`p.id IN (${options.productIds.map(() => "?").join(",")})`); args.push(...options.productIds); }
  args.push(options.limit ?? 100);
@@ -82,7 +84,7 @@ export async function productRead(db, slug) {
 }
 export async function categoryRead(db, query) {
  const page = Math.max(1, query.page ?? 1), perPage = Math.min(60, Math.max(1, query.perPage ?? 12));
- const args = [query.categorySlug], where = [published, "c.slug = ?"];
+ const args = [query.categorySlug, query.categorySlug], where = [published, inCategory];
  if (query.brand) { where.push("p.brand = ?"); args.push(query.brand); }
  if (query.minPricePyg !== undefined) { where.push(`${minPrice} >= ?`); args.push(query.minPricePyg); }
  if (query.maxPricePyg !== undefined) { where.push(`${minPrice} <= ?`); args.push(query.maxPricePyg); }

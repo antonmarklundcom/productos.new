@@ -47,6 +47,8 @@ function revalidarVidriera(): void {
 const CreateSchema = z.object({
   name: z.string().trim().min(1, t("adminForm.nombreCategoria")).max(120),
   slug: z.string().trim().max(120).optional(),
+  /** La categoría principal: `null` la vuelve principal, ausente no la toca. */
+  parentId: z.number().int().positive().nullish(),
   /**
    * Presentación de la categoría (O7). Los `.max()` son el largo exacto de las
    * columnas; `null` borra el campo y **ausente no lo toca**, que es lo que
@@ -69,6 +71,7 @@ export async function crearCategoria(input: unknown): Promise<AdminActionResult<
     const created = await createCategory({
       name: parsed.data.name,
       slug: parsed.data.slug || null,
+      parentId: parsed.data.parentId,
       description: parsed.data.description,
       imageCloudinaryId: parsed.data.imageCloudinaryId,
       imageAlt: parsed.data.imageAlt,
@@ -87,6 +90,8 @@ const UpdateSchema = z.object({
   expectedSnapshot:z.string().max(8000).optional(),
   name: z.string().trim().min(1, t("adminForm.nombreCategoria")).max(120),
   slug: z.string().trim().max(120).optional(),
+  /** La categoría principal: `null` la vuelve principal, ausente no la toca. */
+  parentId: z.number().int().positive().nullish(),
   /**
    * Presentación de la categoría (O7). Los `.max()` son el largo exacto de las
    * columnas; `null` borra el campo y **ausente no lo toca**, que es lo que
@@ -111,6 +116,7 @@ export async function editarCategoria(input: unknown): Promise<AdminActionResult
       expectedSnapshot:parsed.data.expectedSnapshot,
       name: parsed.data.name,
       slug: parsed.data.slug || null,
+      parentId: parsed.data.parentId,
       description: parsed.data.description,
       imageCloudinaryId: parsed.data.imageCloudinaryId,
       imageAlt: parsed.data.imageAlt,

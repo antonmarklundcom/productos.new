@@ -34,6 +34,7 @@ export default async function AdminCategoriesPage() {
             position:category.position,
             slug: category.slug,
             name: category.name,
+            parentId: category.parentId,
             isActive: category.isActive,
             productos: category.productos,
             publicados: category.publicados,

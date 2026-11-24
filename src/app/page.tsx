@@ -18,6 +18,7 @@ import {
   type CatalogProduct,
 } from "@/db/queries";
 import { storeCategories } from "@/components/store-categories";
+import { topLevelCategories } from "@/lib/category-tree";
 import { getStoreSettings } from "@/domain/store-settings";
 import { heroEfectivo } from "@/domain/store-settings-schema";
 import { contactoPublico } from "@/lib/comercio";
@@ -69,7 +70,7 @@ export default async function HomePage() {
     ajustes.marca,
     TIENDA.hero ?? { titulo: TIENDA.titulo }
   );
-  const sections = categories;
+  const sections = topLevelCategories(categories);
   const preview = isLocalCatalogPreview();
   const organization = organizationJsonLd({
     origin: siteOrigin(),

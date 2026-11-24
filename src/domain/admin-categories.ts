@@ -4,6 +4,7 @@ import type { MessageKey, Params } from '@/i18n';
 import { DomainError } from './errors';
 
 import { getDb } from '@/db';
+import { parentProblem } from "@/lib/category-tree";
 import { categories, products } from '@/db/schema';
 import { slugify } from '@/lib/slug';
 
@@ -50,6 +51,8 @@ export type AdminCategoryRow = {
   id: number;
   slug: string;
   name: string;
+  /** La categoría principal; `null` si ésta es principal. */
+  parentId: number | null;
   position: number;
   isActive: boolean;
   /** Productos que apuntan acá, en cualquier estado. */
@@ -87,6 +90,7 @@ export async function listAdminCategories(executor?: Executor): Promise<AdminCat
       id: categories.id,
       slug: categories.slug,
       name: categories.name,
+      parentId: categories.parentId,
       position: categories.position,
       isActive: categories.isActive,
       description: categories.description,
@@ -101,6 +105,7 @@ export async function listAdminCategories(executor?: Executor): Promise<AdminCat
       categories.id,
       categories.slug,
       categories.name,
+      categories.parentId,
       categories.position,
       categories.isActive,
       categories.description,
@@ -116,6 +121,21 @@ export async function listAdminCategories(executor?: Executor): Promise<AdminCat
     // cuando hay filas. Las dos cosas pasan por Number() y terminan en 0.
     publicados: Number(row.publicados ?? 0),
   }));
+}
+
+/** La categoría principal elegida, validada adentro de la transacción. */
+async function validParent(
+  tx: Executor,
+  selfId: number | undefined,
+  parentId: number | null | undefined,
+): Promise<{ parentId?: number | null }> {
+  if (parentId === undefined) return {};
+  const rows = await tx
+    .select({ id: categories.id, parentId: categories.parentId })
+    .from(categories);
+  const problem = parentProblem({ selfId, parentId }, rows);
+  if (problem) throw new AdminCategoryError(problem);
+  return { parentId };
 }
 
 /** El nombre y el slug, validados igual en el alta y en la edición. */
@@ -163,10 +183,12 @@ function presentacion(input: CategoryPresentation): Record<string, string | null
 export async function createCategory(input: {
   name: string;
   slug?: string | null;
+  parentId?: number | null;
 } & CategoryPresentation): Promise<AdminCategoryRow> {
   const { name, slug } = normalizar(input);
 
   return getDb().transaction(async (tx) => {
+    const parent = await validParent(tx, undefined, input.parentId);
     const existing = await tx
       .select({ id: categories.id })
       .from(categories)
@@ -186,6 +208,7 @@ export async function createCategory(input: {
       name,
       slug,
       position: Number(ultima?.n ?? -1) + 1,
+      ...parent,
       ...presentacion(input),
     });
 
@@ -197,6 +220,7 @@ export async function createCategory(input: {
       id: row.id,
       slug: row.slug,
       name: row.name,
+      parentId: row.parentId,
       position: row.position,
       isActive: row.isActive,
       description: row.description,
@@ -221,10 +245,12 @@ export async function updateCategory(input: {
   categoryId: number;
   name: string;
   slug?: string | null;
+  parentId?: number | null;
 } & CategoryPresentation): Promise<void> {
   const { name, slug } = normalizar(input);
 
   return getDb().transaction(async (tx) => {
+    const parent = await validParent(tx, input.categoryId, input.parentId);
     const rows = await tx
       .select()
       .from(categories)
@@ -243,7 +269,7 @@ export async function updateCategory(input: {
 
     await tx
       .update(categories)
-      .set({ name, slug, ...presentacion(input) })
+      .set({ name, slug, ...parent, ...presentacion(input) })
       .where(eq(categories.id, category.id));
   });
 }
